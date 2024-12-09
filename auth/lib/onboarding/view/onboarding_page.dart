@@ -108,7 +108,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                                     child: Text("Lang"),
                                   ),
                                   onTap: () async {
-                                    final locale = await getLocale();
+                                    final locale = (await getLocale())!;
                                     // ignore: unawaited_futures
                                     routeToPage(
                                       context,
@@ -219,9 +219,10 @@ class _OnboardingPageState extends State<OnboardingPage> {
   }
 
   Future<void> _optForOfflineMode() async {
-    bool canCheckBio = Platform.isMacOS || Platform.isLinux
-        ? true
-        : await LocalAuthentication().canCheckBiometrics;
+    bool canCheckBio = Platform.isMacOS ||
+        Platform.isLinux ||
+        Platform.isWindows ||
+        await LocalAuthentication().canCheckBiometrics;
     if (!canCheckBio) {
       showToast(
         context,

@@ -1,19 +1,13 @@
-import { ensure } from "@/utils/ensure";
-import { wait } from "@/utils/promise";
-import { changeEmail, sendOTTForEmailChange } from "@ente/accounts/api/user";
-import { PAGES } from "@ente/accounts/constants/pages";
 import {
-    APP_HOMES,
-    appNameToAppNameOld,
-    type APPS,
-} from "@ente/shared/apps/constants";
+    FormPaper,
+    FormPaperFooter,
+    FormPaperTitle,
+} from "@/base/components/FormPaper";
+import { LoadingButton } from "@/base/components/mui/LoadingButton";
+import log from "@/base/log";
 import { VerticallyCentered } from "@ente/shared/components/Container";
-import FormPaper from "@ente/shared/components/Form/FormPaper";
-import FormPaperFooter from "@ente/shared/components/Form/FormPaper/Footer";
-import FormPaperTitle from "@ente/shared/components/Form/FormPaper/Title";
 import LinkButton from "@ente/shared/components/LinkButton";
-import SubmitButton from "@ente/shared/components/SubmitButton";
-import { LS_KEYS, getData, setData } from "@ente/shared/storage/localStorage";
+import { LS_KEYS, getData, setLSUser } from "@ente/shared/storage/localStorage";
 import { Alert, Box, TextField } from "@mui/material";
 import { Formik, type FormikHelpers } from "formik";
 import { t } from "i18next";
@@ -21,19 +15,17 @@ import { useRouter } from "next/router";
 import { useEffect, useState } from "react";
 import { Trans } from "react-i18next";
 import * as Yup from "yup";
+import { appHomeRoute } from "../services/redirect";
+import { changeEmail, sendOTTForEmailChange } from "../services/user";
 import type { PageProps } from "../types/page";
 
-const Page: React.FC<PageProps> = ({ appContext }) => {
-    const { appName } = appContext;
-
-    const appNameOld = appNameToAppNameOld(appName);
-
+const Page: React.FC<PageProps> = () => {
     const router = useRouter();
 
     useEffect(() => {
         const user = getData(LS_KEYS.USER);
         if (!user?.token) {
-            router.push(PAGES.ROOT);
+            void router.push("/");
         }
     }, []);
 
@@ -41,7 +33,7 @@ const Page: React.FC<PageProps> = ({ appContext }) => {
         <VerticallyCentered>
             <FormPaper>
                 <FormPaperTitle>{t("CHANGE_EMAIL")}</FormPaperTitle>
-                <ChangeEmailForm appName={appNameOld} />
+                <ChangeEmailForm />
             </FormPaper>
         </VerticallyCentered>
     );
@@ -54,12 +46,11 @@ interface formValues {
     ott?: string;
 }
 
-function ChangeEmailForm({ appName }: { appName: APPS }) {
+const ChangeEmailForm: React.FC = () => {
     const [loading, setLoading] = useState(false);
     const [ottInputVisible, setShowOttInputVisibility] = useState(false);
     const [email, setEmail] = useState<string | null>(null);
     const [showMessage, setShowMessage] = useState(false);
-    const [success, setSuccess] = useState(false);
 
     const router = useRouter();
 
@@ -79,7 +70,8 @@ function ChangeEmailForm({ appName }: { appName: APPS }) {
             //     ottInputRef.current?.focus();
             // }, 250);
         } catch (e) {
-            setFieldError("email", t("EMAIl_ALREADY_OWNED"));
+            log.error(e);
+            setFieldError("email", t("email_already_taken"));
         }
         setLoading(false);
     };
@@ -90,22 +82,18 @@ function ChangeEmailForm({ appName }: { appName: APPS }) {
     ) => {
         try {
             setLoading(true);
-            await changeEmail(email, ensure(ott));
-            setData(LS_KEYS.USER, { ...getData(LS_KEYS.USER), email });
+            await changeEmail(email, ott!);
+            await setLSUser({ ...getData(LS_KEYS.USER), email });
             setLoading(false);
-            setSuccess(true);
-            await wait(1000);
-            goToApp();
+            void goToApp();
         } catch (e) {
+            log.error(e);
             setLoading(false);
             setFieldError("ott", t("INCORRECT_CODE"));
         }
     };
 
-    const goToApp = () => {
-        // TODO: Refactor the type of APP_HOMES to not require the ??
-        router.push(APP_HOMES.get(appName) ?? "/");
-    };
+    const goToApp = () => router.push(appHomeRoute);
 
     return (
         <Formik<formValues>
@@ -115,13 +103,13 @@ function ChangeEmailForm({ appName }: { appName: APPS }) {
                     ? Yup.object().shape({
                           email: Yup.string()
                               .email(t("EMAIL_ERROR"))
-                              .required(t("REQUIRED")),
-                          ott: Yup.string().required(t("REQUIRED")),
+                              .required(t("required")),
+                          ott: Yup.string().required(t("required")),
                       })
                     : Yup.object().shape({
                           email: Yup.string()
                               .email(t("EMAIL_ERROR"))
-                              .required(t("REQUIRED")),
+                              .required(t("required")),
                       })
             }
             validateOnChange={false}
@@ -177,16 +165,15 @@ function ChangeEmailForm({ appName }: { appName: APPS }) {
                                     disabled={loading}
                                 />
                             )}
-                            <SubmitButton
-                                success={success}
-                                sx={{ mt: 2 }}
+                            <LoadingButton
+                                fullWidth
+                                color="accent"
+                                type="submit"
+                                sx={{ mt: 2, mb: 4 }}
                                 loading={loading}
-                                buttonText={
-                                    !ottInputVisible
-                                        ? t("SEND_OTT")
-                                        : t("VERIFY")
-                                }
-                            />
+                            >
+                                {!ottInputVisible ? t("SEND_OTT") : t("VERIFY")}
+                            </LoadingButton>
                         </VerticallyCentered>
                     </form>
 
@@ -205,11 +192,11 @@ function ChangeEmailForm({ appName }: { appName: APPS }) {
                             </LinkButton>
                         )}
                         <LinkButton onClick={goToApp}>
-                            {t("GO_BACK")}
+                            {t("go_back")}
                         </LinkButton>
                     </FormPaperFooter>
                 </>
             )}
         </Formik>
     );
-}
+};

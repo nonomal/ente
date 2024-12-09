@@ -1,4 +1,8 @@
+import { EllipsizedTypography } from "@/base/components/Typography";
+import { FilledIconButton } from "@/base/components/mui";
+import { NotificationAttributes } from "@/new/photos/types/notification";
 import CloseIcon from "@mui/icons-material/Close";
+import InfoIcon from "@mui/icons-material/InfoOutlined";
 import {
     Box,
     Button,
@@ -6,13 +10,8 @@ import {
     Stack,
     SxProps,
     Theme,
-    Typography,
     type ButtonProps,
 } from "@mui/material";
-import { NotificationAttributes } from "types/Notification";
-
-import { IconButtonWithBG } from "@ente/shared/components/Container";
-import InfoIcon from "@mui/icons-material/InfoOutlined";
 
 interface Iprops {
     open: boolean;
@@ -72,6 +71,7 @@ export default function Notification({
                     spacing={2}
                     direction="row"
                     alignItems={"center"}
+                    width={"100%"}
                 >
                     <Box sx={{ svg: { fontSize: "36px" } }}>
                         {attributes.startIcon ?? <InfoIcon />}
@@ -82,40 +82,43 @@ export default function Notification({
                         spacing={0.5}
                         flex={1}
                         textAlign="left"
+                        // This is necessary to trigger the ellipsizing of the
+                        // text in children.
+                        overflow="hidden"
                     >
                         {attributes.subtext && (
-                            <Typography variant="small">
+                            <EllipsizedTypography variant="small">
                                 {attributes.subtext}
-                            </Typography>
+                            </EllipsizedTypography>
                         )}
                         {attributes.message && (
-                            <Typography fontWeight="bold">
+                            <EllipsizedTypography fontWeight="bold">
                                 {attributes.message}
-                            </Typography>
+                            </EllipsizedTypography>
                         )}
                         {attributes.title && (
-                            <Typography fontWeight="bold">
+                            <EllipsizedTypography fontWeight="bold">
                                 {attributes.title}
-                            </Typography>
+                            </EllipsizedTypography>
                         )}
                         {attributes.caption && (
-                            <Typography variant="small">
+                            <EllipsizedTypography variant="small">
                                 {attributes.caption}
-                            </Typography>
+                            </EllipsizedTypography>
                         )}
                     </Stack>
 
                     {attributes.endIcon ? (
-                        <IconButtonWithBG
+                        <FilledIconButton
                             onClick={attributes.onClick}
                             sx={{ fontSize: "36px" }}
                         >
                             {attributes?.endIcon}
-                        </IconButtonWithBG>
+                        </FilledIconButton>
                     ) : (
-                        <IconButtonWithBG onClick={handleClose}>
+                        <FilledIconButton onClick={handleClose}>
                             <CloseIcon />
-                        </IconButtonWithBG>
+                        </FilledIconButton>
                     )}
                 </Stack>
             </Button>

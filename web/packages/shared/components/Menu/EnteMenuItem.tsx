@@ -1,25 +1,28 @@
+import { EnteSwitch } from "@/base/components/EnteSwitch";
 import {
     SpaceBetweenFlex,
     VerticallyCenteredFlex,
 } from "@ente/shared/components/Container";
 import {
     Box,
-    ButtonProps,
     MenuItem,
     Typography,
+    type ButtonProps,
     type TypographyProps,
 } from "@mui/material";
 import React from "react";
-import { CaptionedText } from "../CaptionedText";
-import PublicShareSwitch from "../Collections/CollectionShare/publicShare/switch";
 
-interface Iprops {
+interface EnteMenuItemProps {
     onClick: () => void;
     color?: ButtonProps["color"];
     variant?: "primary" | "captioned" | "toggle" | "secondary" | "mini";
     fontWeight?: TypographyProps["fontWeight"];
     startIcon?: React.ReactNode;
     endIcon?: React.ReactNode;
+    /**
+     * One of {@link label} or {@link labelComponent} must be specified.
+     * TODO: Try and reflect this is the type.
+     */
     label?: string;
     subText?: string;
     subIcon?: React.ReactNode;
@@ -27,7 +30,8 @@ interface Iprops {
     labelComponent?: React.ReactNode;
     disabled?: boolean;
 }
-export function EnteMenuItem({
+
+export const EnteMenuItem: React.FC<EnteMenuItemProps> = ({
     onClick,
     color = "primary",
     startIcon,
@@ -40,7 +44,7 @@ export function EnteMenuItem({
     fontWeight = "bold",
     labelComponent,
     disabled = false,
-}: Iprops) {
+}) => {
     const handleButtonClick = () => {
         if (variant === "toggle") {
             return;
@@ -55,18 +59,23 @@ export function EnteMenuItem({
         onClick();
     };
 
+    const labelOrDefault = label ?? "";
+
     return (
         <MenuItem
             disabled={disabled}
             onClick={handleButtonClick}
+            disableRipple={variant == "toggle"}
             sx={{
                 width: "100%",
                 color: (theme) =>
-                    variant !== "captioned" && theme.palette[color].main,
-                ...(variant !== "secondary" &&
-                    variant !== "mini" && {
-                        backgroundColor: (theme) => theme.colors.fill.faint,
-                    }),
+                    variant !== "captioned"
+                        ? theme.palette[color].main
+                        : "inherit",
+                backgroundColor: (theme) =>
+                    variant !== "secondary" && variant !== "mini"
+                        ? theme.colors.fill.faint
+                        : "inherit",
                 "&:hover": {
                     backgroundColor: (theme) => theme.colors.fill.faintPressed,
                 },
@@ -86,17 +95,17 @@ export function EnteMenuItem({
                         ) : variant === "captioned" ? (
                             <CaptionedText
                                 color={color}
-                                mainText={label}
+                                mainText={labelOrDefault}
                                 subText={subText}
                                 subIcon={subIcon}
                             />
                         ) : variant === "mini" ? (
                             <Typography variant="mini" color="text.muted">
-                                {label}
+                                {labelOrDefault}
                             </Typography>
                         ) : (
                             <Typography fontWeight={fontWeight}>
-                                {label}
+                                {labelOrDefault}
                             </Typography>
                         )}
                     </Box>
@@ -104,7 +113,7 @@ export function EnteMenuItem({
                 <VerticallyCenteredFlex gap={"4px"}>
                     {endIcon && endIcon}
                     {variant === "toggle" && (
-                        <PublicShareSwitch
+                        <EnteSwitch
                             checked={checked}
                             onClick={handleIconClick}
                         />
@@ -113,4 +122,37 @@ export function EnteMenuItem({
             </SpaceBetweenFlex>
         </MenuItem>
     );
+};
+
+interface CaptionedTextProps {
+    mainText: string;
+    subText?: string;
+    subIcon?: React.ReactNode;
+    color?: ButtonProps["color"];
 }
+
+const CaptionedText: React.FC<CaptionedTextProps> = ({
+    mainText,
+    subText,
+    subIcon,
+    color,
+}) => {
+    const subTextColor = color == "critical" ? "critical.main" : "text.faint";
+    return (
+        <VerticallyCenteredFlex gap={"4px"}>
+            <Typography>{mainText}</Typography>
+            <Typography variant="small" color={subTextColor}>
+                {"•"}
+            </Typography>
+            {subText ? (
+                <Typography variant="small" color={subTextColor}>
+                    {subText}
+                </Typography>
+            ) : (
+                <Typography variant="small" color={subTextColor}>
+                    {subIcon}
+                </Typography>
+            )}
+        </VerticallyCenteredFlex>
+    );
+};

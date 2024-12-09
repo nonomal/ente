@@ -49,9 +49,9 @@ declare module "@mui/material/Typography" {
         small: true;
         mini: true;
         tiny: true;
-        h4: false;
-        h5: false;
-        h6: false;
+        h4: true;
+        h5: true;
+        h6: true;
         subtitle1: false;
         subtitle2: false;
         body1: false;
@@ -108,7 +108,7 @@ declare module "@mui/material/styles" {
         backdrop: Strength;
         text: Strength;
         fill: FillStrength;
-        stroke: StrokeStrength;
+        stroke: Strength;
         shadows: Shadows;
         accent: ColorStrength;
         warning: ColorStrength;
@@ -164,22 +164,10 @@ declare module "@mui/material/styles" {
         faint: string;
     }
 
-    type FillStrength = Strength & StrengthFillPressed & StrengthFillStrong;
-
-    interface StrengthFillPressed {
+    type FillStrength = Strength & {
         basePressed: string;
         faintPressed: string;
-    }
-
-    interface StrengthFillStrong {
-        strong: string;
-    }
-
-    type StrokeStrength = Strength & StrengthExtras;
-
-    interface StrengthExtras {
-        fainter: string;
-    }
+    };
 
     interface Shadows {
         float: Shadow[];
@@ -200,6 +188,6 @@ declare module "@mui/material/styles" {
         faint: number;
     }
 
-    type AvatarColors = Array<string>;
+    type AvatarColors = string[];
 }
 export {};

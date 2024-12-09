@@ -1,18 +1,10 @@
-import log from "@/next/log";
-import type { AppName } from "@/next/types/app";
-import { sendOtt } from "@ente/accounts/api/user";
-import { PasswordStrengthHint } from "@ente/accounts/components/PasswordStrength";
-import { PAGES } from "@ente/accounts/constants/pages";
-import { isWeakPassword } from "@ente/accounts/utils";
-import { generateKeyAndSRPAttributes } from "@ente/accounts/utils/srp";
-import { LS_KEYS } from "@ente/shared//storage/localStorage";
-import { appNameToAppNameOld } from "@ente/shared/apps/constants";
+import { FormPaperFooter, FormPaperTitle } from "@/base/components/FormPaper";
+import { LoadingButton } from "@/base/components/mui/LoadingButton";
+import log from "@/base/log";
+import { LS_KEYS, setLSUser } from "@ente/shared//storage/localStorage";
 import { VerticallyCentered } from "@ente/shared/components/Container";
-import FormPaperFooter from "@ente/shared/components/Form/FormPaper/Footer";
-import FormPaperTitle from "@ente/shared/components/Form/FormPaper/Title";
 import ShowHidePassword from "@ente/shared/components/Form/ShowHidePassword";
 import LinkButton from "@ente/shared/components/LinkButton";
-import SubmitButton from "@ente/shared/components/SubmitButton";
 import {
     generateAndSaveIntermediateKeyAttributes,
     saveKeyInSessionStore,
@@ -32,6 +24,7 @@ import {
     IconButton,
     InputAdornment,
     Link,
+    Stack,
     TextField,
     Tooltip,
     Typography,
@@ -42,6 +35,11 @@ import type { NextRouter } from "next/router";
 import React, { useState } from "react";
 import { Trans } from "react-i18next";
 import * as Yup from "yup";
+import { PAGES } from "../constants/pages";
+import { generateKeyAndSRPAttributes } from "../services/srp";
+import { sendOtt } from "../services/user";
+import { isWeakPassword } from "../utils/password";
+import { PasswordStrengthHint } from "./PasswordStrength";
 
 interface FormValues {
     email: string;
@@ -53,12 +51,11 @@ interface FormValues {
 interface SignUpProps {
     router: NextRouter;
     login: () => void;
-    appName: AppName;
+    /** Reactive value of {@link customAPIHost}. */
+    host: string | undefined;
 }
 
-export function SignUp({ router, appName, login }: SignUpProps) {
-    const appNameOld = appNameToAppNameOld(appName);
-
+export const SignUp: React.FC<SignUpProps> = ({ router, login, host }) => {
     const [acceptTerms, setAcceptTerms] = useState(false);
     const [loading, setLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
@@ -84,12 +81,15 @@ export function SignUp({ router, appName, login }: SignUpProps) {
             }
             setLoading(true);
             try {
-                setData(LS_KEYS.USER, { email });
+                await setLSUser({ email });
                 setLocalReferralSource(referral);
-                await sendOtt(appNameOld, email);
+                await sendOtt(email);
             } catch (e) {
                 const message = e instanceof Error ? e.message : "";
-                setFieldError("confirm", `${t("UNKNOWN_ERROR")} ${message}`);
+                setFieldError(
+                    "confirm",
+                    `${t("generic_error_retry")} ${message}`,
+                );
                 throw e;
             }
             try {
@@ -109,7 +109,7 @@ export function SignUp({ router, appName, login }: SignUpProps) {
                     masterKey,
                 );
                 setJustSignedUp(true);
-                router.push(PAGES.VERIFY);
+                void router.push(PAGES.VERIFY);
             } catch (e) {
                 setFieldError("confirm", t("PASSWORD_GENERATION_FAILED"));
                 throw e;
@@ -122,7 +122,7 @@ export function SignUp({ router, appName, login }: SignUpProps) {
 
     return (
         <>
-            <FormPaperTitle> {t("SIGN_UP")}</FormPaperTitle>
+            <FormPaperTitle> {t("sign_up")}</FormPaperTitle>
             <Formik<FormValues>
                 initialValues={{
                     email: "",
@@ -133,9 +133,9 @@ export function SignUp({ router, appName, login }: SignUpProps) {
                 validationSchema={Yup.object().shape({
                     email: Yup.string()
                         .email(t("EMAIL_ERROR"))
-                        .required(t("REQUIRED")),
-                    passphrase: Yup.string().required(t("REQUIRED")),
-                    confirm: Yup.string().required(t("REQUIRED")),
+                        .required(t("required")),
+                    passphrase: Yup.string().required(t("required")),
+                    confirm: Yup.string().required(t("required")),
                 })}
                 validateOnChange={false}
                 validateOnBlur={false}
@@ -146,7 +146,7 @@ export function SignUp({ router, appName, login }: SignUpProps) {
                     errors,
                     handleChange,
                     handleSubmit,
-                }): JSX.Element => (
+                }): React.JSX.Element => (
                     <form noValidate onSubmit={handleSubmit}>
                         <VerticallyCentered sx={{ mb: 1 }}>
                             <TextField
@@ -266,7 +266,7 @@ export function SignUp({ router, appName, login }: SignUpProps) {
                                     label={
                                         <Typography variant="small">
                                             <Trans
-                                                i18nKey={"TERMS_AND_CONDITIONS"}
+                                                i18nKey={"terms_and_conditions"}
                                                 components={{
                                                     a: (
                                                         <Link
@@ -288,15 +288,18 @@ export function SignUp({ router, appName, login }: SignUpProps) {
                             </FormGroup>
                         </VerticallyCentered>
                         <Box mb={4}>
-                            <SubmitButton
-                                sx={{ my: 0 }}
-                                buttonText={t("CREATE_ACCOUNT")}
+                            <LoadingButton
+                                fullWidth
+                                color="accent"
+                                type="submit"
                                 loading={loading}
                                 disabled={
                                     !acceptTerms ||
                                     isWeakPassword(values.passphrase)
                                 }
-                            />
+                            >
+                                {t("create_account")}
+                            </LoadingButton>
                             {loading && (
                                 <Typography
                                     mt={1}
@@ -304,7 +307,7 @@ export function SignUp({ router, appName, login }: SignUpProps) {
                                     color="text.muted"
                                     variant="small"
                                 >
-                                    {t("KEY_GENERATION_IN_PROGRESS_MESSAGE")}
+                                    {t("key_generation_in_progress")}
                                 </Typography>
                             )}
                         </Box>
@@ -313,8 +316,20 @@ export function SignUp({ router, appName, login }: SignUpProps) {
             </Formik>
 
             <FormPaperFooter>
-                <LinkButton onClick={login}>{t("ACCOUNT_EXISTS")}</LinkButton>
+                <Stack gap={4}>
+                    <LinkButton onClick={login}>
+                        {t("ACCOUNT_EXISTS")}
+                    </LinkButton>
+
+                    <Typography
+                        variant="mini"
+                        color="text.faint"
+                        minHeight={"32px"}
+                    >
+                        {host ?? "" /* prevent layout shift with a minHeight */}
+                    </Typography>
+                </Stack>
             </FormPaperFooter>
         </>
     );
-}
+};

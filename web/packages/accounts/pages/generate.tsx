@@ -1,20 +1,22 @@
-import log from "@/next/log";
-import { ensure } from "@/utils/ensure";
-import { putAttributes } from "@ente/accounts/api/user";
+import { RecoveryKey } from "@/accounts/components/RecoveryKey";
 import SetPasswordForm, {
     type SetPasswordFormProps,
-} from "@ente/accounts/components/SetPasswordForm";
-import { PAGES } from "@ente/accounts/constants/pages";
-import { configureSRP } from "@ente/accounts/services/srp";
-import { generateKeyAndSRPAttributes } from "@ente/accounts/utils/srp";
-import { APP_HOMES, appNameToAppNameOld } from "@ente/shared/apps/constants";
+} from "@/accounts/components/SetPasswordForm";
+import { PAGES } from "@/accounts/constants/pages";
+import {
+    configureSRP,
+    generateKeyAndSRPAttributes,
+} from "@/accounts/services/srp";
+import { putAttributes } from "@/accounts/services/user";
+import {
+    FormPaper,
+    FormPaperFooter,
+    FormPaperTitle,
+} from "@/base/components/FormPaper";
+import { ActivityIndicator } from "@/base/components/mui/ActivityIndicator";
+import log from "@/base/log";
 import { VerticallyCentered } from "@ente/shared/components/Container";
-import EnteSpinner from "@ente/shared/components/EnteSpinner";
-import FormPaper from "@ente/shared/components/Form/FormPaper";
-import FormPaperFooter from "@ente/shared/components/Form/FormPaper/Footer";
-import FormTitle from "@ente/shared/components/Form/FormPaper/Title";
 import LinkButton from "@ente/shared/components/LinkButton";
-import RecoveryKey from "@ente/shared/components/RecoveryKey";
 import {
     generateAndSaveIntermediateKeyAttributes,
     saveKeyInSessionStore,
@@ -29,46 +31,41 @@ import type { KeyAttributes, User } from "@ente/shared/user/types";
 import { t } from "i18next";
 import { useRouter } from "next/router";
 import { useEffect, useState } from "react";
+import { appHomeRoute } from "../services/redirect";
 import type { PageProps } from "../types/page";
 
 const Page: React.FC<PageProps> = ({ appContext }) => {
-    const { appName, logout } = appContext;
-
-    const appNameOld = appNameToAppNameOld(appName);
+    const { logout, showMiniDialog } = appContext;
 
     const [token, setToken] = useState<string>();
     const [user, setUser] = useState<User>();
-    const [recoverModalView, setRecoveryModalView] = useState(false);
+    const [openRecoveryKey, setOpenRecoveryKey] = useState(false);
     const [loading, setLoading] = useState(true);
 
     const router = useRouter();
 
     useEffect(() => {
-        const main = async () => {
-            const key: string = getKey(SESSION_KEYS.ENCRYPTION_KEY);
-            const keyAttributes: KeyAttributes = getData(
-                LS_KEYS.ORIGINAL_KEY_ATTRIBUTES,
-            );
-            const user: User = getData(LS_KEYS.USER);
-            setUser(user);
-            if (!user?.token) {
-                router.push(PAGES.ROOT);
-            } else if (key) {
-                if (justSignedUp()) {
-                    setRecoveryModalView(true);
-                    setLoading(false);
-                } else {
-                    // TODO: Refactor the type of APP_HOMES to not require the ??
-                    router.push(APP_HOMES.get(appNameOld) ?? "/");
-                }
-            } else if (keyAttributes?.encryptedKey) {
-                router.push(PAGES.CREDENTIALS);
-            } else {
-                setToken(user.token);
+        const key: string = getKey(SESSION_KEYS.ENCRYPTION_KEY);
+        const keyAttributes: KeyAttributes = getData(
+            LS_KEYS.ORIGINAL_KEY_ATTRIBUTES,
+        );
+        const user: User = getData(LS_KEYS.USER);
+        setUser(user);
+        if (!user?.token) {
+            void router.push("/");
+        } else if (key) {
+            if (justSignedUp()) {
+                setOpenRecoveryKey(true);
                 setLoading(false);
+            } else {
+                void router.push(appHomeRoute);
             }
-        };
-        main();
+        } else if (keyAttributes?.encryptedKey) {
+            void router.push(PAGES.CREDENTIALS);
+        } else {
+            setToken(user.token);
+            setLoading(false);
+        }
         appContext.showNavBar(true);
     }, []);
 
@@ -81,7 +78,7 @@ const Page: React.FC<PageProps> = ({ appContext }) => {
                 await generateKeyAndSRPAttributes(passphrase);
 
             // TODO: Refactor the code to not require this ensure
-            await putAttributes(ensure(token), keyAttributes);
+            await putAttributes(token!, keyAttributes);
             await configureSRP(srpSetupAttributes);
             await generateAndSaveIntermediateKeyAttributes(
                 passphrase,
@@ -90,7 +87,7 @@ const Page: React.FC<PageProps> = ({ appContext }) => {
             );
             await saveKeyInSessionStore(SESSION_KEYS.ENCRYPTION_KEY, masterKey);
             setJustSignedUp(true);
-            setRecoveryModalView(true);
+            setOpenRecoveryKey(true);
         } catch (e) {
             log.error("failed to generate password", e);
             setFieldError("passphrase", t("PASSWORD_GENERATION_FAILED"));
@@ -101,24 +98,21 @@ const Page: React.FC<PageProps> = ({ appContext }) => {
         <>
             {loading || !user ? (
                 <VerticallyCentered>
-                    <EnteSpinner />
+                    <ActivityIndicator />
                 </VerticallyCentered>
-            ) : recoverModalView ? (
+            ) : openRecoveryKey ? (
                 <RecoveryKey
-                    isMobile={appContext.isMobile}
-                    show={recoverModalView}
-                    onHide={() => {
-                        setRecoveryModalView(false);
-                        // TODO: Refactor the type of APP_HOMES to not require the ??
-                        router.push(APP_HOMES.get(appNameOld) ?? "/");
+                    open={openRecoveryKey}
+                    onClose={() => {
+                        setOpenRecoveryKey(false);
+                        void router.push(appHomeRoute);
                     }}
-                    /* TODO: Why is this error being ignored */
-                    somethingWentWrong={() => {}}
+                    showMiniDialog={showMiniDialog}
                 />
             ) : (
                 <VerticallyCentered>
                     <FormPaper>
-                        <FormTitle>{t("SET_PASSPHRASE")}</FormTitle>
+                        <FormPaperTitle>{t("SET_PASSPHRASE")}</FormPaperTitle>
                         <SetPasswordForm
                             userEmail={user.email}
                             callback={onSubmit}
@@ -126,7 +120,7 @@ const Page: React.FC<PageProps> = ({ appContext }) => {
                         />
                         <FormPaperFooter>
                             <LinkButton onClick={logout}>
-                                {t("GO_BACK")}
+                                {t("go_back")}
                             </LinkButton>
                         </FormPaperFooter>
                     </FormPaper>

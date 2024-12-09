@@ -5,17 +5,21 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/ente-io/museum/ente"
 
 	model "github.com/ente-io/museum/ente/userentity"
 	"github.com/ente-io/stacktrace"
-	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 )
 
 // Create inserts a new  entry
-func (r *Repository) Create(ctx context.Context, userID int64, entry model.EntityDataRequest) (uuid.UUID, error) {
-	id := uuid.New()
-	err := r.DB.QueryRow(`INSERT into entity_data(
+func (r *Repository) Create(ctx context.Context, userID int64, entry model.EntityDataRequest) (string, error) {
+	idPrt, err := entry.Type.GetNewID()
+	if err != nil {
+		return "", stacktrace.Propagate(err, "failed to generate new id")
+	}
+	id := *idPrt
+	err = r.DB.QueryRow(`INSERT into entity_data(
                          id,
                          user_id,
                          type,
@@ -33,7 +37,7 @@ func (r *Repository) Create(ctx context.Context, userID int64, entry model.Entit
 	return id, nil
 }
 
-func (r *Repository) Get(ctx context.Context, userID int64, id uuid.UUID) (*model.EntityData, error) {
+func (r *Repository) Get(ctx context.Context, userID int64, id string) (*model.EntityData, error) {
 	res := model.EntityData{}
 	row := r.DB.QueryRowContext(ctx, `SELECT
 	id, user_id, type, encrypted_data, header, is_deleted, created_at, updated_at
@@ -50,7 +54,7 @@ func (r *Repository) Get(ctx context.Context, userID int64, id uuid.UUID) (*mode
 	return &res, nil
 }
 
-func (r *Repository) Delete(ctx context.Context, userID int64, id uuid.UUID) (bool, error) {
+func (r *Repository) Delete(ctx context.Context, userID int64, id string) (bool, error) {
 	_, err := r.DB.ExecContext(ctx,
 		`UPDATE entity_data SET is_deleted = true, encrypted_data = NULL, header = NULL where id=$1 and user_id = $2`,
 		id, userID)
@@ -72,6 +76,16 @@ func (r *Repository) Update(ctx context.Context, userID int64, req model.UpdateE
 		return stacktrace.Propagate(err, "")
 	}
 	if affected != 1 {
+		dbEntity, dbEntityErr := r.Get(ctx, userID, req.ID)
+		if dbEntityErr != nil {
+			return stacktrace.Propagate(dbEntityErr, fmt.Sprintf("failed to get entity for update with id=%s", req.ID))
+		}
+		if dbEntity.IsDeleted {
+			return stacktrace.Propagate(ente.NewBadRequestWithMessage("entity is already deleted"), "")
+		} else if *dbEntity.EncryptedData == req.EncryptedData && *dbEntity.Header == req.Header {
+			logrus.WithField("id", req.ID).Info("entity is already updated")
+			return nil
+		}
 		return stacktrace.Propagate(errors.New("exactly one row should be updated"), "")
 	}
 	return nil

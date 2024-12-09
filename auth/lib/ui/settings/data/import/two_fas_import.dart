@@ -72,7 +72,7 @@ Future<void> _pick2FasFile(BuildContext context) async {
     await showErrorDialog(
       context,
       context.l10n.sorry,
-      context.l10n.importFailureDesc,
+      "${context.l10n.importFailureDescNew}\n Error: ${e.toString()}",
     );
   }
 }
@@ -139,7 +139,10 @@ Future<int?> _process2FasExportFile(
   for (var item in decodedServices) {
     var kind = item['otp']['tokenType'];
     var account = item['otp']['account'] ?? '';
-    var issuer = item['otp']['issuer'] ?? item['name'] ?? '';
+    var issuer = item['otp']['issuer'];
+    if (issuer == null || (issuer as String).isEmpty) {
+      issuer = item['name'] ?? '';
+    }
     var algorithm = item['otp']['algorithm'];
     var secret = item['secret'];
     var timer = item['otp']['period'];
@@ -149,14 +152,14 @@ Future<int?> _process2FasExportFile(
     // Build the OTP URL
     String otpUrl;
 
-    if (kind.toLowerCase() == 'totp') {
+    if (kind.toLowerCase() == 'totp' || kind.toLowerCase() == 'steam') {
       otpUrl =
           'otpauth://$kind/$issuer:$account?secret=$secret&issuer=$issuer&algorithm=$algorithm&digits=$digits&period=$timer';
     } else if (kind.toLowerCase() == 'hotp') {
       otpUrl =
           'otpauth://$kind/$issuer:$account?secret=$secret&issuer=$issuer&algorithm=$algorithm&digits=$digits&counter=$counter';
     } else {
-      throw Exception('Invalid OTP type');
+      throw Exception('Invalid OTP type ${kind.toLowerCase()}');
     }
     parsedCodes.add(Code.fromOTPAuthUrl(otpUrl));
   }

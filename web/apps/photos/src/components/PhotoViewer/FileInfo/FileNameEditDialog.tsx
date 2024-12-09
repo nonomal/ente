@@ -1,4 +1,6 @@
-import DialogBoxV2 from "@ente/shared/components/DialogBoxV2";
+import { TitledMiniDialog } from "@/base/components/MiniDialog";
+import log from "@/base/log";
+import { photosDialogZIndex } from "@/new/photos/components/utils/z-index";
 import SingleInputForm, {
     type SingleInputFormProps,
 } from "@ente/shared/components/SingleInputForm";
@@ -19,28 +21,27 @@ export const FileNameEditDialog = ({
             await saveEdits(filename);
             closeEditMode();
         } catch (e) {
-            setFieldError(t("UNKNOWN_ERROR"));
+            log.error(e);
+            setFieldError(t("generic_error_retry"));
         }
     };
     return (
-        <DialogBoxV2
-            sx={{ zIndex: 1600 }}
+        <TitledMiniDialog
+            sx={{ zIndex: photosDialogZIndex }}
             open={isInEditMode}
             onClose={closeEditMode}
-            attributes={{
-                title: t("RENAME_FILE"),
-            }}
+            title={t("rename_file")}
         >
             <SingleInputForm
                 initialValue={filename}
                 callback={onSubmit}
-                placeholder={t("ENTER_FILE_NAME")}
-                buttonText={t("RENAME")}
+                placeholder={t("enter_file_name")}
+                buttonText={t("rename")}
                 fieldType="text"
                 caption={extension}
                 secondaryButtonAction={closeEditMode}
                 submitButtonProps={{ sx: { mt: 1, mb: 2 } }}
             />
-        </DialogBoxV2>
+        </TitledMiniDialog>
     );
 };

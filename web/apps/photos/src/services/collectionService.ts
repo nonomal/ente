@@ -1,83 +1,55 @@
-import { getEndpoint } from "@ente/shared/network/api";
-import localForage from "@ente/shared/storage/localForage";
-import { getData, LS_KEYS } from "@ente/shared/storage/localStorage";
-
-import log from "@/next/log";
-import ComlinkCryptoWorker from "@ente/shared/crypto";
-import { CustomError } from "@ente/shared/error";
-import HTTPService from "@ente/shared/network/HTTPService";
-import { getToken } from "@ente/shared/storage/localStorage/helpers";
-import { getActualKey } from "@ente/shared/user";
-import type { User } from "@ente/shared/user/types";
-import { REQUEST_BATCH_SIZE } from "constants/api";
-import {
-    ALL_SECTION,
-    ARCHIVE_SECTION,
-    COLLECTION_LIST_SORT_BY,
-    COLLECTION_SORT_ORDER,
-    CollectionSummaryType,
-    CollectionType,
-    DUMMY_UNCATEGORIZED_COLLECTION,
-    HIDDEN_ITEMS_SECTION,
-    TRASH_SECTION,
-} from "constants/collection";
-import { t } from "i18next";
+import { encryptMetadataJSON, sharedCryptoWorker } from "@/base/crypto";
+import log from "@/base/log";
+import { apiURL } from "@/base/origins";
 import {
     AddToCollectionRequest,
     Collection,
-    CollectionFilesCount,
     CollectionMagicMetadata,
     CollectionMagicMetadataProps,
     CollectionPublicMagicMetadata,
     CollectionShareeMagicMetadata,
-    CollectionSummaries,
-    CollectionSummary,
-    CollectionToFileMap,
+    CollectionType,
     CreatePublicAccessTokenRequest,
     EncryptedCollection,
     EncryptedFileKey,
     MoveToCollectionRequest,
     PublicURL,
     RemoveFromCollectionRequest,
-    UpdatePublicURL,
-} from "types/collection";
-import { EnteFile } from "types/file";
-import {
-    EncryptedMagicMetadata,
     SUB_TYPE,
-    UpdateMagicMetadataRequest,
-    VISIBILITY_STATE,
-} from "types/magicMetadata";
-import { FamilyData } from "types/user";
+    UpdatePublicURL,
+} from "@/media/collection";
+import { EncryptedMagicMetadata, EnteFile } from "@/media/file";
+import { ItemVisibility } from "@/media/file-metadata";
+import {
+    isDefaultHiddenCollection,
+    isHiddenCollection,
+} from "@/new/photos/services/collection";
+import type { CollectionSummary } from "@/new/photos/services/collection/ui";
+import {
+    CollectionSummaryOrder,
+    CollectionsSortBy,
+} from "@/new/photos/services/collection/ui";
+import { groupFilesByCollectionID } from "@/new/photos/services/file";
+import { getLocalFiles, sortFiles } from "@/new/photos/services/files";
+import { updateMagicMetadata } from "@/new/photos/services/magic-metadata";
+import type { FamilyData } from "@/new/photos/services/user-details";
+import { batch } from "@/utils/array";
+import HTTPService from "@ente/shared/network/HTTPService";
+import localForage from "@ente/shared/storage/localForage";
+import { LS_KEYS, getData } from "@ente/shared/storage/localStorage";
+import { getToken } from "@ente/shared/storage/localStorage/helpers";
+import { getActualKey } from "@ente/shared/user";
+import type { User } from "@ente/shared/user/types";
 import {
     changeCollectionSubType,
     getHiddenCollections,
     getNonHiddenCollections,
-    isDefaultHiddenCollection,
-    isHiddenCollection,
-    isIncomingCollabShare,
-    isIncomingShare,
-    isOutgoingShare,
     isQuickLinkCollection,
-    isSharedOnlyViaLink,
     isValidMoveTarget,
 } from "utils/collection";
-import { batch } from "utils/common";
-import {
-    getUniqueFiles,
-    groupFilesBasedOnCollectionID,
-    sortFiles,
-} from "utils/file";
-import {
-    isArchivedCollection,
-    isArchivedFile,
-    isPinnedCollection,
-    updateMagicMetadata,
-} from "utils/magicMetadata";
-import { getLocalFiles } from "./fileService";
+import { UpdateMagicMetadataRequest } from "./fileService";
 import { getPublicKey } from "./userService";
 
-const ENDPOINT = getEndpoint();
 const COLLECTION_TABLE = "collections";
 const COLLECTION_UPDATION_TIME = "collection-updation-time";
 const HIDDEN_COLLECTION_IDS = "hidden-collection-ids";
@@ -85,6 +57,8 @@ const HIDDEN_COLLECTION_IDS = "hidden-collection-ids";
 const UNCATEGORIZED_COLLECTION_NAME = "Uncategorized";
 export const HIDDEN_COLLECTION_NAME = ".hidden";
 const FAVORITE_COLLECTION_NAME = "Favorites";
+
+export const REQUEST_BATCH_SIZE = 1000;
 
 export const getCollectionLastSyncTime = async (collection: Collection) =>
     (await localForage.getItem<number>(`${collection.id}-time`)) ?? 0;
@@ -101,7 +75,7 @@ const getCollectionWithSecrets = async (
     collection: EncryptedCollection,
     masterKey: string,
 ): Promise<Collection> => {
-    const cryptoWorker = await ComlinkCryptoWorker.getInstance();
+    const cryptoWorker = await sharedCryptoWorker();
     const userID = getData(LS_KEYS.USER).id;
     let collectionKey: string;
     if (collection.owner.id === userID) {
@@ -135,22 +109,22 @@ const getCollectionWithSecrets = async (
     if (collection.magicMetadata?.data) {
         collectionMagicMetadata = {
             ...collection.magicMetadata,
-            data: await cryptoWorker.decryptMetadata(
-                collection.magicMetadata.data,
-                collection.magicMetadata.header,
-                collectionKey,
-            ),
+            data: await cryptoWorker.decryptMetadataJSON({
+                encryptedDataB64: collection.magicMetadata.data,
+                decryptionHeaderB64: collection.magicMetadata.header,
+                keyB64: collectionKey,
+            }),
         };
     }
     let collectionPublicMagicMetadata: CollectionPublicMagicMetadata;
     if (collection.pubMagicMetadata?.data) {
         collectionPublicMagicMetadata = {
             ...collection.pubMagicMetadata,
-            data: await cryptoWorker.decryptMetadata(
-                collection.pubMagicMetadata.data,
-                collection.pubMagicMetadata.header,
-                collectionKey,
-            ),
+            data: await cryptoWorker.decryptMetadataJSON({
+                encryptedDataB64: collection.pubMagicMetadata.data,
+                decryptionHeaderB64: collection.pubMagicMetadata.header,
+                keyB64: collectionKey,
+            }),
         };
     }
 
@@ -158,11 +132,11 @@ const getCollectionWithSecrets = async (
     if (collection.sharedMagicMetadata?.data) {
         collectionShareeMagicMetadata = {
             ...collection.sharedMagicMetadata,
-            data: await cryptoWorker.decryptMetadata(
-                collection.sharedMagicMetadata.data,
-                collection.sharedMagicMetadata.header,
-                collectionKey,
-            ),
+            data: await cryptoWorker.decryptMetadataJSON({
+                encryptedDataB64: collection.sharedMagicMetadata.data,
+                decryptionHeaderB64: collection.sharedMagicMetadata.header,
+                keyB64: collectionKey,
+            }),
         };
     }
 
@@ -183,7 +157,7 @@ const getCollections = async (
 ): Promise<Collection[]> => {
     try {
         const resp = await HTTPService.get(
-            `${ENDPOINT}/collections/v2`,
+            await apiURL("/collections/v2"),
             {
                 sinceTime,
             },
@@ -330,7 +304,7 @@ export const getCollection = async (
             return;
         }
         const resp = await HTTPService.get(
-            `${ENDPOINT}/collections/${collectionID}`,
+            await apiURL(`/collections/${collectionID}`),
             null,
             { "X-Auth-Token": token },
         );
@@ -346,67 +320,6 @@ export const getCollection = async (
     }
 };
 
-export const getCollectionLatestFiles = (
-    files: EnteFile[],
-): CollectionToFileMap => {
-    const latestFiles = new Map<number, EnteFile>();
-
-    files.forEach((file) => {
-        if (!latestFiles.has(file.collectionID)) {
-            latestFiles.set(file.collectionID, file);
-        }
-    });
-    return latestFiles;
-};
-
-export const getCollectionCoverFiles = (
-    files: EnteFile[],
-    collections: Collection[],
-): CollectionToFileMap => {
-    const collectionIDToFileMap = groupFilesBasedOnCollectionID(files);
-
-    const coverFiles = new Map<number, EnteFile>();
-
-    collections.forEach((collection) => {
-        const collectionFiles = collectionIDToFileMap.get(collection.id);
-        if (!collectionFiles || collectionFiles.length === 0) {
-            return;
-        }
-        const coverID = collection.pubMagicMetadata?.data?.coverID;
-        if (typeof coverID === "number" && coverID > 0) {
-            const coverFile = collectionFiles.find(
-                (file) => file.id === coverID,
-            );
-            if (coverFile) {
-                coverFiles.set(collection.id, coverFile);
-                return;
-            }
-        }
-        if (collection.pubMagicMetadata?.data?.asc) {
-            coverFiles.set(
-                collection.id,
-                collectionFiles[collectionFiles.length - 1],
-            );
-        } else {
-            coverFiles.set(collection.id, collectionFiles[0]);
-        }
-    });
-    return coverFiles;
-};
-
-export const getFavItemIds = async (
-    files: EnteFile[],
-): Promise<Set<number>> => {
-    const favCollection = await getFavCollection();
-    if (!favCollection) return new Set();
-
-    return new Set(
-        files
-            .filter((file) => file.collectionID === favCollection.id)
-            .map((file): number => file.id),
-    );
-};
-
 export const createAlbum = (albumName: string) => {
     return createCollection(albumName, CollectionType.album);
 };
@@ -417,7 +330,7 @@ const createCollection = async (
     magicMetadataProps?: CollectionMagicMetadataProps,
 ): Promise<Collection> => {
     try {
-        const cryptoWorker = await ComlinkCryptoWorker.getInstance();
+        const cryptoWorker = await sharedCryptoWorker();
         const encryptionKey = await getActualKey();
         const token = getToken();
         const collectionKey = await cryptoWorker.generateEncryptionKey();
@@ -428,16 +341,16 @@ const createCollection = async (
         let encryptedMagicMetadata: EncryptedMagicMetadata;
         if (magicMetadataProps) {
             const magicMetadata = await updateMagicMetadata(magicMetadataProps);
-            const { file: encryptedMagicMetadataProps } =
-                await cryptoWorker.encryptMetadata(
-                    magicMetadataProps,
-                    collectionKey,
-                );
+            const encryptedMagicMetadataProps =
+                await cryptoWorker.encryptMetadataJSON({
+                    jsonValue: magicMetadataProps,
+                    keyB64: collectionKey,
+                });
 
             encryptedMagicMetadata = {
                 ...magicMetadata,
-                data: encryptedMagicMetadataProps.encryptedData,
-                header: encryptedMagicMetadataProps.decryptionHeader,
+                data: encryptedMagicMetadataProps.encryptedDataB64,
+                header: encryptedMagicMetadataProps.decryptionHeaderB64,
             };
         }
         const newCollection: EncryptedCollection = {
@@ -474,7 +387,7 @@ const postCollection = async (
 ): Promise<EncryptedCollection> => {
     try {
         const response = await HTTPService.post(
-            `${ENDPOINT}/collections`,
+            await apiURL("/collections"),
             collectionData,
             null,
             { "X-Auth-Token": token },
@@ -490,12 +403,16 @@ export const createFavoritesCollection = () => {
 };
 
 export const addToFavorites = async (file: EnteFile) => {
+    await addMultipleToFavorites([file]);
+};
+
+export const addMultipleToFavorites = async (files: EnteFile[]) => {
     try {
         let favCollection = await getFavCollection();
         if (!favCollection) {
             favCollection = await createFavoritesCollection();
         }
-        await addToCollection(favCollection, [file]);
+        await addToCollection(favCollection, files);
     } catch (e) {
         log.error("failed to add to favorite", e);
     }
@@ -505,7 +422,7 @@ export const removeFromFavorites = async (file: EnteFile) => {
     try {
         const favCollection = await getFavCollection();
         if (!favCollection) {
-            throw Error(CustomError.FAV_COLLECTION_MISSING);
+            throw Error("favorite collection missing");
         }
         await removeFromCollection(favCollection.id, [file]);
     } catch (e) {
@@ -529,7 +446,7 @@ export const addToCollection = async (
                 files: fileKeysEncryptedWithNewCollection,
             };
             await HTTPService.post(
-                `${ENDPOINT}/collections/add-files`,
+                await apiURL("/collections/add-files"),
                 requestBody,
                 null,
                 {
@@ -559,7 +476,7 @@ export const restoreToCollection = async (
                 files: fileKeysEncryptedWithNewCollection,
             };
             await HTTPService.post(
-                `${ENDPOINT}/collections/restore-files`,
+                await apiURL("/collections/restore-files"),
                 requestBody,
                 null,
                 {
@@ -590,7 +507,7 @@ export const moveToCollection = async (
                 files: fileKeysEncryptedWithNewCollection,
             };
             await HTTPService.post(
-                `${ENDPOINT}/collections/move-files`,
+                await apiURL("/collections/move-files"),
                 requestBody,
                 null,
                 {
@@ -609,7 +526,7 @@ const encryptWithNewCollectionKey = async (
     files: EnteFile[],
 ): Promise<EncryptedFileKey[]> => {
     const fileKeysEncryptedWithNewCollection: EncryptedFileKey[] = [];
-    const cryptoWorker = await ComlinkCryptoWorker.getInstance();
+    const cryptoWorker = await sharedCryptoWorker();
     for (const file of files) {
         const newEncryptedKey = await cryptoWorker.encryptToB64(
             file.key,
@@ -668,7 +585,7 @@ export const removeUserFiles = async (
         const toRemoveFilesCopiesInOtherCollections = allFiles.filter((f) => {
             return toRemoveFilesIds.has(f.id);
         });
-        const groupiedFiles = groupFilesBasedOnCollectionID(
+        const groupedFiles = groupFilesByCollectionID(
             toRemoveFilesCopiesInOtherCollections,
         );
 
@@ -676,7 +593,7 @@ export const removeUserFiles = async (
         const collectionsMap = new Map(collections.map((c) => [c.id, c]));
         const user: User = getData(LS_KEYS.USER);
 
-        for (const [targetCollectionID, files] of groupiedFiles.entries()) {
+        for (const [targetCollectionID, files] of groupedFiles.entries()) {
             const targetCollection = collectionsMap.get(targetCollectionID);
             if (
                 !isValidMoveTarget(sourceCollectionID, targetCollection, user)
@@ -736,7 +653,7 @@ export const removeNonUserFiles = async (
             };
 
             await HTTPService.post(
-                `${ENDPOINT}/collections/v3/remove-files`,
+                await apiURL("/collections/v3/remove-files"),
                 request,
                 null,
                 { "X-Auth-Token": token },
@@ -763,7 +680,7 @@ export const deleteCollection = async (
         const token = getToken();
 
         await HTTPService.delete(
-            `${ENDPOINT}/collections/v3/${collectionID}`,
+            await apiURL(`/collections/v3/${collectionID}`),
             null,
             { collectionID, keepFiles },
             { "X-Auth-Token": token },
@@ -779,7 +696,7 @@ export const leaveSharedAlbum = async (collectionID: number) => {
         const token = getToken();
 
         await HTTPService.post(
-            `${ENDPOINT}/collections/leave/${collectionID}`,
+            await apiURL(`/collections/leave/${collectionID}`),
             null,
             null,
             { "X-Auth-Token": token },
@@ -799,11 +716,8 @@ export const updateCollectionMagicMetadata = async (
         return;
     }
 
-    const cryptoWorker = await ComlinkCryptoWorker.getInstance();
-
-    const { file: encryptedMagicMetadata } = await cryptoWorker.encryptMetadata(
-        updatedMagicMetadata.data,
-        collection.key,
+    const { encryptedDataB64, decryptionHeaderB64 } = await encryptMetadataJSON(
+        { jsonValue: updatedMagicMetadata.data, keyB64: collection.key },
     );
 
     const reqBody: UpdateMagicMetadataRequest = {
@@ -811,13 +725,13 @@ export const updateCollectionMagicMetadata = async (
         magicMetadata: {
             version: updatedMagicMetadata.version,
             count: updatedMagicMetadata.count,
-            data: encryptedMagicMetadata.encryptedData,
-            header: encryptedMagicMetadata.decryptionHeader,
+            data: encryptedDataB64,
+            header: decryptionHeaderB64,
         },
     };
 
     await HTTPService.put(
-        `${ENDPOINT}/collections/magic-metadata`,
+        await apiURL("/collections/magic-metadata"),
         reqBody,
         null,
         {
@@ -843,25 +757,21 @@ export const updateSharedCollectionMagicMetadata = async (
         return;
     }
 
-    const cryptoWorker = await ComlinkCryptoWorker.getInstance();
-
-    const { file: encryptedMagicMetadata } = await cryptoWorker.encryptMetadata(
-        updatedMagicMetadata.data,
-        collection.key,
+    const { encryptedDataB64, decryptionHeaderB64 } = await encryptMetadataJSON(
+        { jsonValue: updatedMagicMetadata.data, keyB64: collection.key },
     );
-
     const reqBody: UpdateMagicMetadataRequest = {
         id: collection.id,
         magicMetadata: {
             version: updatedMagicMetadata.version,
             count: updatedMagicMetadata.count,
-            data: encryptedMagicMetadata.encryptedData,
-            header: encryptedMagicMetadata.decryptionHeader,
+            data: encryptedDataB64,
+            header: decryptionHeaderB64,
         },
     };
 
     await HTTPService.put(
-        `${ENDPOINT}/collections/sharee-magic-metadata`,
+        await apiURL("/collections/sharee-magic-metadata"),
         reqBody,
         null,
         {
@@ -887,25 +797,21 @@ export const updatePublicCollectionMagicMetadata = async (
         return;
     }
 
-    const cryptoWorker = await ComlinkCryptoWorker.getInstance();
-
-    const { file: encryptedMagicMetadata } = await cryptoWorker.encryptMetadata(
-        updatedPublicMagicMetadata.data,
-        collection.key,
+    const { encryptedDataB64, decryptionHeaderB64 } = await encryptMetadataJSON(
+        { jsonValue: updatedPublicMagicMetadata.data, keyB64: collection.key },
     );
-
     const reqBody: UpdateMagicMetadataRequest = {
         id: collection.id,
         magicMetadata: {
             version: updatedPublicMagicMetadata.version,
             count: updatedPublicMagicMetadata.count,
-            data: encryptedMagicMetadata.encryptedData,
-            header: encryptedMagicMetadata.decryptionHeader,
+            data: encryptedDataB64,
+            header: decryptionHeaderB64,
         },
     };
 
     await HTTPService.put(
-        `${ENDPOINT}/collections/public-magic-metadata`,
+        await apiURL("/collections/public-magic-metadata"),
         reqBody,
         null,
         {
@@ -931,7 +837,7 @@ export const renameCollection = async (
         await changeCollectionSubType(collection, SUB_TYPE.DEFAULT);
     }
     const token = getToken();
-    const cryptoWorker = await ComlinkCryptoWorker.getInstance();
+    const cryptoWorker = await sharedCryptoWorker();
     const { encryptedData: encryptedName, nonce: nameDecryptionNonce } =
         await cryptoWorker.encryptUTF8(newCollectionName, collection.key);
     const collectionRenameRequest = {
@@ -940,7 +846,7 @@ export const renameCollection = async (
         nameDecryptionNonce,
     };
     await HTTPService.post(
-        `${ENDPOINT}/collections/rename`,
+        await apiURL("/collections/rename"),
         collectionRenameRequest,
         null,
         {
@@ -955,7 +861,7 @@ export const shareCollection = async (
     role: string,
 ) => {
     try {
-        const cryptoWorker = await ComlinkCryptoWorker.getInstance();
+        const cryptoWorker = await sharedCryptoWorker();
         const token = getToken();
         const publicKey: string = await getPublicKey(withUserEmail);
         const encryptedKey = await cryptoWorker.boxSeal(
@@ -969,7 +875,7 @@ export const shareCollection = async (
             encryptedKey,
         };
         await HTTPService.post(
-            `${ENDPOINT}/collections/share`,
+            await apiURL("/collections/share"),
             shareCollectionRequest,
             null,
             {
@@ -993,7 +899,7 @@ export const unshareCollection = async (
             email: withUserEmail,
         };
         await HTTPService.post(
-            `${ENDPOINT}/collections/unshare`,
+            await apiURL("/collections/unshare"),
             shareCollectionRequest,
             null,
             {
@@ -1015,7 +921,7 @@ export const createShareableURL = async (collection: Collection) => {
             collectionID: collection.id,
         };
         const resp = await HTTPService.post(
-            `${ENDPOINT}/collections/share-url`,
+            await apiURL("/collections/share-url"),
             createPublicAccessTokenRequest,
             null,
             {
@@ -1036,7 +942,7 @@ export const deleteShareableURL = async (collection: Collection) => {
             return null;
         }
         await HTTPService.delete(
-            `${ENDPOINT}/collections/share-url/${collection.id}`,
+            await apiURL(`/collections/share-url/${collection.id}`),
             null,
             null,
             {
@@ -1058,7 +964,7 @@ export const updateShareableURL = async (
             return null;
         }
         const res = await HTTPService.put(
-            `${ENDPOINT}/collections/share-url`,
+            await apiURL("/collections/share-url"),
             request,
             null,
             {
@@ -1081,46 +987,37 @@ export const getFavCollection = async () => {
     }
 };
 
-export const getNonEmptyCollections = (
-    collections: Collection[],
-    files: EnteFile[],
-) => {
-    const nonEmptyCollectionsIds = new Set<number>();
-    for (const file of files) {
-        nonEmptyCollectionsIds.add(file.collectionID);
-    }
-    return collections.filter((collection) =>
-        nonEmptyCollectionsIds.has(collection.id),
-    );
-};
-
-export function sortCollectionSummaries(
+export const sortCollectionSummaries = (
     collectionSummaries: CollectionSummary[],
-    sortBy: COLLECTION_LIST_SORT_BY,
-) {
-    return collectionSummaries
+    by: CollectionsSortBy,
+) =>
+    collectionSummaries
         .sort((a, b) => {
-            switch (sortBy) {
-                case COLLECTION_LIST_SORT_BY.CREATION_TIME_ASCENDING:
+            switch (by) {
+                case "name":
+                    return a.name.localeCompare(b.name);
+                case "creation-time-asc":
                     return (
                         -1 *
                         compareCollectionsLatestFile(b.latestFile, a.latestFile)
                     );
-                case COLLECTION_LIST_SORT_BY.UPDATION_TIME_DESCENDING:
-                    return b.updationTime - a.updationTime;
-                case COLLECTION_LIST_SORT_BY.NAME:
-                    return a.name.localeCompare(b.name);
+                case "updation-time-desc":
+                    return (b.updationTime ?? 0) - (a.updationTime ?? 0);
             }
         })
+        // TODO:
+        // eslint-disable-next-line no-constant-binary-expression
         .sort((a, b) => b.order ?? 0 - a.order ?? 0)
         .sort(
             (a, b) =>
-                COLLECTION_SORT_ORDER.get(a.type) -
-                COLLECTION_SORT_ORDER.get(b.type),
+                CollectionSummaryOrder.get(a.type) -
+                CollectionSummaryOrder.get(b.type),
         );
-}
 
-function compareCollectionsLatestFile(first: EnteFile, second: EnteFile) {
+function compareCollectionsLatestFile(
+    first: EnteFile | undefined,
+    second: EnteFile | undefined,
+) {
     if (!first) {
         return 1;
     } else if (!second) {
@@ -1133,213 +1030,6 @@ function compareCollectionsLatestFile(first: EnteFile, second: EnteFile) {
             return -1;
         }
     }
-}
-
-export function getCollectionSummaries(
-    user: User,
-    collections: Collection[],
-    files: EnteFile[],
-): CollectionSummaries {
-    const collectionSummaries: CollectionSummaries = new Map();
-    const collectionLatestFiles = getCollectionLatestFiles(files);
-    const collectionCoverFiles = getCollectionCoverFiles(files, collections);
-    const collectionFilesCount = getCollectionsFileCount(files);
-
-    let hasUncategorizedCollection = false;
-    for (const collection of collections) {
-        if (
-            !hasUncategorizedCollection &&
-            collection.type === CollectionType.uncategorized
-        ) {
-            hasUncategorizedCollection = true;
-        }
-        if (
-            collectionFilesCount.get(collection.id) ||
-            collection.type === CollectionType.uncategorized
-        ) {
-            let type: CollectionSummaryType;
-            if (isIncomingShare(collection, user)) {
-                if (isIncomingCollabShare(collection, user)) {
-                    type = CollectionSummaryType.incomingShareCollaborator;
-                } else {
-                    type = CollectionSummaryType.incomingShareViewer;
-                }
-            } else if (isOutgoingShare(collection, user)) {
-                type = CollectionSummaryType.outgoingShare;
-            } else if (isSharedOnlyViaLink(collection)) {
-                type = CollectionSummaryType.sharedOnlyViaLink;
-            } else if (isArchivedCollection(collection)) {
-                type = CollectionSummaryType.archived;
-            } else if (isDefaultHiddenCollection(collection)) {
-                type = CollectionSummaryType.defaultHidden;
-            } else if (isPinnedCollection(collection)) {
-                type = CollectionSummaryType.pinned;
-            } else {
-                type = CollectionSummaryType[collection.type];
-            }
-
-            let CollectionSummaryItemName: string;
-            if (type === CollectionSummaryType.uncategorized) {
-                CollectionSummaryItemName = t("UNCATEGORIZED");
-            } else if (type === CollectionSummaryType.favorites) {
-                CollectionSummaryItemName = t("FAVORITES");
-            } else {
-                CollectionSummaryItemName = collection.name;
-            }
-
-            collectionSummaries.set(collection.id, {
-                id: collection.id,
-                name: CollectionSummaryItemName,
-                latestFile: collectionLatestFiles.get(collection.id),
-                coverFile: collectionCoverFiles.get(collection.id),
-                fileCount: collectionFilesCount.get(collection.id) ?? 0,
-                updationTime: collection.updationTime,
-                type: type,
-                order: collection.magicMetadata?.data?.order ?? 0,
-            });
-        }
-    }
-    if (!hasUncategorizedCollection) {
-        collectionSummaries.set(
-            DUMMY_UNCATEGORIZED_COLLECTION,
-            getDummyUncategorizedCollectionSummary(),
-        );
-    }
-
-    return collectionSummaries;
-}
-
-function getCollectionsFileCount(files: EnteFile[]): CollectionFilesCount {
-    const collectionIDToFileMap = groupFilesBasedOnCollectionID(files);
-    const collectionFilesCount = new Map<number, number>();
-    for (const [id, files] of collectionIDToFileMap) {
-        collectionFilesCount.set(id, files.length);
-    }
-    return collectionFilesCount;
-}
-
-export function getSectionSummaries(
-    files: EnteFile[],
-    trashedFiles: EnteFile[],
-    archivedCollections: Set<number>,
-): CollectionSummaries {
-    const collectionSummaries: CollectionSummaries = new Map();
-    collectionSummaries.set(
-        ALL_SECTION,
-        getAllSectionSummary(files, archivedCollections),
-    );
-    collectionSummaries.set(
-        TRASH_SECTION,
-        getTrashedCollectionSummary(trashedFiles),
-    );
-    collectionSummaries.set(ARCHIVE_SECTION, getArchivedSectionSummary(files));
-
-    return collectionSummaries;
-}
-
-function getAllSectionSummary(
-    files: EnteFile[],
-    archivedCollections: Set<number>,
-): CollectionSummary {
-    const allSectionFiles = getAllSectionVisibleFiles(
-        files,
-        archivedCollections,
-    );
-    return {
-        id: ALL_SECTION,
-        name: t("ALL_SECTION_NAME"),
-        type: CollectionSummaryType.all,
-        coverFile: allSectionFiles?.[0],
-        latestFile: allSectionFiles?.[0],
-        fileCount: allSectionFiles?.length || 0,
-        updationTime: allSectionFiles?.[0]?.updationTime,
-    };
-}
-
-function getAllSectionVisibleFiles(
-    files: EnteFile[],
-    archivedCollections: Set<number>,
-): EnteFile[] {
-    const allSectionVisibleFiles = getUniqueFiles(
-        files.filter((file) => {
-            if (
-                isArchivedFile(file) ||
-                archivedCollections.has(file.collectionID)
-            ) {
-                return false;
-            }
-            return true;
-        }),
-    );
-    return allSectionVisibleFiles;
-}
-
-export function getDummyUncategorizedCollectionSummary(): CollectionSummary {
-    return {
-        id: DUMMY_UNCATEGORIZED_COLLECTION,
-        name: t("UNCATEGORIZED"),
-        type: CollectionSummaryType.uncategorized,
-        latestFile: null,
-        coverFile: null,
-        fileCount: 0,
-        updationTime: 0,
-    };
-}
-
-export function getArchivedSectionSummary(
-    files: EnteFile[],
-): CollectionSummary {
-    const archivedFiles = getUniqueFiles(
-        files.filter((file) => isArchivedFile(file)),
-    );
-    return {
-        id: ARCHIVE_SECTION,
-        name: t("ARCHIVE_SECTION_NAME"),
-        type: CollectionSummaryType.archive,
-        coverFile: null,
-        latestFile: archivedFiles?.[0],
-        fileCount: archivedFiles?.length,
-        updationTime: archivedFiles?.[0]?.updationTime,
-    };
-}
-
-export function getHiddenItemsSummary(
-    hiddenFiles: EnteFile[],
-    hiddenCollections: Collection[],
-): CollectionSummary {
-    const defaultHiddenCollectionIds = new Set(
-        hiddenCollections
-            .filter((collection) => isDefaultHiddenCollection(collection))
-            .map((collection) => collection.id),
-    );
-    const hiddenItems = getUniqueFiles(
-        hiddenFiles.filter((file) =>
-            defaultHiddenCollectionIds.has(file.collectionID),
-        ),
-    );
-    return {
-        id: HIDDEN_ITEMS_SECTION,
-        name: t("HIDDEN_ITEMS"),
-        type: CollectionSummaryType.hiddenItems,
-        coverFile: hiddenItems?.[0],
-        latestFile: hiddenItems?.[0],
-        fileCount: hiddenItems?.length,
-        updationTime: hiddenItems?.[0]?.updationTime,
-    };
-}
-
-export function getTrashedCollectionSummary(
-    trashedFiles: EnteFile[],
-): CollectionSummary {
-    return {
-        id: TRASH_SECTION,
-        name: t("TRASH"),
-        type: CollectionSummaryType.trash,
-        coverFile: null,
-        latestFile: trashedFiles?.[0],
-        fileCount: trashedFiles?.length,
-        updationTime: trashedFiles?.[0]?.updationTime,
-    };
 }
 
 export async function getUncategorizedCollection(
@@ -1374,7 +1064,7 @@ export async function getDefaultHiddenCollection(): Promise<Collection> {
 export function createHiddenCollection() {
     return createCollection(HIDDEN_COLLECTION_NAME, CollectionType.album, {
         subType: SUB_TYPE.DEFAULT_HIDDEN,
-        visibility: VISIBILITY_STATE.HIDDEN,
+        visibility: ItemVisibility.hidden,
     });
 }
 
@@ -1384,8 +1074,8 @@ export async function moveToHiddenCollection(files: EnteFile[]) {
         if (!hiddenCollection) {
             hiddenCollection = await createHiddenCollection();
         }
-        const groupiedFiles = groupFilesBasedOnCollectionID(files);
-        for (const [collectionID, files] of groupiedFiles.entries()) {
+        const groupedFiles = groupFilesByCollectionID(files);
+        for (const [collectionID, files] of groupedFiles.entries()) {
             if (collectionID === hiddenCollection.id) {
                 continue;
             }
@@ -1402,8 +1092,8 @@ export async function unhideToCollection(
     files: EnteFile[],
 ) {
     try {
-        const groupiedFiles = groupFilesBasedOnCollectionID(files);
-        for (const [collectionID, files] of groupiedFiles.entries()) {
+        const groupedFiles = groupFilesByCollectionID(files);
+        for (const [collectionID, files] of groupedFiles.entries()) {
             if (collectionID === collection.id) {
                 continue;
             }

@@ -18,17 +18,44 @@ import "package:photos/utils/email_util.dart";
 typedef DialogBuilder = DialogWidget Function(BuildContext context);
 
 ///Will return null if dismissed by tapping outside
-Future<ButtonResult?> showErrorDialog(
-  BuildContext context,
-  String title,
-  String? body, {
+Future<ButtonResult?> showInfoDialog(
+  BuildContext context, {
+  String title = "",
+  String? body,
+  IconData icon = Icons.info_outline_rounded,
   bool isDismissable = true,
 }) async {
   return showDialogWidget(
     context: context,
     title: title,
     body: body,
+    icon: icon,
     isDismissible: isDismissable,
+    buttons: [
+      ButtonWidget(
+        buttonType: ButtonType.secondary,
+        labelText: S.of(context).ok,
+        isInAlert: true,
+        buttonAction: ButtonAction.first,
+      ),
+    ],
+  );
+}
+
+///Will return null if dismissed by tapping outside
+Future<ButtonResult?> showErrorDialog(
+  BuildContext context,
+  String title,
+  String? body, {
+  bool isDismissable = true,
+  bool useRootNavigator = false,
+}) async {
+  return showDialogWidget(
+    context: context,
+    title: title,
+    body: body,
+    isDismissible: isDismissable,
+    useRootNavigator: useRootNavigator,
     buttons: [
       ButtonWidget(
         buttonType: ButtonType.secondary,
@@ -61,10 +88,10 @@ Future<ButtonResult?> showErrorDialogForException({
     icon: Icons.error_outline_outlined,
     body: errorMessage,
     isDismissible: isDismissible,
-    buttons: const [
+    buttons: [
       ButtonWidget(
         buttonType: ButtonType.secondary,
-        labelText: "OK",
+        labelText: S.of(context).ok,
         isInAlert: true,
       ),
     ],
@@ -329,10 +356,13 @@ Future<dynamic> showTextInputDialog(
   TextEditingController? textEditingController,
   List<TextInputFormatter>? textInputFormatter,
   TextInputType? textInputType,
+  bool useRootNavigator = false,
+  bool popnavAfterSubmission = true,
 }) {
   return showDialog(
     barrierColor: backdropFaintDark,
     context: context,
+    useRootNavigator: useRootNavigator,
     builder: (context) {
       final bottomInset = MediaQuery.of(context).viewInsets.bottom;
       final isKeyboardUp = bottomInset > 100;
@@ -359,6 +389,7 @@ Future<dynamic> showTextInputDialog(
             textEditingController: textEditingController,
             textInputFormatter: textInputFormatter,
             textInputType: textInputType,
+            popnavAfterSubmission: popnavAfterSubmission,
           ),
         ),
       );

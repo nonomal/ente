@@ -1,5 +1,58 @@
 # CHANGELOG
 
+## v1.7.8 (Unreleased)
+
+-   .
+
+## v1.7.7
+
+-   Retain JPEG originals even on date modifications.
+-   Support Portuguese and Vietnamese translations.
+
+## v1.7.6
+
+-   Face merging and suggestions (beta).
+-   Parse description from metadata JSON.
+-   Support Italian, Ukrainian and Lithuanian translations.
+-   Fix an out of memory crash on uploading large libraries.
+
+## v1.7.5
+
+-   Face grouping (beta).
+-   Include shared files in export.
+-   Directly upload to selected album on drag and drop.
+-   Improve heuristics for clubbing a photo and video into a live photo.
+
+## v1.7.4
+
+-   Improved date search, including support for day of week and hour of day.
+-   Fix video thumbnail generation and upload on Intel macOS.
+-   Club a photo and video into a live photo only if both are within 2 minutes.
+-   Fix an issue causing ZIP uploads to sometimes fail.
+
+## v1.7.3
+
+-   Face recognition and magic search (public beta).
+-   Support Polish translations.
+
+## v1.7.2
+
+-   Significantly improve the speed of the metadata parsing step during imports
+    of Google takeouts.
+-   Add a option to set and use a custom endpoint.
+-   Fix an issue preventing subscription purchases and renewals.
+-   Clear cached password after changing it on a different device.
+-   Reconcile exported files with disk on app start and resync.
+
+## v1.7.1
+
+-   Support for passkeys as a second factor authentication mechanism.
+-   Remember the window size across app restarts.
+-   Revert changes to the Linux icon.
+-   Fix an issue causing deleted items in watched folders to not move to
+    uncategorized.
+-   Fix duplicate file uploads when initializing a folder watch (sometimes).
+
 ## v1.7.0
 
 v1.7 is a major rewrite to improve the security of our app. In particular, the

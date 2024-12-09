@@ -3,10 +3,15 @@
     "version": "0.0.0",
     "private": true,
     "dependencies": {
-        "@/next": "*",
+        "@/base": "*",
+        "@/gallery": "*",
         "@/utils": "*",
         "@ente/shared": "*",
-        "zod": "^3"
+        "@mui/x-date-pickers": "^7.16.0",
+        "dayjs": "^1.11.13",
+        "formik": "^2.4.6"
     },
-    "devDependencies": {}
+    "devDependencies": {
+        "@/build-config": "*"
+    }
 }

@@ -22,11 +22,17 @@ import 'package:ente_auth/ui/account/logout_dialog.dart';
 import 'package:ente_auth/ui/code_error_widget.dart';
 import 'package:ente_auth/ui/code_widget.dart';
 import 'package:ente_auth/ui/common/loading_widget.dart';
+import 'package:ente_auth/ui/components/buttons/button_widget.dart';
+import 'package:ente_auth/ui/components/dialog_widget.dart';
+import 'package:ente_auth/ui/components/models/button_type.dart';
 import 'package:ente_auth/ui/home/coach_mark_widget.dart';
 import 'package:ente_auth/ui/home/home_empty_state.dart';
 import 'package:ente_auth/ui/home/speed_dial_label_widget.dart';
+import 'package:ente_auth/ui/reorder_codes_page.dart';
 import 'package:ente_auth/ui/scanner_page.dart';
 import 'package:ente_auth/ui/settings_page.dart';
+import 'package:ente_auth/ui/sort_option_menu.dart';
+import 'package:ente_auth/ui/tools/app_lock.dart';
 import 'package:ente_auth/utils/dialog_util.dart';
 import 'package:ente_auth/utils/platform_util.dart';
 import 'package:ente_auth/utils/totp_util.dart';
@@ -55,8 +61,12 @@ class _HomePageState extends State<HomePage> {
   final Logger _logger = Logger("HomePage");
   final scaffoldKey = GlobalKey<ScaffoldState>();
 
+  // Used to request focus on the search box when clicked the search icon
+  late FocusNode searchBoxFocusNode;
+
   final TextEditingController _textController = TextEditingController();
-  final FocusNode searchInputFocusNode = FocusNode();
+  final bool _autoFocusSearch =
+      PreferenceService.instance.shouldAutoFocusOnSearchBar();
   bool _showSearchBox = false;
   String _searchText = "";
   List<Code>? _allCodes;
@@ -66,11 +76,18 @@ class _HomePageState extends State<HomePage> {
   StreamSubscription<TriggerLogoutEvent>? _triggerLogoutEvent;
   StreamSubscription<IconsChangedEvent>? _iconsChangedEvent;
   String selectedTag = "";
+  bool _isTrashOpen = false;
+  bool hasTrashedCodes = false;
+  bool hasNonTrashedCodes = false;
+  bool isCompactMode = false;
+
+  late CodeSortKey _codeSortKey;
 
   @override
   void initState() {
     super.initState();
     _textController.addListener(_applyFilteringAndRefresh);
+    _codeSortKey = PreferenceService.instance.codeSortKey();
     _loadCodes();
     _streamSubscription = Bus.instance.on<CodesUpdatedEvent>().listen((event) {
       _loadCodes();
@@ -79,6 +96,7 @@ class _HomePageState extends State<HomePage> {
         Bus.instance.on<TriggerLogoutEvent>().listen((event) async {
       await autoLogoutAlert(context);
     });
+
     _initDeepLinks();
     Future.delayed(
       const Duration(seconds: 1),
@@ -87,27 +105,37 @@ class _HomePageState extends State<HomePage> {
     _iconsChangedEvent = Bus.instance.on<IconsChangedEvent>().listen((event) {
       setState(() {});
     });
-    _showSearchBox = PreferenceService.instance.shouldAutoFocusOnSearchBar();
-    if (_showSearchBox) {
-      WidgetsBinding.instance.addPostFrameCallback(
-        (_) {
-          // https://github.com/flutter/flutter/issues/20706#issuecomment-646328652
-          FocusScope.of(context).unfocus();
-          Timer(const Duration(milliseconds: 1), () {
-            FocusScope.of(context).requestFocus(searchInputFocusNode);
-          });
-        },
-      );
-    }
+    _showSearchBox = _autoFocusSearch;
+
+    searchBoxFocusNode = FocusNode();
   }
 
   void _loadCodes() {
     CodeStore.instance.getAllCodes().then((codes) {
       _allCodes = codes;
+      hasTrashedCodes = false;
+      hasNonTrashedCodes = false;
+
+      for (final c in _allCodes ?? []) {
+        if (c.isTrashed) {
+          hasTrashedCodes = true;
+        } else {
+          hasNonTrashedCodes = true;
+        }
+
+        if (hasTrashedCodes && hasNonTrashedCodes) {
+          break;
+        }
+      }
+      if (!hasTrashedCodes) {
+        _isTrashOpen = false;
+      }
+      if (!hasNonTrashedCodes && hasTrashedCodes) {
+        _isTrashOpen = true;
+      }
 
       CodeDisplayStore.instance.getAllTags(allCodes: _allCodes).then((value) {
         tags = value;
-
         if (mounted) {
           if (!tags.contains(selectedTag)) {
             selectedTag = "";
@@ -134,7 +162,8 @@ class _HomePageState extends State<HomePage> {
       for (final Code codeState in _allCodes!) {
         if (codeState.hasError ||
             selectedTag != "" &&
-                !codeState.display.tags.contains(selectedTag)) {
+                !codeState.display.tags.contains(selectedTag) ||
+            (codeState.isTrashed != _isTrashOpen)) {
           continue;
         }
 
@@ -146,17 +175,28 @@ class _HomePageState extends State<HomePage> {
       }
       _filteredCodes = issuerMatch;
       _filteredCodes.addAll(accountMatch);
+    } else if (_isTrashOpen) {
+      _filteredCodes = _allCodes
+              ?.where(
+                (element) => !element.hasError && element.isTrashed,
+              )
+              .toList() ??
+          [];
     } else {
       _filteredCodes = _allCodes
               ?.where(
                 (element) =>
                     !element.hasError &&
+                    !element.isTrashed &&
                     (selectedTag == "" ||
                         element.display.tags.contains(selectedTag)),
               )
               .toList() ??
           [];
     }
+
+    sortFilteredCodes(_filteredCodes, _codeSortKey);
+
     if (mounted) {
       setState(() {});
     }
@@ -168,7 +208,44 @@ class _HomePageState extends State<HomePage> {
     _triggerLogoutEvent?.cancel();
     _iconsChangedEvent?.cancel();
     _textController.removeListener(_applyFilteringAndRefresh);
+
+    searchBoxFocusNode.dispose();
+
     super.dispose();
+  }
+
+  void sortFilteredCodes(List<Code> codes, CodeSortKey sortKey) {
+    switch (sortKey) {
+      case CodeSortKey.issuerName:
+        codes.sort((a, b) => a.issuer.compareTo(b.issuer));
+        break;
+      case CodeSortKey.accountName:
+        codes.sort((a, b) => a.account.compareTo(b.account));
+        break;
+      case CodeSortKey.mostFrequentlyUsed:
+        codes.sort((a, b) => b.display.tapCount.compareTo(a.display.tapCount));
+        break;
+      case CodeSortKey.recentlyUsed:
+        codes.sort(
+          (a, b) => b.display.lastUsedAt.compareTo(a.display.lastUsedAt),
+        );
+        break;
+      case CodeSortKey.manual:
+      default:
+        codes.sort((a, b) => a.display.position.compareTo(b.display.position));
+        break;
+    }
+    if (sortKey != CodeSortKey.manual) {
+      // move pinned codes to the using
+      int insertIndex = 0;
+      for (int i = 0; i < codes.length; i++) {
+        if (codes[i].isPinned) {
+          final code = codes.removeAt(i);
+          codes.insert(insertIndex, code);
+          insertIndex++;
+        }
+      }
+    }
   }
 
   Future<void> _redirectToScannerPage() async {
@@ -201,12 +278,52 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  Future<void> navigateToLockScreen() async {
+    final bool shouldShowLockScreen =
+        await Configuration.instance.shouldShowLockScreen();
+    if (shouldShowLockScreen) {
+      await AppLock.of(context)!.showLockScreen();
+    } else {
+      await showDialogWidget(
+        context: context,
+        title: context.l10n.appLockNotEnabled,
+        body: context.l10n.appLockNotEnabledDescription,
+        isDismissible: true,
+        buttons: const [
+          ButtonWidget(
+            buttonType: ButtonType.secondary,
+            labelText: "OK",
+            isInAlert: true,
+          ),
+        ],
+      );
+    }
+  }
+
+  Future<void> navigateToReorderPage(List<Code> allCodes) async {
+    List<Code> sortCandidate = allCodes
+        .where((element) => !element.hasError && !element.isTrashed)
+        .toList();
+    sortCandidate
+        .sort((a, b) => a.display.position.compareTo(b.display.position));
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (BuildContext context) {
+          return ReorderCodesPage(codes: sortCandidate);
+        },
+      ),
+    ).then((value) {
+      setState(() {});
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
+    isCompactMode = PreferenceService.instance.isCompactMode();
 
     return PopScope(
-      onPopInvoked: (_) async {
+      onPopInvokedWithResult: (_, result) async {
         if (_isSettingsOpen) {
           scaffoldKey.currentState!.closeDrawer();
           return;
@@ -238,8 +355,9 @@ class _HomePageState extends State<HomePage> {
           title: !_showSearchBox
               ? const Text('Ente Auth')
               : TextField(
-                  focusNode: searchInputFocusNode,
-                  autofocus: _searchText.isEmpty,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  autofocus: _autoFocusSearch,
                   controller: _textController,
                   onChanged: (val) {
                     _searchText = val;
@@ -250,9 +368,38 @@ class _HomePageState extends State<HomePage> {
                     border: InputBorder.none,
                     focusedBorder: InputBorder.none,
                   ),
+                  focusNode: searchBoxFocusNode,
                 ),
-          centerTitle: true,
+          centerTitle: PlatformUtil.isDesktop() ? false : true,
           actions: <Widget>[
+            SortCodeMenuWidget(
+              currentKey: PreferenceService.instance.codeSortKey(),
+              onSelected: (newOrder) async {
+                await PreferenceService.instance.setCodeSortKey(newOrder);
+                if (newOrder == CodeSortKey.manual &&
+                    newOrder == _codeSortKey) {
+                  await navigateToReorderPage(_allCodes!);
+                }
+                setState(() {
+                  _codeSortKey = newOrder;
+                });
+                if (mounted) {
+                  _applyFilteringAndRefresh();
+                }
+              },
+            ),
+            PlatformUtil.isDesktop()
+                ? IconButton(
+                    icon: const Icon(Icons.lock),
+                    tooltip: l10n.appLock,
+                    onPressed: () async {
+                      await navigateToLockScreen();
+                    },
+                  )
+                : const SizedBox.shrink(),
+            const SizedBox(
+              width: 4,
+            ),
             IconButton(
               icon: _showSearchBox
                   ? const Icon(Icons.clear)
@@ -267,6 +414,9 @@ class _HomePageState extends State<HomePage> {
                       _searchText = "";
                     } else {
                       _searchText = _textController.text;
+
+                      // Request focus on the search box
+                      searchBoxFocusNode.requestFocus();
                     }
                     _applyFilteringAndRefresh();
                   },
@@ -296,6 +446,8 @@ class _HomePageState extends State<HomePage> {
         final anyCodeHasError =
             _allCodes?.firstWhereOrNull((element) => element.hasError) != null;
         final indexOffset = anyCodeHasError ? 1 : 0;
+        final itemCount = (hasNonTrashedCodes ? tags.length + 1 : 0) +
+            (hasTrashedCodes ? 1 : 0);
 
         final list = Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -309,39 +461,62 @@ class _HomePageState extends State<HomePage> {
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
                   separatorBuilder: (context, index) =>
                       const SizedBox(width: 8),
-                  itemCount: tags.length + 1,
+                  itemCount: itemCount,
                   itemBuilder: (context, index) {
-                    if (index == 0) {
+                    if (index == 0 && hasNonTrashedCodes) {
                       return TagChip(
-                        label: "All",
-                        state: selectedTag == ""
+                        label: l10n.all,
+                        state: selectedTag == "" && _isTrashOpen == false
                             ? TagChipState.selected
                             : TagChipState.unselected,
                         onTap: () {
                           selectedTag = "";
+                          _isTrashOpen = false;
+
                           setState(() {});
                           _applyFilteringAndRefresh();
                         },
                       );
                     }
-                    return TagChip(
-                      label: tags[index - 1],
-                      action: TagChipAction.menu,
-                      state: selectedTag == tags[index - 1]
-                          ? TagChipState.selected
-                          : TagChipState.unselected,
-                      onTap: () {
-                        if (selectedTag == tags[index - 1]) {
+
+                    if (index == itemCount - 1 && hasTrashedCodes) {
+                      return TagChip(
+                        label: l10n.trash,
+                        state: _isTrashOpen
+                            ? TagChipState.selected
+                            : TagChipState.unselected,
+                        onTap: () {
                           selectedTag = "";
+                          _isTrashOpen = !_isTrashOpen;
                           setState(() {});
                           _applyFilteringAndRefresh();
-                          return;
-                        }
-                        selectedTag = tags[index - 1];
-                        setState(() {});
-                        _applyFilteringAndRefresh();
-                      },
-                    );
+                        },
+                        iconData: Icons.delete,
+                      );
+                    }
+                    final customTagIndex = index - 1;
+                    if (customTagIndex >= 0 && customTagIndex < tags.length) {
+                      return TagChip(
+                        label: tags[customTagIndex],
+                        action: TagChipAction.menu,
+                        state: selectedTag == tags[customTagIndex]
+                            ? TagChipState.selected
+                            : TagChipState.unselected,
+                        onTap: () {
+                          _isTrashOpen = false;
+                          if (selectedTag == tags[customTagIndex]) {
+                            selectedTag = "";
+                            setState(() {});
+                            _applyFilteringAndRefresh();
+                            return;
+                          }
+                          selectedTag = tags[customTagIndex];
+                          setState(() {});
+                          _applyFilteringAndRefresh();
+                        },
+                      );
+                    }
+                    return const SizedBox.shrink();
                   },
                 ),
               ),
@@ -357,15 +532,20 @@ class _HomePageState extends State<HomePage> {
                     return CodeErrorWidget(
                       errors: _allCodes
                               ?.where((element) => element.hasError)
-                              .length ??
-                          0,
+                              .toList() ??
+                          [],
                     );
                   }
                   final newIndex = index - indexOffset;
 
+                  final code = _filteredCodes[newIndex];
+
                   return ClipRect(
                     child: CodeWidget(
-                      _filteredCodes[newIndex],
+                      key: ValueKey('${code.hashCode}_$newIndex'),
+                      code,
+                      isCompactMode: isCompactMode,
+                      sortKey: _codeSortKey,
                     ),
                   );
                 }),
@@ -395,7 +575,9 @@ class _HomePageState extends State<HomePage> {
                         itemBuilder: ((context, index) {
                           final codeState = _filteredCodes[index];
                           return CodeWidget(
+                            key: ValueKey('${codeState.hashCode}_$index'),
                             codeState,
+                            isCompactMode: isCompactMode,
                           );
                         }),
                         itemCount: _filteredCodes.length,
@@ -418,7 +600,7 @@ class _HomePageState extends State<HomePage> {
     final appLinks = AppLinks();
     try {
       String? initialLink;
-      initialLink = await appLinks.getInitialAppLinkString();
+      initialLink = await appLinks.getInitialLinkString();
       // Parse the link and warn the user, if it is not correct,
       // but keep in mind it could be `null`.
       if (initialLink != null) {
@@ -458,7 +640,10 @@ class _HomePageState extends State<HomePage> {
         CodeStore.instance.addCode(newCode);
         _focusNewCode(newCode);
       } catch (e, s) {
-        showGenericErrorDialog(context: context);
+        showGenericErrorDialog(
+          context: context,
+          error: e,
+        );
         _logger.severe("error while handling deeplink", e, s);
       }
     }
@@ -490,7 +675,7 @@ class _HomePageState extends State<HomePage> {
       foregroundColor: Theme.of(context).colorScheme.fabForegroundColor,
       backgroundColor: Theme.of(context).colorScheme.fabBackgroundColor,
       overlayOpacity: 0.5,
-      overlayColor: Theme.of(context).colorScheme.background,
+      overlayColor: Theme.of(context).colorScheme.surface,
       elevation: 8.0,
       animationCurve: Curves.elasticInOut,
       children: [

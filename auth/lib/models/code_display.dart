@@ -9,7 +9,9 @@ class CodeDisplay {
   final bool trashed;
   final int lastUsedAt;
   final int tapCount;
+  String note;
   final List<String> tags;
+  int position;
 
   CodeDisplay({
     this.pinned = false,
@@ -17,6 +19,8 @@ class CodeDisplay {
     this.lastUsedAt = 0,
     this.tapCount = 0,
     this.tags = const [],
+    this.note = '',
+    this.position = 0,
   });
 
   // copyWith
@@ -26,12 +30,16 @@ class CodeDisplay {
     int? lastUsedAt,
     int? tapCount,
     List<String>? tags,
+    String? note,
+    int? position,
   }) {
     final bool updatedPinned = pinned ?? this.pinned;
     final bool updatedTrashed = trashed ?? this.trashed;
     final int updatedLastUsedAt = lastUsedAt ?? this.lastUsedAt;
     final int updatedTapCount = tapCount ?? this.tapCount;
     final List<String> updatedTags = tags ?? this.tags;
+    final String updatedNote = note ?? this.note;
+    final int updatedPosition = position ?? this.position;
 
     return CodeDisplay(
       pinned: updatedPinned,
@@ -39,6 +47,8 @@ class CodeDisplay {
       lastUsedAt: updatedLastUsedAt,
       tapCount: updatedTapCount,
       tags: updatedTags,
+      note: updatedNote,
+      position: updatedPosition,
     );
   }
 
@@ -52,6 +62,8 @@ class CodeDisplay {
       lastUsedAt: json['lastUsedAt'] ?? 0,
       tapCount: json['tapCount'] ?? 0,
       tags: List<String>.from(json['tags'] ?? []),
+      note: json['note'] ?? '',
+      position: json['position'] ?? 0,
     );
   }
 
@@ -92,6 +104,8 @@ class CodeDisplay {
       'lastUsedAt': lastUsedAt,
       'tapCount': tapCount,
       'tags': tags,
+      'note': note,
+      'position': position,
     };
   }
 
@@ -104,6 +118,7 @@ class CodeDisplay {
         other.trashed == trashed &&
         other.lastUsedAt == lastUsedAt &&
         other.tapCount == tapCount &&
+        other.note == note &&
         listEquals(other.tags, tags);
   }
 
@@ -113,6 +128,7 @@ class CodeDisplay {
         trashed.hashCode ^
         lastUsedAt.hashCode ^
         tapCount.hashCode ^
+        note.hashCode ^
         tags.hashCode;
   }
 }

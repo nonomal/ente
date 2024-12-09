@@ -1,21 +1,29 @@
-import log from "@/next/log";
-import DialogBoxV2 from "@ente/shared/components/DialogBoxV2";
-import EnteButton from "@ente/shared/components/EnteButton";
-import { DELETE_ACCOUNT_EMAIL } from "@ente/shared/constants/urls";
-import { Button, Link, Stack } from "@mui/material";
+import { TitledMiniDialog } from "@/base/components/MiniDialog";
+import { FocusVisibleButton } from "@/base/components/mui/FocusVisibleButton";
+import { LoadingButton } from "@/base/components/mui/LoadingButton";
+import { sharedCryptoWorker } from "@/base/crypto";
+import { AppContext } from "@/new/photos/types/context";
+import { initiateEmail } from "@/new/photos/utils/web";
+import { getData, LS_KEYS } from "@ente/shared/storage/localStorage";
+import { getActualKey } from "@ente/shared/user";
+import {
+    Checkbox,
+    FormControlLabel,
+    FormGroup,
+    Link,
+    Stack,
+    TextField,
+    Typography,
+    type TypographyProps,
+} from "@mui/material";
 import { Formik, type FormikHelpers } from "formik";
 import { t } from "i18next";
-import { AppContext } from "pages/_app";
 import { GalleryContext } from "pages/gallery";
-import { useContext, useEffect, useRef, useState } from "react";
+import { useContext, useRef, useState } from "react";
 import { Trans } from "react-i18next";
 import { deleteAccount, getAccountDeleteChallenge } from "services/userService";
-import { initiateEmail, preloadImage } from "utils/common";
-import { decryptDeleteAccountChallenge } from "utils/crypto";
 import * as Yup from "yup";
-import { CheckboxInput } from "./CheckboxInput";
 import DropdownInput, { DropdownOption } from "./DropdownInput";
-import MultilineInput from "./MultilineInput";
 
 interface Iprops {
     onClose: () => void;
@@ -27,40 +35,15 @@ interface FormValues {
     feedback: string;
 }
 
-enum DELETE_REASON {
-    MISSING_FEATURE = "It's missing a key feature that I need",
-    BROKEN_BEHAVIOR = "The app or a certain feature does not behave as I think it should",
-    FOUND_ANOTHER_SERVICE = "I found another service that I like better",
-    NOT_LISTED = "My reason isn't listed",
-}
-
-const getReasonOptions = (): DropdownOption<DELETE_REASON>[] => {
-    return Object.keys(DELETE_REASON).map((reason) => ({
-        label: t(`DELETE_REASON.${reason}`),
-        value: DELETE_REASON[reason],
-    }));
-};
-
 const DeleteAccountModal = ({ open, onClose }: Iprops) => {
-    const { setDialogBoxAttributesV2, isMobile, logout } =
-        useContext(AppContext);
+    const { showMiniDialog, onGenericError, logout } = useContext(AppContext);
     const { authenticateUser } = useContext(GalleryContext);
+
     const [loading, setLoading] = useState(false);
     const deleteAccountChallenge = useRef<string>();
 
     const [acceptDataDeletion, setAcceptDataDeletion] = useState(false);
     const reasonAndFeedbackRef = useRef<{ reason: string; feedback: string }>();
-
-    useEffect(() => {
-        preloadImage("/images/delete-account");
-    }, []);
-
-    const somethingWentWrong = () =>
-        setDialogBoxAttributesV2({
-            title: t("ERROR"),
-            close: { variant: "critical" },
-            content: t("UNKNOWN_ERROR"),
-        });
 
     const initiateDelete = async (
         { reason, feedback }: FormValues,
@@ -70,14 +53,14 @@ const DeleteAccountModal = ({ open, onClose }: Iprops) => {
             feedback = feedback.trim();
             if (feedback.length === 0) {
                 switch (reason) {
-                    case DELETE_REASON.FOUND_ANOTHER_SERVICE:
+                    case "found_another_service":
                         setFieldError(
                             "feedback",
-                            t("FEEDBACK_REQUIRED_FOUND_ANOTHER_SERVICE"),
+                            t("feedback_required_found_another_service"),
                         );
                         break;
                     default:
-                        setFieldError("feedback", t("FEEDBACK_REQUIRED"));
+                        setFieldError("feedback", t("feedback_required"));
                 }
                 return;
             }
@@ -92,157 +75,260 @@ const DeleteAccountModal = ({ open, onClose }: Iprops) => {
                 askToMailForDeletion();
             }
         } catch (e) {
-            log.error("Error while initiating account deletion", e);
-            somethingWentWrong();
+            onGenericError(e);
         } finally {
             setLoading(false);
         }
     };
 
-    const confirmAccountDeletion = () => {
-        setDialogBoxAttributesV2({
-            title: t("DELETE_ACCOUNT"),
-            content: <Trans i18nKey="CONFIRM_ACCOUNT_DELETION_MESSAGE" />,
-            proceed: {
-                text: t("DELETE"),
+    const confirmAccountDeletion = () =>
+        showMiniDialog({
+            title: t("delete_account"),
+            message: <Trans i18nKey="delete_account_confirm_message" />,
+            continue: {
+                text: t("delete"),
+                color: "critical",
                 action: solveChallengeAndDeleteAccount,
-                variant: "critical",
             },
-            close: { text: t("CANCEL") },
         });
-    };
 
     const askToMailForDeletion = () => {
-        setDialogBoxAttributesV2({
-            title: t("DELETE_ACCOUNT"),
-            content: (
+        const emailID = "account-deletion@ente.io";
+
+        showMiniDialog({
+            title: t("delete_account"),
+            message: (
                 <Trans
-                    i18nKey="DELETE_ACCOUNT_MESSAGE"
-                    components={{
-                        a: <Link href={`mailto:${DELETE_ACCOUNT_EMAIL}`} />,
-                    }}
-                    values={{ emailID: DELETE_ACCOUNT_EMAIL }}
+                    i18nKey="delete_account_manually_message"
+                    components={{ a: <Link href={`mailto:${emailID}`} /> }}
+                    values={{ emailID }}
                 />
             ),
-            proceed: {
-                text: t("DELETE"),
-                action: () => {
-                    initiateEmail("account-deletion@ente.io");
-                },
-                variant: "critical",
+            continue: {
+                text: t("delete"),
+                color: "critical",
+                action: () => initiateEmail(emailID),
             },
-            close: { text: t("CANCEL") },
         });
     };
 
-    const solveChallengeAndDeleteAccount = async (
-        setLoading: (value: boolean) => void,
-    ) => {
-        try {
-            setLoading(true);
-            const decryptedChallenge = await decryptDeleteAccountChallenge(
-                deleteAccountChallenge.current,
-            );
-            const { reason, feedback } = reasonAndFeedbackRef.current;
-            await deleteAccount(decryptedChallenge, reason, feedback);
-            logout();
-        } catch (e) {
-            log.error("solveChallengeAndDeleteAccount failed", e);
-            somethingWentWrong();
-        } finally {
-            setLoading(false);
-        }
+    const solveChallengeAndDeleteAccount = async () => {
+        const decryptedChallenge = await decryptDeleteAccountChallenge(
+            deleteAccountChallenge.current,
+        );
+        const { reason, feedback } = reasonAndFeedbackRef.current;
+        await deleteAccount(decryptedChallenge, reason, feedback);
+        logout();
     };
 
     return (
-        <>
-            <DialogBoxV2
-                fullWidth
-                open={open}
-                onClose={onClose}
-                fullScreen={isMobile}
-                attributes={{
-                    title: t("DELETE_ACCOUNT"),
-                    secondary: {
-                        action: onClose,
-                        text: t("CANCEL"),
-                    },
+        <TitledMiniDialog
+            open={open}
+            onClose={onClose}
+            title={t("delete_account")}
+        >
+            <Formik<FormValues>
+                initialValues={{
+                    reason: "",
+                    feedback: "",
                 }}
+                validationSchema={Yup.object().shape({
+                    reason: Yup.string().required(t("required")),
+                })}
+                validateOnChange={false}
+                validateOnBlur={false}
+                onSubmit={initiateDelete}
             >
-                <Formik<FormValues>
-                    initialValues={{
-                        reason: "",
-                        feedback: "",
-                    }}
-                    validationSchema={Yup.object().shape({
-                        reason: Yup.string().required(t("REQUIRED")),
-                    })}
-                    validateOnChange={false}
-                    validateOnBlur={false}
-                    onSubmit={initiateDelete}
-                >
-                    {({
-                        values,
-                        errors,
-                        handleChange,
-                        handleSubmit,
-                    }): JSX.Element => (
-                        <form noValidate onSubmit={handleSubmit}>
-                            <Stack spacing={"24px"}>
-                                <DropdownInput
-                                    options={getReasonOptions()}
-                                    label={t("DELETE_ACCOUNT_REASON_LABEL")}
-                                    placeholder={t(
-                                        "DELETE_ACCOUNT_REASON_PLACEHOLDER",
-                                    )}
-                                    selected={values.reason}
-                                    setSelected={handleChange("reason")}
-                                    messageProps={{ color: "critical.main" }}
-                                    message={errors.reason}
-                                />
-                                <MultilineInput
-                                    label={t("DELETE_ACCOUNT_FEEDBACK_LABEL")}
-                                    placeholder={t(
-                                        "DELETE_ACCOUNT_FEEDBACK_PLACEHOLDER",
-                                    )}
-                                    value={values.feedback}
-                                    onChange={handleChange("feedback")}
-                                    message={errors.feedback}
-                                    messageProps={{ color: "critical.main" }}
-                                    rowCount={3}
-                                />
-                                <CheckboxInput
-                                    checked={acceptDataDeletion}
-                                    onChange={setAcceptDataDeletion}
-                                    label={t(
-                                        "CONFIRM_DELETE_ACCOUNT_CHECKBOX_LABEL",
-                                    )}
-                                />
-                                <Stack spacing={"8px"}>
-                                    <EnteButton
-                                        type="submit"
-                                        size="large"
-                                        color="critical"
-                                        disabled={!acceptDataDeletion}
-                                        loading={loading}
-                                    >
-                                        {t("CONFIRM_DELETE_ACCOUNT")}
-                                    </EnteButton>
-                                    <Button
-                                        size="large"
-                                        color={"secondary"}
-                                        onClick={onClose}
-                                    >
-                                        {t("CANCEL")}
-                                    </Button>
-                                </Stack>
+                {({
+                    values,
+                    errors,
+                    handleChange,
+                    handleSubmit,
+                }): React.JSX.Element => (
+                    <form noValidate onSubmit={handleSubmit}>
+                        <Stack spacing={"24px"}>
+                            <DropdownInput
+                                options={deleteReasonOptions()}
+                                label={t("delete_account_reason_label")}
+                                placeholder={t(
+                                    "delete_account_reason_placeholder",
+                                )}
+                                selected={values.reason}
+                                setSelected={handleChange("reason")}
+                                messageProps={{ color: "critical.main" }}
+                                message={errors.reason}
+                            />
+                            <MultilineInput
+                                label={t("delete_account_feedback_label")}
+                                placeholder={t(
+                                    "delete_account_feedback_placeholder",
+                                )}
+                                value={values.feedback}
+                                onChange={handleChange("feedback")}
+                                message={errors.feedback}
+                                messageProps={{ color: "critical.main" }}
+                                rowCount={3}
+                            />
+                            <CheckboxInput
+                                checked={acceptDataDeletion}
+                                onChange={setAcceptDataDeletion}
+                                label={t(
+                                    "delete_account_confirm_checkbox_label",
+                                )}
+                            />
+                            <Stack spacing={"8px"}>
+                                <LoadingButton
+                                    type="submit"
+                                    size="large"
+                                    color="critical"
+                                    disabled={!acceptDataDeletion}
+                                    loading={loading}
+                                >
+                                    {t("delete_account_confirm")}
+                                </LoadingButton>
+                                <FocusVisibleButton
+                                    size="large"
+                                    color={"secondary"}
+                                    onClick={onClose}
+                                >
+                                    {t("cancel")}
+                                </FocusVisibleButton>
                             </Stack>
-                        </form>
-                    )}
-                </Formik>
-            </DialogBoxV2>
-        </>
+                        </Stack>
+                    </form>
+                )}
+            </Formik>
+        </TitledMiniDialog>
     );
 };
 
 export default DeleteAccountModal;
+
+/**
+ * All of these must have a corresponding localized string nested under the
+ * "delete_reason" key.
+ */
+const deleteReasons = [
+    "missing_feature",
+    "behaviour",
+    "found_another_service",
+    "not_listed",
+] as const;
+
+type DeleteReason = (typeof deleteReasons)[number];
+
+const deleteReasonOptions = (): DropdownOption<DeleteReason>[] =>
+    deleteReasons.map((reason) => ({
+        label: t(`delete_reason.${reason}`),
+        value: reason,
+    }));
+
+interface MultilineInputProps {
+    label: string;
+    labelProps?: TypographyProps;
+    message?: string;
+    messageProps?: TypographyProps;
+    placeholder?: string;
+    value: string;
+    rowCount: number;
+    onChange: (value: string) => void;
+}
+
+function MultilineInput({
+    label,
+    labelProps,
+    message,
+    messageProps,
+    placeholder,
+    value,
+    rowCount,
+    onChange,
+}: MultilineInputProps) {
+    return (
+        <Stack spacing={"4px"}>
+            <Typography {...labelProps}>{label}</Typography>
+            <TextField
+                variant="standard"
+                multiline
+                rows={rowCount}
+                value={value}
+                onChange={(e) => onChange(e.target.value)}
+                placeholder={placeholder}
+                sx={(theme) => ({
+                    border: "1px solid",
+                    borderColor: theme.colors.stroke.faint,
+                    borderRadius: "8px",
+                    padding: "12px",
+                    ".MuiInputBase-formControl": {
+                        "::before, ::after": {
+                            borderBottom: "none !important",
+                        },
+                    },
+                })}
+            />
+            <Typography
+                px={"8px"}
+                variant="small"
+                color="text.secondary"
+                {...messageProps}
+            >
+                {message}
+            </Typography>
+        </Stack>
+    );
+}
+
+interface CheckboxInputProps {
+    disabled?: boolean;
+    checked: boolean;
+    onChange: (value: boolean) => void;
+    label: string;
+    labelProps?: TypographyProps;
+}
+
+function CheckboxInput({
+    disabled,
+    checked,
+    onChange,
+    label,
+    labelProps,
+}: CheckboxInputProps) {
+    return (
+        <FormGroup sx={{ width: "100%" }}>
+            <FormControlLabel
+                control={
+                    <Checkbox
+                        size="small"
+                        disabled={disabled}
+                        checked={checked}
+                        onChange={(e) => onChange(e.target.checked)}
+                        color="accent"
+                    />
+                }
+                label={
+                    <Typography color="text.secondary" {...labelProps}>
+                        {label}
+                    </Typography>
+                }
+            />
+        </FormGroup>
+    );
+}
+
+async function decryptDeleteAccountChallenge(encryptedChallenge: string) {
+    const cryptoWorker = await sharedCryptoWorker();
+    const masterKey = await getActualKey();
+    const keyAttributes = getData(LS_KEYS.KEY_ATTRIBUTES);
+    const secretKey = await cryptoWorker.decryptB64(
+        keyAttributes.encryptedSecretKey,
+        keyAttributes.secretKeyDecryptionNonce,
+        masterKey,
+    );
+    const b64DecryptedChallenge = await cryptoWorker.boxSealOpen(
+        encryptedChallenge,
+        keyAttributes.publicKey,
+        secretKey,
+    );
+    const utf8DecryptedChallenge = atob(b64DecryptedChallenge);
+    return utf8DecryptedChallenge;
+}

@@ -1,19 +1,16 @@
-import { hasFileHash } from "@/media/file";
-import { FILE_TYPE } from "@/media/file-type";
-import type { Metadata } from "@/media/types/file";
-import log from "@/next/log";
+import log from "@/base/log";
+import { apiURL } from "@/base/origins";
+import { EnteFile, hasFileHash } from "@/media/file";
+import type { Metadata } from "@/media/file-metadata";
+import { FileType } from "@/media/file-type";
 import HTTPService from "@ente/shared/network/HTTPService";
-import { getEndpoint } from "@ente/shared/network/api";
 import { getToken } from "@ente/shared/storage/localStorage/helpers";
-import { EnteFile } from "types/file";
-
-const ENDPOINT = getEndpoint();
 
 interface DuplicatesResponse {
-    duplicates: Array<{
+    duplicates: {
         fileIDs: number[];
         size: number;
-    }>;
+    }[];
 }
 
 export interface Duplicate {
@@ -148,7 +145,7 @@ function groupDupesByFileHashes(dupe: Duplicate) {
 async function fetchDuplicateFileIDs() {
     try {
         const response = await HTTPService.get(
-            `${ENDPOINT}/files/duplicates`,
+            await apiURL("/files/duplicates"),
             null,
             {
                 "X-Auth-Token": getToken(),
@@ -176,7 +173,7 @@ async function sortDuplicateFiles(
 }
 
 function areFileHashesSame(firstFile: Metadata, secondFile: Metadata) {
-    if (firstFile.fileType === FILE_TYPE.LIVE_PHOTO) {
+    if (firstFile.fileType === FileType.livePhoto) {
         return (
             firstFile.imageHash === secondFile.imageHash &&
             firstFile.videoHash === secondFile.videoHash

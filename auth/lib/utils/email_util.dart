@@ -10,13 +10,13 @@ import 'package:ente_auth/ui/components/dialog_widget.dart';
 import 'package:ente_auth/ui/components/models/button_type.dart';
 import 'package:ente_auth/ui/tools/debug/log_file_viewer.dart';
 import 'package:ente_auth/utils/dialog_util.dart';
+import 'package:ente_auth/utils/directory_utils.dart';
 import 'package:ente_auth/utils/platform_util.dart';
 import 'package:ente_auth/utils/share_utils.dart';
 import 'package:ente_auth/utils/toast_util.dart';
 import "package:file_saver/file_saver.dart";
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_email_sender/flutter_email_sender.dart';
 import "package:intl/intl.dart";
 import 'package:logging/logging.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -35,8 +35,7 @@ bool isValidEmail(String? email) {
 
 Future<void> sendLogs(
   BuildContext context,
-  String title,
-  String toEmail, {
+  String title, {
   Function? postShare,
   String? subject,
   String? body,
@@ -55,7 +54,7 @@ Future<void> sendLogs(
         buttonAction: ButtonAction.first,
         shouldSurfaceExecutionStates: false,
         onTap: () async {
-          await _sendLogs(context, toEmail, subject, body);
+          await openSupportPage(subject, body);
           if (postShare != null) {
             postShare();
           }
@@ -111,27 +110,35 @@ Future<void> sendLogs(
   );
 }
 
-Future<void> _sendLogs(
-  BuildContext context,
-  String toEmail,
+Future<void> openSupportPage(
   String? subject,
   String? body,
 ) async {
-  final String zipFilePath = await getZippedLogsFile(context);
-  final Email email = Email(
-    recipients: [toEmail],
-    subject: subject ?? '',
-    body: body ?? '',
-    attachmentPaths: [zipFilePath],
-    isHTML: false,
-  );
-  try {
-    await FlutterEmailSender.send(email);
-  } catch (e, s) {
-    _logger.severe('email sender failed', e, s);
-    Navigator.of(context, rootNavigator: true).pop();
-    await shareLogs(context, toEmail, zipFilePath);
+  const url = "https://github.com/ente-io/ente/discussions/new?category=q-a";
+  if (subject != null && body != null) {
+    await launchUrl(
+      Uri.parse(
+        "$url&title=$subject&body=$body",
+      ),
+    );
+  } else {
+    await launchUrl(Uri.parse(url));
   }
+  // final String zipFilePath = await getZippedLogsFile(context);
+  // final Email email = Email(
+  //   recipients: [toEmail],
+  //   subject: subject ?? '',
+  //   body: body ?? '',
+  //   attachmentPaths: [zipFilePath],
+  //   isHTML: false,
+  // );
+  // try {
+  //   await FlutterEmailSender.send(email);
+  // } catch (e, s) {
+  //   _logger.severe('email sender failed', e, s);
+  //   Navigator.of(context, rootNavigator: true).pop();
+  //   await shareLogs(context, toEmail, zipFilePath);
+  // }
 }
 
 Future<String> getZippedLogsFile(BuildContext context) async {
@@ -140,7 +147,7 @@ Future<String> getZippedLogsFile(BuildContext context) async {
   await dialog.show();
   final logsPath = (await getApplicationSupportDirectory()).path;
   final logsDirectory = Directory("$logsPath/logs");
-  final tempPath = (await getTemporaryDirectory()).path;
+  final tempPath = (await DirectoryUtils.getTempsDir()).path;
   final zipFilePath =
       "$tempPath/logs-${Configuration.instance.getUserID() ?? 0}.zip";
   final encoder = ZipFileEncoder();

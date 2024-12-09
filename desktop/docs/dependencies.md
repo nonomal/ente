@@ -23,8 +23,9 @@ a _renderer_ process.
 -   The _renderer_ process is a regular web app that gets loaded into the
     embedded Chromium. When the main process starts, it creates a new "window"
     that shows this embedded Chromium. In our case, we build and bundle a static
-    export of the [Photos web app](../web/README.md) in the generated app. This
-    gets loaded by the embedded Chromium at runtime, acting as the app's UI.
+    export of the [Photos web app](../../web/README.md) in the generated desktop
+    app. This gets loaded by the embedded Chromium at runtime, acting as the
+    desktop app's UI.
 
 There is also a third environment that gets temporarily created:
 
@@ -83,12 +84,20 @@ are similar to that in the web code.
 
 Some extra ones specific to the code here are:
 
--   [shx](https://github.com/shelljs/shx) for providing a portable way to use
-    Unix commands in our `package.json` scripts. This allows us to use the same
-    commands (like `ln`) across different platforms like Linux and Windows.
-
 -   [@tsconfig/recommended](https://github.com/tsconfig/bases) gives us a base
     tsconfig for the Node.js version that our current Electron version uses.
+
+-   [shx](https://github.com/shelljs/shx) provides us a portable way to use Unix
+    commands in our `package.json` scripts. This allows us to use the same
+    commands (like `ln`) across both POSIX platforms (Linux, macOS) and Windows.
+
+-   [cross-env](https://github.com/kentcdodds/cross-env) is similar to shx, but
+    for allowing us to set environment variables in a way that also works on
+    Windows.
+
+-   We don't need `ajv`, but it is a transitive dependency which breaks the
+    build if we let its version be resolved via the yarn resolution mechanism.
+    Taking a direct dependency on it is the easiest workaround for now.
 
 ## Functionality
 
@@ -108,23 +117,24 @@ resources (`build`) folder. This is used for thumbnail generation on Linux.
 On macOS, we use the `sips` CLI tool for conversion, but that is already
 available on the host machine, and is not bundled with our app.
 
-### AI/ML
+### ML
 
-[onnxruntime-node](https://github.com/Microsoft/onnxruntime) is used as the
-AI/ML runtime. It powers both natural language searches (using CLIP) and face
+[onnxruntime-node](https://github.com/Microsoft/onnxruntime) is used as the ML
+runtime. It powers both natural language searches (using CLIP) and face
 detection (using YOLO).
 
-[jpeg-js](https://github.com/jpeg-js/jpeg-js#readme) is used for decoding JPEG
-data into raw RGB bytes before passing it to ONNX.
-
-html-entities is used by the bundled clip-bpe-ts tokenizer for CLIP.
-
-### Watch Folders
-
-[chokidar](https://github.com/paulmillr/chokidar) is used as a file system
-watcher for the watch folders functionality.
+[clip-bpe-js](https://github.com/simonwarchol/clip-bpe-js) is used for tokening
+the user's search phrase before computing its CLIP (text) embedding.
 
 ### ZIP
 
 [node-stream-zip](https://github.com/antelle/node-stream-zip) is used for
 reading of large ZIP files (e.g. during imports of Google Takeout ZIPs).
+
+[lru-cache](https://github.com/isaacs/node-lru-cache) is used to cache file ZIP
+handles to avoid reopening them for every operation.
+
+### Watch folders
+
+[chokidar](https://github.com/paulmillr/chokidar) is used as a file system
+watcher for the watch folders functionality.

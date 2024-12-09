@@ -1,15 +1,14 @@
-import log from "@/next/log";
+import log from "@/base/log";
 import { FlexWrapper } from "@ente/shared/components/Container";
 import Close from "@mui/icons-material/Close";
 import Done from "@mui/icons-material/Done";
-import { Box, IconButton, TextField } from "@mui/material";
+import { Box, CircularProgress, IconButton, TextField } from "@mui/material";
+import type { DisplayFile } from "components/PhotoFrame";
 import { Formik } from "formik";
 import { t } from "i18next";
 import { useState } from "react";
-import { EnteFile } from "types/file";
 import { changeCaption, updateExistingFilePubMetadata } from "utils/file";
 import * as Yup from "yup";
-import { SmallLoadingSpinner } from "../styledComponents/SmallLoadingSpinner";
 
 export const MAX_CAPTION_SIZE = 5000;
 
@@ -24,7 +23,7 @@ export function RenderCaption({
     shouldDisableEdits,
 }: {
     shouldDisableEdits: boolean;
-    file: EnteFile;
+    file: DisplayFile;
     scheduleUpdate: () => void;
     refreshPhotoswipe: () => void;
 }) {
@@ -71,7 +70,7 @@ export function RenderCaption({
                 validationSchema={Yup.object().shape({
                     caption: Yup.string().max(
                         MAX_CAPTION_SIZE,
-                        t("CAPTION_CHARACTER_LIMIT"),
+                        t("caption_character_limit"),
                     ),
                 })}
                 validateOnBlur={false}
@@ -92,7 +91,7 @@ export function RenderCaption({
                             name="caption"
                             type="text"
                             multiline
-                            placeholder={t("CAPTION_PLACEHOLDER")}
+                            placeholder={t("caption_placeholder")}
                             value={values.caption}
                             onChange={handleChange("caption")}
                             error={Boolean(errors.caption)}
@@ -103,7 +102,10 @@ export function RenderCaption({
                             <FlexWrapper justifyContent={"flex-end"}>
                                 <IconButton type="submit" disabled={loading}>
                                     {loading ? (
-                                        <SmallLoadingSpinner />
+                                        <CircularProgress
+                                            size={"18px"}
+                                            color="inherit"
+                                        />
                                     ) : (
                                         <Done />
                                     )}

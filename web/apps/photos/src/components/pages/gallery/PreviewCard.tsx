@@ -1,28 +1,31 @@
-import { FILE_TYPE } from "@/media/file-type";
-import log from "@/next/log";
-import { Overlay } from "@ente/shared/components/Container";
-import { CustomError } from "@ente/shared/error";
-import useLongPress from "@ente/shared/hooks/useLongPress";
-import { formatDateRelative } from "@ente/shared/time/format";
-import AlbumOutlined from "@mui/icons-material/AlbumOutlined";
-import PlayCircleOutlineOutlinedIcon from "@mui/icons-material/PlayCircleOutlineOutlined";
-import { Tooltip, styled } from "@mui/material";
+import { Overlay } from "@/base/components/mui/Container";
+import log from "@/base/log";
+import { downloadManager } from "@/gallery/services/download";
+import { FileType } from "@/media/file-type";
+import {
+    GAP_BTW_TILES,
+    IMAGE_CONTAINER_MAX_WIDTH,
+} from "@/new/photos/components/PhotoList";
 import {
     LoadingThumbnail,
     StaticThumbnail,
-} from "components/PlaceholderThumbnails";
-import { TRASH_SECTION } from "constants/collection";
-import { GAP_BTW_TILES, IMAGE_CONTAINER_MAX_WIDTH } from "constants/gallery";
+} from "@/new/photos/components/PlaceholderThumbnails";
+import { TRASH_SECTION } from "@/new/photos/services/collection";
+import useLongPress from "@ente/shared/hooks/useLongPress";
+import AlbumOutlined from "@mui/icons-material/AlbumOutlined";
+import Favorite from "@mui/icons-material/FavoriteRounded";
+import PlayCircleOutlineOutlinedIcon from "@mui/icons-material/PlayCircleOutlineOutlined";
+import { Tooltip, styled } from "@mui/material";
+import type { DisplayFile } from "components/PhotoFrame";
+import i18n from "i18next";
 import { DeduplicateContext } from "pages/deduplicate";
 import { GalleryContext } from "pages/gallery";
 import React, { useContext, useEffect, useRef, useState } from "react";
-import DownloadManager from "services/download";
-import { EnteFile } from "types/file";
 import { shouldShowAvatar } from "utils/file";
 import Avatar from "./Avatar";
 
 interface IProps {
-    file: EnteFile;
+    file: DisplayFile;
     updateURL: (id: number, url: string) => void;
     onClick: () => void;
     selectable: boolean;
@@ -35,6 +38,7 @@ interface IProps {
     isInsSelectRange: boolean;
     activeCollectionID: number;
     showPlaceholder: boolean;
+    isFav: boolean;
 }
 
 const Check = styled("input")<{ $active: boolean }>`
@@ -42,7 +46,6 @@ const Check = styled("input")<{ $active: boolean }>`
     position: absolute;
     z-index: 10;
     left: 0;
-    opacity: 0;
     outline: none;
     cursor: pointer;
     @media (pointer: coarse) {
@@ -90,8 +93,10 @@ const Check = styled("input")<{ $active: boolean }>`
         border-right: 2px solid #ddd;
         border-bottom: 2px solid #ddd;
     }
-    ${(props) => props.$active && "opacity: 0.5 "};
+    visibility: hidden;
+    ${(props) => props.$active && "visibility: visible; opacity: 0.5;"};
     &:checked {
+        visibility: visible;
         opacity: 1 !important;
     }
 `;
@@ -115,6 +120,15 @@ export const AvatarOverlay = styled(Overlay)`
     align-items: flex-start;
     padding-right: 5px;
     padding-top: 5px;
+`;
+
+export const FavOverlay = styled(Overlay)`
+    display: flex;
+    justify-content: flex-start;
+    align-items: flex-end;
+    padding-left: 5px;
+    padding-bottom: 5px;
+    opacity: 0.9;
 `;
 
 export const InSelectRangeOverLay = styled("div")<{ $active: boolean }>`
@@ -207,6 +221,7 @@ const Cont = styled("div")<{ disabled: boolean }>`
 
     &:hover {
         input[type="checkbox"] {
+            visibility: visible;
             opacity: 0.5;
         }
 
@@ -259,7 +274,7 @@ export default function PreviewCard(props: IProps) {
                     return;
                 }
                 const url: string =
-                    await DownloadManager.getThumbnailForPreview(
+                    await downloadManager.renderableThumbnailURL(
                         file,
                         props.showPlaceholder,
                     );
@@ -270,9 +285,7 @@ export default function PreviewCard(props: IProps) {
                 setImgSrc(url);
                 updateURL(file.id, url);
             } catch (e) {
-                if (e.message !== CustomError.URL_ALREADY_SET) {
-                    log.error("preview card useEffect failed", e);
-                }
+                log.error("preview card useEffect failed", e);
                 // no-op
             }
         };
@@ -329,12 +342,12 @@ export default function PreviewCard(props: IProps) {
             ) : (
                 <LoadingThumbnail />
             )}
-            {file.metadata.fileType === FILE_TYPE.LIVE_PHOTO ? (
+            {file.metadata.fileType === FileType.livePhoto ? (
                 <FileTypeIndicatorOverlay>
                     <AlbumOutlined />
                 </FileTypeIndicatorOverlay>
             ) : (
-                file.metadata.fileType === FILE_TYPE.VIDEO && (
+                file.metadata.fileType === FileType.video && (
                     <FileTypeIndicatorOverlay>
                         <PlayCircleOutlineOutlinedIcon />
                     </FileTypeIndicatorOverlay>
@@ -345,6 +358,11 @@ export default function PreviewCard(props: IProps) {
                 <AvatarOverlay>
                     <Avatar file={file} />
                 </AvatarOverlay>
+            )}
+            {props.isFav && (
+                <FavOverlay>
+                    <Favorite />
+                </FavOverlay>
             )}
 
             <HoverOverlay
@@ -390,4 +408,28 @@ export default function PreviewCard(props: IProps) {
     } else {
         return renderFn();
     }
+}
+
+function formatDateRelative(date: number) {
+    const units = {
+        year: 24 * 60 * 60 * 1000 * 365,
+        month: (24 * 60 * 60 * 1000 * 365) / 12,
+        day: 24 * 60 * 60 * 1000,
+        hour: 60 * 60 * 1000,
+        minute: 60 * 1000,
+        second: 1000,
+    };
+    const relativeDateFormat = new Intl.RelativeTimeFormat(i18n.language, {
+        localeMatcher: "best fit",
+        numeric: "always",
+        style: "long",
+    });
+    const elapsed = date - Date.now(); // "Math.abs" accounts for both "past" & "future" scenarios
+
+    for (const u in units)
+        if (Math.abs(elapsed) > units[u] || u === "second")
+            return relativeDateFormat.format(
+                Math.round(elapsed / units[u]),
+                u as Intl.RelativeTimeFormatUnit,
+            );
 }

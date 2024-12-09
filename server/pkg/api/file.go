@@ -3,6 +3,7 @@ package api
 import (
 	"fmt"
 	"github.com/ente-io/museum/pkg/controller/file_copy"
+	"github.com/ente-io/museum/pkg/controller/filedata"
 	"net/http"
 	"os"
 	"strconv"
@@ -24,6 +25,7 @@ import (
 type FileHandler struct {
 	Controller   *controller.FileController
 	FileCopyCtrl *file_copy.FileCopyController
+	FileDataCtrl *filedata.Controller
 }
 
 // DefaultMaxBatchSize is the default maximum API batch size unless specified otherwise
@@ -139,7 +141,7 @@ func (h *FileHandler) GetMultipartUploadURLs(c *gin.Context) {
 // Get redirects the request to the file location
 func (h *FileHandler) Get(c *gin.Context) {
 	userID, fileID := getUserAndFileIDs(c)
-	url, err := h.Controller.GetFileURL(userID, fileID)
+	url, err := h.Controller.GetFileURL(c, userID, fileID)
 	if err != nil {
 		handler.Error(c, stacktrace.Propagate(err, ""))
 		return
@@ -151,7 +153,7 @@ func (h *FileHandler) Get(c *gin.Context) {
 // GetV2 returns the URL of the file to client
 func (h *FileHandler) GetV2(c *gin.Context) {
 	userID, fileID := getUserAndFileIDs(c)
-	url, err := h.Controller.GetFileURL(userID, fileID)
+	url, err := h.Controller.GetFileURL(c, userID, fileID)
 	if err != nil {
 		handler.Error(c, stacktrace.Propagate(err, ""))
 		return
@@ -164,7 +166,7 @@ func (h *FileHandler) GetV2(c *gin.Context) {
 // GetThumbnail redirects the request to the file's thumbnail location
 func (h *FileHandler) GetThumbnail(c *gin.Context) {
 	userID, fileID := getUserAndFileIDs(c)
-	url, err := h.Controller.GetThumbnailURL(userID, fileID)
+	url, err := h.Controller.GetThumbnailURL(c, userID, fileID)
 	if err != nil {
 		handler.Error(c, stacktrace.Propagate(err, ""))
 		return
@@ -176,7 +178,7 @@ func (h *FileHandler) GetThumbnail(c *gin.Context) {
 // GetThumbnailV2 returns the URL of the thumbnail to the client
 func (h *FileHandler) GetThumbnailV2(c *gin.Context) {
 	userID, fileID := getUserAndFileIDs(c)
-	url, err := h.Controller.GetThumbnailURL(userID, fileID)
+	url, err := h.Controller.GetThumbnailURL(c, userID, fileID)
 	if err != nil {
 		handler.Error(c, stacktrace.Propagate(err, ""))
 		return

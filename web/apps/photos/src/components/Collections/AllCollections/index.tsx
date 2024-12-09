@@ -1,58 +1,66 @@
-import Divider from "@mui/material/Divider";
+import { FilledIconButton } from "@/base/components/mui";
+import { CollectionsSortOptions } from "@/new/photos/components/CollectionsSortOptions";
+import { SlideUpTransition } from "@/new/photos/components/mui/SlideUpTransition";
+import type { CollectionSummary } from "@/new/photos/services/collection/ui";
+import { CollectionsSortBy } from "@/new/photos/services/collection/ui";
+import { FlexWrapper, FluidContainer } from "@ente/shared/components/Container";
+import Close from "@mui/icons-material/Close";
 import {
-    AllCollectionDialog,
-    Transition,
-} from "components/Collections/AllCollections/dialog";
-import { COLLECTION_LIST_SORT_BY } from "constants/collection";
-import { AppContext } from "pages/_app";
-import { useContext } from "react";
-import { CollectionSummary } from "types/collection";
+    Box,
+    DialogTitle,
+    Divider,
+    Stack,
+    Typography,
+    useMediaQuery,
+} from "@mui/material";
+import { AllCollectionDialog } from "components/Collections/AllCollections/dialog";
+import { t } from "i18next";
 import AllCollectionContent from "./content";
-import AllCollectionsHeader from "./header";
 
-interface Iprops {
+interface AllCollectionsProps {
     open: boolean;
     onClose: () => void;
     collectionSummaries: CollectionSummary[];
-    setActiveCollectionID: (id?: number) => void;
-    collectionListSortBy: COLLECTION_LIST_SORT_BY;
-    setCollectionListSortBy: (v: COLLECTION_LIST_SORT_BY) => void;
+    onSelectCollectionID: (id: number) => void;
+    collectionsSortBy: CollectionsSortBy;
+    onChangeCollectionsSortBy: (by: CollectionsSortBy) => void;
     isInHiddenSection: boolean;
 }
 
-const LeftSlideTransition = Transition("up");
-
-export default function AllCollections(props: Iprops) {
+export default function AllCollections(props: AllCollectionsProps) {
     const {
         collectionSummaries,
         open,
         onClose,
-        setActiveCollectionID,
-        collectionListSortBy,
-        setCollectionListSortBy,
+        onSelectCollectionID,
+        collectionsSortBy,
+        onChangeCollectionsSortBy,
         isInHiddenSection,
     } = props;
-    const { isMobile } = useContext(AppContext);
+    const isMobile = useMediaQuery("(max-width: 428px)");
 
     const onCollectionClick = (collectionID: number) => {
-        setActiveCollectionID(collectionID);
+        onSelectCollectionID(collectionID);
         onClose();
     };
 
     return (
         <AllCollectionDialog
             position="flex-end"
-            TransitionComponent={LeftSlideTransition}
+            TransitionComponent={SlideUpTransition}
             onClose={onClose}
             open={open}
             fullScreen={isMobile}
+            fullWidth={true}
         >
             <AllCollectionsHeader
-                isInHiddenSection={isInHiddenSection}
-                onClose={onClose}
+                {...{
+                    isInHiddenSection,
+                    onClose,
+                    collectionsSortBy,
+                    onChangeCollectionsSortBy,
+                }}
                 collectionCount={props.collectionSummaries.length}
-                collectionSortBy={collectionListSortBy}
-                setCollectionSortBy={setCollectionListSortBy}
             />
             <Divider />
             <AllCollectionContent
@@ -62,3 +70,42 @@ export default function AllCollections(props: Iprops) {
         </AllCollectionDialog>
     );
 }
+
+const AllCollectionsHeader = ({
+    onClose,
+    collectionCount,
+    collectionsSortBy,
+    onChangeCollectionsSortBy,
+    isInHiddenSection,
+}) => (
+    <DialogTitle>
+        <FlexWrapper>
+            <FluidContainer mr={1.5}>
+                <Box>
+                    <Typography variant="h3">
+                        {isInHiddenSection
+                            ? t("all_hidden_albums")
+                            : t("all_albums")}
+                    </Typography>
+                    <Typography
+                        variant="small"
+                        fontWeight={"normal"}
+                        color={"text.muted"}
+                    >
+                        {t("albums_count", { count: collectionCount })}
+                    </Typography>
+                </Box>
+            </FluidContainer>
+            <Stack direction="row" spacing={1.5}>
+                <CollectionsSortOptions
+                    activeSortBy={collectionsSortBy}
+                    onChangeSortBy={onChangeCollectionsSortBy}
+                    nestedInDialog
+                />
+                <FilledIconButton onClick={onClose}>
+                    <Close />
+                </FilledIconButton>
+            </Stack>
+        </FlexWrapper>
+    </DialogTitle>
+);

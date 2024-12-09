@@ -1,16 +1,16 @@
-import { CustomHead } from "@/next/components/Head";
-import { disableDiskLogs } from "@/next/log";
-import { logUnhandledErrorsAndRejections } from "@/next/log-web";
-import { APPS, APP_TITLES } from "@ente/shared/apps/constants";
+import { staticAppTitle } from "@/base/app";
+import { CustomHead } from "@/base/components/Head";
+import { disableDiskLogs } from "@/base/log";
+import { logUnhandledErrorsAndRejections } from "@/base/log-web";
 import { getTheme } from "@ente/shared/themes";
 import { THEME_COLOR } from "@ente/shared/themes/constants";
 import { CssBaseline, ThemeProvider } from "@mui/material";
 import type { AppProps } from "next/app";
-import { useEffect } from "react";
+import React, { useEffect } from "react";
 
 import "styles/global.css";
 
-export default function App({ Component, pageProps }: AppProps) {
+const App: React.FC<AppProps> = ({ Component, pageProps }) => {
     useEffect(() => {
         disableDiskLogs();
         logUnhandledErrorsAndRejections(true);
@@ -19,12 +19,14 @@ export default function App({ Component, pageProps }: AppProps) {
 
     return (
         <>
-            <CustomHead title={APP_TITLES.get(APPS.PHOTOS)} />
+            <CustomHead title={staticAppTitle} />
 
-            <ThemeProvider theme={getTheme(THEME_COLOR.DARK, APPS.PHOTOS)}>
+            <ThemeProvider theme={getTheme(THEME_COLOR.DARK, "photos")}>
                 <CssBaseline enableColorScheme />
                 <Component {...pageProps} />
             </ThemeProvider>
         </>
     );
-}
+};
+
+export default App;

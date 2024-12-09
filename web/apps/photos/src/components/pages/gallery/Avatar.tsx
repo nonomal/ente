@@ -1,9 +1,8 @@
-import log from "@/next/log";
-import { styled } from "@mui/material";
-import { useTheme } from "@mui/material/styles";
+import log from "@/base/log";
+import { EnteFile } from "@/media/file";
+import { styled, useTheme } from "@mui/material";
 import { GalleryContext } from "pages/gallery";
 import React, { useContext, useLayoutEffect, useState } from "react";
-import { EnteFile } from "types/file";
 
 interface AvatarProps {
     file?: EnteFile;
@@ -21,7 +20,7 @@ const AvatarBase = styled("div")<{
     width: ${({ size }) => `${size}px`};
     height: ${({ size }) => `${size}px`};
     background-color: ${({ colorCode, opacity }) =>
-        `${colorCode}${opacity === 100 ? "" : opacity ?? 95}`};
+        `${colorCode}${opacity === 100 ? "" : (opacity ?? 95)}`};
     border-radius: 50%;
     display: flex;
     justify-content: center;
@@ -56,7 +55,7 @@ const Avatar: React.FC<AvatarProps> = ({ file, email, opacity }) => {
                 setUserLetter(email[0].toUpperCase());
                 setColorCode(colorCode);
             } else if (file.ownerID === user.id) {
-                const uploaderName = file.pubMagicMetadata.data.uploaderName;
+                const uploaderName = file.pubMagicMetadata?.data.uploaderName;
                 if (!uploaderName) {
                     log.error(
                         "uploaderName not found in file.pubMagicMetadata.data",

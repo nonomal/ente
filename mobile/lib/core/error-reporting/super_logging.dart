@@ -5,6 +5,7 @@ import 'dart:collection';
 import 'dart:core';
 import 'dart:io';
 
+import "package:dio/dio.dart";
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:http/http.dart' as http;
@@ -14,6 +15,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:photos/core/error-reporting/tunneled_transport.dart';
+import "package:photos/core/errors.dart";
 import 'package:photos/models/typedefs.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -36,8 +38,9 @@ extension SuperString on String {
 }
 
 extension SuperLogRecord on LogRecord {
-  String toPrettyString([String? extraLines]) {
-    final header = "[$loggerName] [$level] [$time]";
+  String toPrettyString([String? extraLines, bool inIsolate = false]) {
+    final header =
+        "[$loggerName${inIsolate ? " (in isolate)" : ""}] [$level] [$time]";
 
     var msg = "$header $message";
 
@@ -225,17 +228,34 @@ class SuperLogging {
     }
   }
 
+  static _shouldSkipSentry(Object error) {
+    if (error is DioError) {
+      return true;
+    }
+    final bool result = error is StorageLimitExceededError ||
+        error is WiFiUnavailableError ||
+        error is InvalidFileError ||
+        error is NoActiveSubscriptionError;
+    if (kDebugMode && result) {
+      $.info('Not sending error to sentry: $error');
+    }
+    return result;
+  }
+
   static Future<void> _sendErrorToSentry(
     Object error,
     StackTrace? stack,
   ) async {
     try {
+      if (_shouldSkipSentry(error)) {
+        return;
+      }
       await Sentry.captureException(
         error,
         stackTrace: stack,
       );
     } catch (e) {
-      $.info('Sending report to sentry.io failed: $e');
+      $.info('Sending report to sentry failed: $e');
       $.info('Original error: $error');
     }
   }
@@ -256,6 +276,10 @@ class SuperLogging {
     // write to stdout
     printLog(str);
 
+    saveLogString(str, rec.error);
+  }
+
+  static void saveLogString(String str, Object? error) {
     // push to log queue
     if (fileIsEnabled) {
       fileQueueEntries.add(str + '\n');
@@ -265,8 +289,8 @@ class SuperLogging {
     }
 
     // add error to sentry queue
-    if (sentryIsEnabled && rec.error != null) {
-      _sendErrorToSentry(rec.error!, null).ignore();
+    if (sentryIsEnabled && error != null) {
+      _sendErrorToSentry(error, null).ignore();
     }
   }
 
@@ -303,6 +327,9 @@ class SuperLogging {
   static Future<void> setupSentry() async {
     await for (final error in sentryQueueControl.stream.asBroadcastStream()) {
       try {
+        if (_shouldSkipSentry(error)) {
+          continue;
+        }
         await Sentry.captureException(
           error,
         );
@@ -384,7 +411,7 @@ class SuperLogging {
       }
     }
 
-    logFile = File("$dirPath/${config.dateFmt!.format(DateTime.now())}.txt");
+    logFile = File("$dirPath/${config.dateFmt!.format(DateTime.now())}.log");
   }
 
   /// Current app version, obtained from package_info plugin.

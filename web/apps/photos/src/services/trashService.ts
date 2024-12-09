@@ -1,32 +1,23 @@
-import log from "@/next/log";
+import log from "@/base/log";
+import { apiURL } from "@/base/origins";
+import type { Collection } from "@/media/collection";
+import { EncryptedTrashItem, Trash, type EnteFile } from "@/media/file";
+import {
+    getLocalTrash,
+    getTrashedFiles,
+    TRASH,
+} from "@/new/photos/services/files";
 import HTTPService from "@ente/shared/network/HTTPService";
-import { getEndpoint } from "@ente/shared/network/api";
 import localForage from "@ente/shared/storage/localForage";
 import { getToken } from "@ente/shared/storage/localStorage/helpers";
-import { Collection } from "types/collection";
-import { EnteFile } from "types/file";
-import { SetFiles } from "types/gallery";
-import { EncryptedTrashItem, Trash } from "types/trash";
-import { decryptFile, mergeMetadata, sortTrashFiles } from "utils/file";
+import { decryptFile } from "utils/file";
 import { getCollection } from "./collectionService";
 
-const TRASH = "file-trash";
 const TRASH_TIME = "trash-time";
 const DELETED_COLLECTION = "deleted-collection";
 
-const ENDPOINT = getEndpoint();
-
-async function getLocalTrash() {
-    const trash = (await localForage.getItem<Trash>(TRASH)) || [];
-    return trash;
-}
-
-export async function getLocalTrashedFiles() {
-    return getTrashedFiles(await getLocalTrash());
-}
-
 export async function getLocalDeletedCollections() {
-    const trashedCollections: Array<Collection> =
+    const trashedCollections: Collection[] =
         (await localForage.getItem<Collection[]>(DELETED_COLLECTION)) || [];
     const nonUndefinedCollections = trashedCollections.filter(
         (collection) => !!collection,
@@ -53,7 +44,7 @@ async function getLastSyncTime() {
 }
 export async function syncTrash(
     collections: Collection[],
-    setTrashedFiles: SetFiles,
+    setTrashedFiles: (fs: EnteFile[]) => void,
 ): Promise<void> {
     const trash = await getLocalTrash();
     collections = [...collections, ...(await getLocalDeletedCollections())];
@@ -77,7 +68,7 @@ export async function syncTrash(
 export const updateTrash = async (
     collections: Map<number, Collection>,
     sinceTime: number,
-    setTrashedFiles: SetFiles,
+    setTrashedFiles: (fs: EnteFile[]) => void,
     currentTrash: Trash,
 ): Promise<Trash> => {
     try {
@@ -91,7 +82,7 @@ export const updateTrash = async (
                 break;
             }
             resp = await HTTPService.get(
-                `${ENDPOINT}/trash/v2/diff`,
+                await apiURL("/trash/v2/diff"),
                 {
                     sinceTime: time,
                 },
@@ -138,19 +129,6 @@ export const updateTrash = async (
     return currentTrash;
 };
 
-export function getTrashedFiles(trash: Trash): EnteFile[] {
-    return sortTrashFiles(
-        mergeMetadata(
-            trash.map((trashedFile) => ({
-                ...trashedFile.file,
-                updationTime: trashedFile.updatedAt,
-                deleteBy: trashedFile.deleteBy,
-                isTrashed: true,
-            })),
-        ),
-    );
-}
-
 export const emptyTrash = async () => {
     try {
         const token = getToken();
@@ -160,7 +138,7 @@ export const emptyTrash = async () => {
         const lastUpdatedAt = await getLastSyncTime();
 
         await HTTPService.post(
-            `${ENDPOINT}/trash/empty`,
+            await apiURL("/trash/empty"),
             { lastUpdatedAt },
             null,
             {

@@ -1,14 +1,17 @@
-import { haveWindow } from "@/next/env";
+import { haveWindow } from "@/base/env";
+import { type Location } from "@/base/types";
+import { ChipButton } from "@/new/photos/components/mui/ChipButton";
 import { styled } from "@mui/material";
-import { useEffect, useRef } from "react";
-import { MapButton } from "./MapButton";
-
 import { t } from "i18next";
+import { useEffect, useRef } from "react";
+
 import "leaflet-defaulticon-compatibility/dist/leaflet-defaulticon-compatibility.webpack.css"; // Re-uses images from ~leaflet package
 import "leaflet/dist/leaflet.css";
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 haveWindow() && require("leaflet-defaulticon-compatibility");
 const L = haveWindow()
-    ? (require("leaflet") as typeof import("leaflet"))
+    ? // eslint-disable-next-line @typescript-eslint/no-require-imports
+      (require("leaflet") as typeof import("leaflet"))
     : null;
 
 const LAYER_TILE_URL = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
@@ -29,7 +32,7 @@ const MapBoxEnableContainer = styled(MapBoxContainer)`
 `;
 
 interface MapBoxProps {
-    location: { latitude: number; longitude: number };
+    location: Location;
     mapEnabled: boolean;
     openUpdateMapConfirmationDialog: () => void;
 }
@@ -56,7 +59,7 @@ const MapBox: React.FC<MapBoxProps> = ({
                 L.marker(position).addTo(map).openPopup();
             }
         } else {
-            if (mapContainer && mapContainer.hasChildNodes()) {
+            if (mapContainer?.hasChildNodes()) {
                 if (mapContainer.firstChild) {
                     mapContainer.removeChild(mapContainer.firstChild);
                 }
@@ -68,10 +71,9 @@ const MapBox: React.FC<MapBoxProps> = ({
         <MapBoxContainer ref={mapBoxContainerRef} />
     ) : (
         <MapBoxEnableContainer>
-            <MapButton onClick={openUpdateMapConfirmationDialog}>
-                {" "}
-                {t("ENABLE_MAP")}
-            </MapButton>
+            <ChipButton onClick={openUpdateMapConfirmationDialog}>
+                {t("enable_map")}
+            </ChipButton>
         </MapBoxEnableContainer>
     );
 };

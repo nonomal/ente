@@ -1,12 +1,21 @@
+import "dart:async";
+import "dart:developer";
 import "dart:io";
 
 import "package:computer/computer.dart";
 import 'package:exif/exif.dart';
+import "package:ffmpeg_kit_flutter_min/ffprobe_kit.dart";
+import "package:ffmpeg_kit_flutter_min/media_information.dart";
+import "package:ffmpeg_kit_flutter_min/media_information_session.dart";
+import "package:flutter/foundation.dart";
 import 'package:intl/intl.dart';
 import 'package:logging/logging.dart';
+import "package:motion_photos/src/xmp_extractor.dart";
+import "package:photos/models/ffmpeg/ffprobe_props.dart";
 import 'package:photos/models/file/file.dart';
 import "package:photos/models/location/location.dart";
 import "package:photos/services/location_service.dart";
+import "package:photos/utils/ffprobe_util.dart";
 import 'package:photos/utils/file_util.dart';
 
 const kDateTimeOriginal = "EXIF DateTimeOriginal";
@@ -46,6 +55,74 @@ Future<Map<String, IfdTag>?> getExifFromSourceFile(File originFile) async {
     _logger.severe("failed to get exif from origin file", e, s);
     return null;
   }
+}
+
+Future<Map<String, dynamic>> getXmp(File file) async {
+  return Computer.shared().compute(
+    _getXMPComputer,
+    param: {"file": file},
+    taskName: "getXMPAsync",
+  );
+}
+
+Map<String, dynamic> _getXMPComputer(Map<String, dynamic> args) {
+  final File originalFile = args["file"] as File;
+  return XMPExtractor().extract(originalFile.readAsBytesSync());
+}
+
+Future<FFProbeProps?> getVideoPropsAsync(File originalFile) async {
+  try {
+    final stopwatch = Stopwatch()..start();
+    final Map<int, StringBuffer> logs = {};
+    final completer = Completer<MediaInformation?>();
+
+    final session = await FFprobeKit.getMediaInformationAsync(
+      originalFile.path,
+      (MediaInformationSession session) async {
+        // This callback is called when the session is complete
+        final mediaInfo = session.getMediaInformation();
+        if (mediaInfo == null) {
+          _logger.warning("Failed to get video metadata");
+          final failStackTrace = await session.getFailStackTrace();
+          final output = await session.getOutput();
+          _logger.warning(
+            'Failed to get video metadata. failStackTrace=$failStackTrace, output=$output',
+          );
+        }
+        completer.complete(mediaInfo);
+      },
+      (log) {
+        // put log messages into a map
+        logs.putIfAbsent(log.getSessionId(), () => StringBuffer());
+        logs[log.getSessionId()]!.write(log.getMessage());
+      },
+    );
+
+    // Wait for the session to complete
+    await session.getReturnCode();
+    final mediaInfo = await completer.future;
+    if (kDebugMode) {
+      logs.forEach((key, value) {
+        log("log for session $key: $value", name: "FFprobeKit");
+      });
+    }
+    if (mediaInfo == null) {
+      return null;
+    }
+    final properties = await FFProbeUtil.getProperties(mediaInfo);
+    _logger.info("getVideoPropsAsync took ${stopwatch.elapsedMilliseconds}ms");
+    stopwatch.stop();
+    return properties;
+  } catch (e, s) {
+    _logger.severe("Failed to getVideoProps", e, s);
+    return null;
+  }
+}
+
+bool? checkPanoramaFromEXIF(File? file, Map<String, IfdTag>? exifData) {
+  final element = exifData?["EXIF CustomRendered"];
+  if (element?.printable == null) return null;
+  return element?.printable == "6";
 }
 
 Future<DateTime?> getCreationTimeFromEXIF(

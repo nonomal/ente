@@ -1,22 +1,29 @@
+import 'dart:math' as math;
+
 import "package:flutter/material.dart";
+import "package:flutter_svg/svg.dart";
 import "package:photos/theme/ente_theme.dart";
 
+/// Pass icon or asset path of svg
 class SelectionActionButton extends StatelessWidget {
   final String labelText;
-  final IconData icon;
+  final IconData? icon;
+  final String? svgAssetPath;
   final VoidCallback? onTap;
   final bool shouldShow;
 
   const SelectionActionButton({
     required this.labelText,
-    required this.icon,
     required this.onTap,
+    this.icon,
+    this.svgAssetPath,
     this.shouldShow = true,
     super.key,
   });
 
   @override
   Widget build(BuildContext context) {
+    assert(icon != null || svgAssetPath != null);
     return AnimatedSize(
       duration: const Duration(milliseconds: 350),
       curve: Curves.easeInOutCirc,
@@ -27,6 +34,7 @@ class SelectionActionButton extends StatelessWidget {
                 labelText: labelText,
                 icon: icon,
                 onTap: onTap,
+                svgAssetPath: svgAssetPath,
               )
             : const SizedBox(
                 height: 60,
@@ -38,12 +46,14 @@ class SelectionActionButton extends StatelessWidget {
 
 class _Body extends StatefulWidget {
   final String labelText;
-  final IconData icon;
+  final IconData? icon;
+  final String? svgAssetPath;
   final VoidCallback? onTap;
   const _Body({
     required this.labelText,
-    required this.icon,
     required this.onTap,
+    this.icon,
+    this.svgAssetPath,
   });
 
   @override
@@ -89,11 +99,51 @@ class __BodyState extends State<_Body> {
               mainAxisAlignment: MainAxisAlignment.center,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(
-                  widget.icon,
-                  size: 24,
-                  color: getEnteColorScheme(context).textMuted,
-                ),
+                if (widget.icon == Icons.navigation_rounded)
+                  Transform.rotate(
+                    angle: math.pi / 2,
+                    child: Icon(
+                      widget.icon,
+                      size: 24,
+                      color: getEnteColorScheme(context).primary300,
+                      shadows: const [
+                        BoxShadow(
+                          color: Color.fromARGB(12, 0, 179, 60),
+                          offset: Offset(0, 2.51),
+                          blurRadius: 5.02,
+                          spreadRadius: 0,
+                        ),
+                        BoxShadow(
+                          color: Color.fromARGB(24, 0, 179, 60),
+                          offset: Offset(0, 1.25),
+                          blurRadius: 3.76,
+                          spreadRadius: 0,
+                        ),
+                        BoxShadow(
+                          color: Color.fromARGB(24, 0, 179, 60),
+                          offset: Offset(0, 0.63),
+                          blurRadius: 1.88,
+                          spreadRadius: 0,
+                        ),
+                      ],
+                    ),
+                  )
+                else
+                  widget.svgAssetPath != null
+                      ? SvgPicture.asset(
+                          widget.svgAssetPath!,
+                          colorFilter: ColorFilter.mode(
+                            getEnteColorScheme(context).textMuted,
+                            BlendMode.srcIn,
+                          ),
+                          width: 24,
+                          height: 24,
+                        )
+                      : Icon(
+                          widget.icon,
+                          size: 24,
+                          color: getEnteColorScheme(context).textMuted,
+                        ),
                 const SizedBox(height: 4),
                 Text(
                   widget.labelText,

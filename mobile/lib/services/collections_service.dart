@@ -4,7 +4,9 @@ import 'dart:math';
 
 import 'package:collection/collection.dart';
 import 'package:dio/dio.dart';
+import "package:fast_base58/fast_base58.dart";
 import 'package:flutter/foundation.dart';
+import "package:flutter/material.dart";
 import 'package:logging/logging.dart';
 import 'package:photos/core/configuration.dart';
 import 'package:photos/core/constants.dart';
@@ -21,6 +23,7 @@ import 'package:photos/events/force_reload_home_gallery_event.dart';
 import 'package:photos/events/local_photos_updated_event.dart';
 import 'package:photos/extensions/list.dart';
 import 'package:photos/extensions/stop_watch.dart';
+import "package:photos/generated/l10n.dart";
 import 'package:photos/models/api/collection/create_request.dart';
 import "package:photos/models/api/collection/public_url.dart";
 import "package:photos/models/api/collection/user.dart";
@@ -30,13 +33,15 @@ import 'package:photos/models/collection/collection_items.dart';
 import 'package:photos/models/file/file.dart';
 import "package:photos/models/files_split.dart";
 import "package:photos/models/metadata/collection_magic.dart";
+import "package:photos/service_locator.dart";
 import 'package:photos/services/app_lifecycle_service.dart';
 import "package:photos/services/favorites_service.dart";
 import 'package:photos/services/file_magic_service.dart';
 import 'package:photos/services/local_sync_service.dart';
 import 'package:photos/services/remote_sync_service.dart';
 import 'package:photos/utils/crypto_util.dart';
-import 'package:photos/utils/file_download_util.dart';
+import "package:photos/utils/dialog_util.dart";
+import "package:photos/utils/file_key.dart";
 import "package:photos/utils/local_settings.dart";
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -63,6 +68,12 @@ class CollectionsService {
   Collection? cachedUncategorizedCollection;
   final Map<String, EnteFile> _coverCache = <String, EnteFile>{};
   final Map<int, int> _countCache = <int, int>{};
+
+  //Used for links-in-app
+  final _cachedPublicAlbumToken = <int, String>{};
+  final _cachedPublicAlbumJWT = <int, String>{};
+  final _cachedPublicCollectionID = <int>[];
+  final _cachedPublicAlbumKey = <int, String>{};
 
   CollectionsService._privateConstructor() {
     _db = CollectionsDB.instance;
@@ -171,7 +182,11 @@ class CollectionsService {
     _collectionIDToCollections.clear();
     cachedDefaultHiddenCollection = null;
     cachedUncategorizedCollection = null;
+    _cachedPublicAlbumToken.clear();
+    _cachedPublicAlbumJWT.clear();
+    _cachedPublicCollectionID.clear();
     _cachedKeys.clear();
+    _cachedPublicAlbumKey.clear();
   }
 
   Future<Map<int, int>> getCollectionIDsToBeSynced() async {
@@ -399,7 +414,7 @@ class CollectionsService {
   }
 
   Future<List<Collection>> getCollectionForOnEnteSection() async {
-    final AlbumSortKey sortKey = LocalSettings.instance.albumSortKey();
+    final AlbumSortKey sortKey = localSettings.albumSortKey();
     final List<Collection> collections =
         CollectionsService.instance.getCollectionsForUI();
     final bool hasFavorites = FavoritesService.instance.hasFavorites();
@@ -431,7 +446,8 @@ class CollectionsService {
     for (final collection in collections) {
       if (collection.type == CollectionType.uncategorized ||
           collection.isQuickLinkCollection() ||
-          collection.isHidden()) {
+          collection.isHidden() ||
+          collection.isArchived()) {
         continue;
       }
       if (collection.type == CollectionType.favorites) {
@@ -728,7 +744,7 @@ class CollectionsService {
       collection.setName(newName);
       sync().ignore();
     } catch (e, s) {
-      _logger.severe("failed to rename collection", e, s);
+      _logger.warning("failed to rename collection", e, s);
       rethrow;
     }
   }
@@ -1026,6 +1042,113 @@ class CollectionsService {
       }
       rethrow;
     }
+  }
+
+  Future<Collection> getCollectionFromPublicLink(
+    BuildContext context,
+    Uri uri,
+  ) async {
+    final String? authToken = uri.queryParameters["t"];
+    final String albumKey = uri.fragment;
+    try {
+      final response = await _enteDio.get(
+        "/public-collection/info",
+        options: Options(
+          headers: {"X-Auth-Access-Token": authToken},
+        ),
+      );
+
+      final collectionData = response.data["collection"];
+      final Collection collection = Collection.fromMap(collectionData);
+      final Uint8List collectionKey =
+          Uint8List.fromList(Base58Decode(albumKey));
+
+      _cachedKeys[collection.id] = collectionKey;
+      _cachedPublicAlbumToken[collection.id] = authToken!;
+      _cachedPublicCollectionID.add(collection.id);
+      _cachedPublicAlbumKey[collection.id] = albumKey;
+      collection.setName(_getDecryptedCollectionName(collection));
+      return collection;
+    } catch (e, s) {
+      _logger.warning(e, s);
+      _logger.severe("Failed to fetch public collection");
+      if (e is DioError && e.response?.statusCode == 410) {
+        await showInfoDialog(
+          context,
+          title: S.of(context).linkExpired,
+          body: S.of(context).theLinkYouAreTryingToAccessHasExpired,
+        );
+        throw UnauthorizedError();
+      }
+      await showGenericErrorDialog(context: context, error: e);
+      if (e is DioError && e.response?.statusCode == 401) {
+        throw UnauthorizedError();
+      }
+      rethrow;
+    }
+  }
+
+  Future<bool> verifyPublicCollectionPassword(
+    BuildContext context,
+    String passwordHash,
+    int collectionID,
+  ) async {
+    final authToken = await getSharedPublicAlbumToken(collectionID);
+    try {
+      final response = await _enteDio.post(
+        "https://api.ente.io/public-collection/verify-password",
+        data: {"passHash": passwordHash},
+        options: Options(
+          headers: {
+            "X-Auth-Access-Token": authToken,
+          },
+        ),
+      );
+      final jwtToken = response.data["jwtToken"];
+      if (response.statusCode == 200) {
+        await setPublicAlbumTokenJWT(collectionID, jwtToken);
+        return true;
+      }
+      return false;
+    } catch (e) {
+      _logger.warning("Failed to verify public collection password $e");
+      await showErrorDialog(
+        context,
+        S.of(context).incorrectPasswordTitle,
+        S.of(context).pleaseTryAgain,
+      );
+      return false;
+    }
+  }
+
+  Future<String> getSharedPublicAlbumKey(int collectionID) async {
+    if (_cachedPublicAlbumKey.containsKey(collectionID)) {
+      return _cachedPublicAlbumKey[collectionID]!;
+    }
+    return "";
+  }
+
+  Future<String?> getSharedPublicAlbumToken(int collectionID) async {
+    if (_cachedPublicAlbumToken.containsKey(collectionID)) {
+      return _cachedPublicAlbumToken[collectionID];
+    }
+    return null;
+  }
+
+  Future<String?> getSharedPublicAlbumTokenJWT(int collectionID) async {
+    if (_cachedPublicAlbumJWT.containsKey(collectionID)) {
+      return _cachedPublicAlbumJWT[collectionID];
+    }
+    return null;
+  }
+
+  /// Is a public link opened in the app
+  bool isSharedPublicLink(int collectionID) {
+    return _cachedPublicCollectionID.contains(collectionID);
+  }
+
+  Future<void> setPublicAlbumTokenJWT(int collectionID, String token) async {
+    _cachedPublicAlbumJWT[collectionID] = token;
   }
 
   Future<Collection> _fromRemoteCollection(

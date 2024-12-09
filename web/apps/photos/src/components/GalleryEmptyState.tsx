@@ -1,53 +1,46 @@
+import { EnteLogoSVG } from "@/base/components/EnteLogo";
 import {
     FlexWrapper,
     VerticallyCentered,
 } from "@ente/shared/components/Container";
-import { EnteLogo } from "@ente/shared/components/EnteLogo";
 import AddPhotoAlternateIcon from "@mui/icons-material/AddPhotoAlternateOutlined";
 import FolderIcon from "@mui/icons-material/FolderOutlined";
 import { Box, Button, Stack, Typography, styled } from "@mui/material";
 import { t } from "i18next";
 import { Trans } from "react-i18next";
 import uploadManager from "services/upload/uploadManager";
-import { UploadTypeSelectorIntent } from "types/gallery";
-
-const Wrapper = styled(Box)`
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-`;
-const NonDraggableImage = styled("img")`
-    pointer-events: none;
-`;
 
 export default function GalleryEmptyState({ openUploader }) {
     return (
         <Wrapper>
-            <Stack
-                sx={{
-                    flex: "none",
-                    pt: 1.5,
-                    pb: 1.5,
-                }}
-            >
+            <Stack sx={{ flex: "none", paddingBlock: "12px 32px" }}>
                 <VerticallyCentered sx={{ flex: "none" }}>
-                    <Typography variant="h3" color="text.muted" mb={1}>
+                    <Typography
+                        variant="h3"
+                        color="text.muted"
+                        sx={{
+                            userSelect: "none",
+                            marginBlockEnd: 1,
+                            svg: {
+                                color: "text.base",
+                                verticalAlign: "middle",
+                                marginBlockEnd: "2px",
+                            },
+                        }}
+                    >
                         <Trans
-                            i18nKey="WELCOME_TO_ENTE_HEADING"
-                            components={{ a: <EnteLogo /> }}
+                            i18nKey="welcome_to_ente_title"
+                            components={{ a: <EnteLogoSVG /> }}
                         />
                     </Typography>
                     <Typography variant="h2">
-                        {t("WELCOME_TO_ENTE_SUBHEADING")}
+                        {t("welcome_to_ente_subtitle")}
                     </Typography>
                 </VerticallyCentered>
-                <Typography mt={3.5} color="text.muted">
-                    {t("WHERE_YOUR_BEST_PHOTOS_LIVE")}
-                </Typography>
             </Stack>
             <NonDraggableImage
                 height={287.57}
+                alt=""
                 src="/images/empty-state/ente_duck.png"
                 srcSet="/images/empty-state/ente_duck@2x.png,
                                 /images/empty-state/ente_duck@3x.png"
@@ -61,9 +54,7 @@ export default function GalleryEmptyState({ openUploader }) {
                             "not-allowed",
                     }}
                     color="accent"
-                    onClick={() =>
-                        openUploader(UploadTypeSelectorIntent.normalUpload)
-                    }
+                    onClick={() => openUploader("upload")}
                     disabled={!uploadManager.shouldAllowNewUpload()}
                     sx={{
                         mt: 1.5,
@@ -83,9 +74,7 @@ export default function GalleryEmptyState({ openUploader }) {
                             !uploadManager.shouldAllowNewUpload() &&
                             "not-allowed",
                     }}
-                    onClick={() =>
-                        openUploader(UploadTypeSelectorIntent.import)
-                    }
+                    onClick={() => openUploader("import")}
                     disabled={!uploadManager.shouldAllowNewUpload()}
                     sx={{
                         mt: 1.5,
@@ -103,3 +92,19 @@ export default function GalleryEmptyState({ openUploader }) {
         </Wrapper>
     );
 }
+
+const Wrapper = styled(Box)`
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+`;
+
+/**
+ * Prevent the image from being selected _and_ dragged, since dragging it
+ * triggers the our dropdown selector overlay.
+ */
+const NonDraggableImage = styled("img")`
+    pointer-events: none;
+    user-select: none;
+`;

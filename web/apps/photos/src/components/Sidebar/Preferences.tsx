@@ -1,97 +1,114 @@
+import { MenuItemGroup, MenuSectionTitle } from "@/base/components/Menu";
+import {
+    NestedSidebarDrawer,
+    SidebarDrawerTitlebar,
+    type NestedSidebarDrawerVisibilityProps,
+} from "@/base/components/mui/SidebarDrawer";
+import { useModalVisibility } from "@/base/components/utils/modal";
 import {
     getLocaleInUse,
     setLocaleInUse,
     supportedLocales,
     type SupportedLocale,
-} from "@/next/i18n";
+} from "@/base/i18n";
+import { MLSettings } from "@/new/photos/components/sidebar/MLSettings";
+import {
+    confirmDisableMapsDialogAttributes,
+    confirmEnableMapsDialogAttributes,
+} from "@/new/photos/components/utils/dialog";
+import { useSettingsSnapshot } from "@/new/photos/components/utils/use-snapshot";
+import { isMLSupported } from "@/new/photos/services/ml";
+import {
+    syncSettings,
+    updateCFProxyDisabledPreference,
+    updateMapEnabled,
+} from "@/new/photos/services/settings";
+import { useAppContext } from "@/new/photos/types/context";
+import { EnteMenuItem } from "@ente/shared/components/Menu/EnteMenuItem";
 import ChevronRight from "@mui/icons-material/ChevronRight";
-import { Box, DialogProps, Stack } from "@mui/material";
+import { Stack } from "@mui/material";
 import DropdownInput from "components/DropdownInput";
-import { EnteDrawer } from "components/EnteDrawer";
-import { EnteMenuItem } from "components/Menu/EnteMenuItem";
-import Titlebar from "components/Titlebar";
 import { t } from "i18next";
-import { useRouter } from "next/router";
-import { useState } from "react";
-import AdvancedSettings from "./AdvancedSettings";
-import MapSettings from "./MapSetting";
+import React, { useCallback, useEffect } from "react";
 
-export default function Preferences({ open, onClose, onRootClose }) {
-    const [advancedSettingsView, setAdvancedSettingsView] = useState(false);
-    const [mapSettingsView, setMapSettingsView] = useState(false);
+export const Preferences: React.FC<NestedSidebarDrawerVisibilityProps> = ({
+    open,
+    onClose,
+    onRootClose,
+}) => {
+    const { show: showMapSettings, props: mapSettingsVisibilityProps } =
+        useModalVisibility();
+    const {
+        show: showAdvancedSettings,
+        props: advancedSettingsVisibilityProps,
+    } = useModalVisibility();
+    const { show: showMLSettings, props: mlSettingsVisibilityProps } =
+        useModalVisibility();
 
-    const openAdvancedSettings = () => setAdvancedSettingsView(true);
-    const closeAdvancedSettings = () => setAdvancedSettingsView(false);
-
-    const openMapSettings = () => setMapSettingsView(true);
-    const closeMapSettings = () => setMapSettingsView(false);
+    useEffect(() => {
+        if (open) void syncSettings();
+    }, [open]);
 
     const handleRootClose = () => {
         onClose();
         onRootClose();
     };
 
-    const handleDrawerClose: DialogProps["onClose"] = (_, reason) => {
-        if (reason === "backdropClick") {
-            handleRootClose();
-        } else {
-            onClose();
-        }
-    };
-
     return (
-        <EnteDrawer
-            transitionDuration={0}
-            open={open}
-            onClose={handleDrawerClose}
-            BackdropProps={{
-                sx: { "&&&": { backgroundColor: "transparent" } },
-            }}
-        >
-            <Stack spacing={"4px"} py={"12px"}>
-                <Titlebar
+        <NestedSidebarDrawer {...{ open, onClose }} onRootClose={onRootClose}>
+            <Stack sx={{ gap: "4px", py: "12px" }}>
+                <SidebarDrawerTitlebar
                     onClose={onClose}
-                    title={t("PREFERENCES")}
+                    title={t("preferences")}
                     onRootClose={handleRootClose}
                 />
-                <Box px={"8px"}>
-                    <Stack py="20px" spacing="24px">
-                        <LanguageSelector />
-                        <EnteMenuItem
-                            onClick={openMapSettings}
-                            endIcon={<ChevronRight />}
-                            label={t("MAP")}
-                        />
-                        <EnteMenuItem
-                            onClick={openAdvancedSettings}
-                            endIcon={<ChevronRight />}
-                            label={t("ADVANCED")}
-                        />
-                    </Stack>
-                </Box>
+                <Stack sx={{ px: "16px", py: "20px", gap: "24px" }}>
+                    <LanguageSelector />
+                    {isMLSupported && (
+                        <MenuItemGroup>
+                            <EnteMenuItem
+                                endIcon={<ChevronRight />}
+                                onClick={showMLSettings}
+                                label={t("ml_search")}
+                            />
+                        </MenuItemGroup>
+                    )}
+                    <EnteMenuItem
+                        onClick={showMapSettings}
+                        endIcon={<ChevronRight />}
+                        label={t("map")}
+                    />
+                    <EnteMenuItem
+                        onClick={showAdvancedSettings}
+                        endIcon={<ChevronRight />}
+                        label={t("advanced")}
+                    />
+                </Stack>
             </Stack>
-            <AdvancedSettings
-                open={advancedSettingsView}
-                onClose={closeAdvancedSettings}
-                onRootClose={onRootClose}
-            />
             <MapSettings
-                open={mapSettingsView}
-                onClose={closeMapSettings}
+                {...mapSettingsVisibilityProps}
                 onRootClose={onRootClose}
             />
-        </EnteDrawer>
+            <AdvancedSettings
+                {...advancedSettingsVisibilityProps}
+                onRootClose={onRootClose}
+            />
+            <MLSettings
+                {...mlSettingsVisibilityProps}
+                onRootClose={handleRootClose}
+            />
+        </NestedSidebarDrawer>
     );
-}
+};
 
 const LanguageSelector = () => {
     const locale = getLocaleInUse();
-    // Enhancement: Is this full reload needed?
-    const router = useRouter();
 
     const updateCurrentLocale = (newLocale: SupportedLocale) => {
         setLocaleInUse(newLocale);
-        router.reload();
+        // A full reload is needed because we use the global `t` instance
+        // instead of the useTranslation hook.
+        window.location.reload();
     };
 
     const options = supportedLocales.map((locale) => ({
@@ -102,7 +119,7 @@ const LanguageSelector = () => {
     return (
         <DropdownInput
             options={options}
-            label={t("LANGUAGE")}
+            label={t("language")}
             labelProps={{ color: "text.muted" }}
             selected={locale}
             setSelected={updateCurrentLocale}
@@ -127,9 +144,123 @@ const localeName = (locale: SupportedLocale) => {
             return "Nederlands";
         case "es-ES":
             return "Español";
+        case "pt-PT":
+            return "Português";
         case "pt-BR":
-            return "Brazilian Portuguese";
+            return "Português Brasileiro";
         case "ru-RU":
-            return "Russian";
+            return "Русский";
+        case "pl-PL":
+            return "Polski";
+        case "it-IT":
+            return "Italiano";
+        case "lt-LT":
+            return "Lietuvių kalba";
+        case "uk-UA":
+            return "Українська";
+        case "vi-VN":
+            return "Tiếng Việt";
     }
+};
+
+export const MapSettings: React.FC<NestedSidebarDrawerVisibilityProps> = ({
+    open,
+    onClose,
+    onRootClose,
+}) => {
+    const { showMiniDialog } = useAppContext();
+
+    const { mapEnabled } = useSettingsSnapshot();
+
+    const confirmToggle = useCallback(
+        () =>
+            showMiniDialog(
+                mapEnabled
+                    ? confirmDisableMapsDialogAttributes(() =>
+                          updateMapEnabled(false),
+                      )
+                    : confirmEnableMapsDialogAttributes(() =>
+                          updateMapEnabled(true),
+                      ),
+            ),
+        [showMiniDialog, mapEnabled],
+    );
+
+    const handleRootClose = () => {
+        onClose();
+        onRootClose();
+    };
+
+    return (
+        <NestedSidebarDrawer
+            {...{ open, onClose }}
+            onRootClose={handleRootClose}
+        >
+            <Stack sx={{ gap: "4px", py: "12px" }}>
+                <SidebarDrawerTitlebar
+                    onClose={onClose}
+                    onRootClose={handleRootClose}
+                    title={t("map")}
+                />
+
+                <Stack sx={{ px: "16px", py: "20px" }}>
+                    <MenuItemGroup>
+                        <EnteMenuItem
+                            onClick={confirmToggle}
+                            variant="toggle"
+                            checked={mapEnabled}
+                            label={t("enabled")}
+                        />
+                    </MenuItemGroup>
+                </Stack>
+            </Stack>
+        </NestedSidebarDrawer>
+    );
+};
+
+export const AdvancedSettings: React.FC<NestedSidebarDrawerVisibilityProps> = ({
+    open,
+    onClose,
+    onRootClose,
+}) => {
+    const { cfUploadProxyDisabled } = useSettingsSnapshot();
+
+    const handleRootClose = () => {
+        onClose();
+        onRootClose();
+    };
+
+    const toggle = () =>
+        void updateCFProxyDisabledPreference(!cfUploadProxyDisabled);
+
+    return (
+        <NestedSidebarDrawer
+            {...{ open, onClose }}
+            onRootClose={handleRootClose}
+        >
+            <Stack sx={{ gap: "4px", py: "12px" }}>
+                <SidebarDrawerTitlebar
+                    onClose={onClose}
+                    onRootClose={handleRootClose}
+                    title={t("advanced")}
+                />
+
+                <Stack sx={{ px: "16px", py: "20px" }}>
+                    <Stack sx={{ gap: "4px" }}>
+                        <MenuItemGroup>
+                            <EnteMenuItem
+                                variant="toggle"
+                                checked={!cfUploadProxyDisabled}
+                                onClick={toggle}
+                                label={t("faster_upload")}
+                            />
+                        </MenuItemGroup>
+                        <MenuSectionTitle
+                            title={t("faster_upload_description")}
+                        />
+                    </Stack>
+                </Stack>
+            </Stack>
+        </NestedSidebarDrawer>
+    );
 };

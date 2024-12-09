@@ -1,90 +1,58 @@
-import log from "@/next/log";
-import ComlinkCryptoWorker from "@ente/shared/crypto";
-import { Events, eventBus } from "@ente/shared/events";
-import HTTPService from "@ente/shared/network/HTTPService";
-import { getEndpoint } from "@ente/shared/network/api";
-import localForage from "@ente/shared/storage/localForage";
-import { getToken } from "@ente/shared/storage/localStorage/helpers";
-import { REQUEST_BATCH_SIZE } from "constants/api";
-import { Collection } from "types/collection";
+import { encryptMetadataJSON } from "@/base/crypto";
+import log from "@/base/log";
+import { apiURL } from "@/base/origins";
+import type { Collection } from "@/media/collection";
+import type { EncryptedMagicMetadata } from "@/media/file";
 import {
     EncryptedEnteFile,
     EnteFile,
     FileWithUpdatedMagicMetadata,
     FileWithUpdatedPublicMagicMetadata,
     TrashRequest,
-} from "types/file";
-import { SetFiles } from "types/gallery";
-import { BulkUpdateMagicMetadataRequest } from "types/magicMetadata";
-import { batch } from "utils/common";
+} from "@/media/file";
+import { getLatestVersionFiles } from "@/new/photos/services/file";
 import {
-    decryptFile,
-    getLatestVersionFiles,
-    mergeMetadata,
-    sortFiles,
-} from "utils/file";
+    clearCachedThumbnailsIfChanged,
+    getLocalFiles,
+    setLocalFiles,
+} from "@/new/photos/services/files";
+import { batch } from "@/utils/array";
+import HTTPService from "@ente/shared/network/HTTPService";
+import { getToken } from "@ente/shared/storage/localStorage/helpers";
+import exportService from "services/export";
+import { decryptFile } from "utils/file";
 import {
     getCollectionLastSyncTime,
+    REQUEST_BATCH_SIZE,
     setCollectionLastSyncTime,
 } from "./collectionService";
 
-const ENDPOINT = getEndpoint();
-const FILES_TABLE = "files";
-const HIDDEN_FILES_TABLE = "hidden-files";
-
 /**
- * Return all files that we know about locally, both "normal" and "hidden".
+ * Fetch all files of the given {@link type}, belonging to the given
+ * {@link collections}, from remote and update our local database.
+ *
+ * If this is the initial read, or if the count of files we have differs from
+ * the state of the local database (these two are expected to be the same case),
+ * then the {@link onResetFiles} callback is invoked to give the caller a chance
+ * to bring its state up to speed.
+ *
+ * In addition to updating the local database, it also calls the provided
+ * {@link onFetchFiles} callback with the latest decrypted files after each
+ * batch the new and/or updated files are received from remote.
  */
-export const getAllLocalFiles = async () =>
-    [].concat(await getLocalFiles("normal"), await getLocalFiles("hidden"));
-
-/**
- * Return all files that we know about locally. By default it returns only
- * "normal" (i.e. non-"hidden") files, but it can be passed the {@link type}
- * "hidden" to get it to instead return hidden files that we know about locally.
- */
-export const getLocalFiles = async (type: "normal" | "hidden" = "normal") => {
-    const tableName = type === "normal" ? FILES_TABLE : HIDDEN_FILES_TABLE;
-    const files: Array<EnteFile> =
-        (await localForage.getItem<EnteFile[]>(tableName)) || [];
-    return files;
-};
-
-const setLocalFiles = async (type: "normal" | "hidden", files: EnteFile[]) => {
-    try {
-        const tableName = type === "normal" ? FILES_TABLE : HIDDEN_FILES_TABLE;
-        await localForage.setItem(tableName, files);
-        try {
-            eventBus.emit(Events.LOCAL_FILES_UPDATED);
-        } catch (e) {
-            log.error("Error in localFileUpdated handlers", e);
-        }
-    } catch (e1) {
-        try {
-            const storageEstimate = await navigator.storage.estimate();
-            log.error(
-                `failed to save files to indexedDB (storageEstimate was ${storageEstimate}`,
-                e1,
-            );
-            log.info(`storage estimate ${JSON.stringify(storageEstimate)}`);
-        } catch (e2) {
-            log.error("failed to save files to indexedDB", e1);
-            log.error("failed to get storage stats", e2);
-        }
-        throw e1;
-    }
-};
-
 export const syncFiles = async (
     type: "normal" | "hidden",
     collections: Collection[],
-    setFiles: SetFiles,
+    onResetFiles: (fs: EnteFile[]) => void,
+    onFetchFiles: (fs: EnteFile[]) => void,
 ) => {
     const localFiles = await getLocalFiles(type);
     let files = await removeDeletedCollectionFiles(collections, localFiles);
+    let didUpdateFiles = false;
     if (files.length !== localFiles.length) {
         await setLocalFiles(type, files);
-        setFiles(sortFiles(mergeMetadata(files)));
+        onResetFiles(files);
+        didUpdateFiles = true;
     }
     for (const collection of collections) {
         if (!getToken()) {
@@ -95,18 +63,20 @@ export const syncFiles = async (
             continue;
         }
 
-        const newFiles = await getFiles(collection, lastSyncTime, setFiles);
+        const newFiles = await getFiles(collection, lastSyncTime, onFetchFiles);
+        await clearCachedThumbnailsIfChanged(localFiles, newFiles);
         files = getLatestVersionFiles([...files, ...newFiles]);
         await setLocalFiles(type, files);
+        didUpdateFiles = true;
         setCollectionLastSyncTime(collection, collection.updationTime);
     }
-    return files;
+    if (didUpdateFiles) exportService.onLocalFilesUpdated();
 };
 
 export const getFiles = async (
     collection: Collection,
     sinceTime: number,
-    setFiles: SetFiles,
+    onFetchFiles: (fs: EnteFile[]) => void,
 ): Promise<EnteFile[]> => {
     try {
         let decryptedFiles: EnteFile[] = [];
@@ -118,7 +88,7 @@ export const getFiles = async (
                 break;
             }
             resp = await HTTPService.get(
-                `${ENDPOINT}/collections/v2/diff`,
+                await apiURL("/collections/v2/diff"),
                 {
                     collectionID: collection.id,
                     sinceTime: time,
@@ -139,16 +109,7 @@ export const getFiles = async (
             );
             decryptedFiles = [...decryptedFiles, ...newDecryptedFilesBatch];
 
-            setFiles((files) =>
-                sortFiles(
-                    mergeMetadata(
-                        getLatestVersionFiles([
-                            ...(files || []),
-                            ...decryptedFiles,
-                        ]),
-                    ),
-                ),
-            );
+            onFetchFiles(decryptedFiles);
             if (resp.data.diff.length) {
                 time = resp.data.diff.slice(-1)[0].updationTime;
             }
@@ -187,7 +148,7 @@ export const trashFiles = async (filesToTrash: EnteFile[]) => {
                 })),
             };
             await HTTPService.post(
-                `${ENDPOINT}/files/trash`,
+                await apiURL("/files/trash"),
                 trashRequest,
                 null,
                 {
@@ -211,7 +172,7 @@ export const deleteFromTrash = async (filesToDelete: number[]) => {
 
         for (const batch of batchedFilesToDelete) {
             await HTTPService.post(
-                `${ENDPOINT}/trash/delete`,
+                await apiURL("/trash/delete"),
                 { fileIDs: batch },
                 null,
                 {
@@ -225,6 +186,15 @@ export const deleteFromTrash = async (filesToDelete: number[]) => {
     }
 };
 
+export interface UpdateMagicMetadataRequest {
+    id: number;
+    magicMetadata: EncryptedMagicMetadata;
+}
+
+export interface BulkUpdateMagicMetadataRequest {
+    metadataList: UpdateMagicMetadataRequest[];
+}
+
 export const updateFileMagicMetadata = async (
     fileWithUpdatedMagicMetadataList: FileWithUpdatedMagicMetadata[],
 ) => {
@@ -233,29 +203,33 @@ export const updateFileMagicMetadata = async (
         return;
     }
     const reqBody: BulkUpdateMagicMetadataRequest = { metadataList: [] };
-    const cryptoWorker = await ComlinkCryptoWorker.getInstance();
     for (const {
         file,
         updatedMagicMetadata,
     } of fileWithUpdatedMagicMetadataList) {
-        const { file: encryptedMagicMetadata } =
-            await cryptoWorker.encryptMetadata(
-                updatedMagicMetadata.data,
-                file.key,
-            );
+        const { encryptedDataB64, decryptionHeaderB64 } =
+            await encryptMetadataJSON({
+                jsonValue: updatedMagicMetadata.data,
+                keyB64: file.key,
+            });
         reqBody.metadataList.push({
             id: file.id,
             magicMetadata: {
                 version: updatedMagicMetadata.version,
                 count: updatedMagicMetadata.count,
-                data: encryptedMagicMetadata.encryptedData,
-                header: encryptedMagicMetadata.decryptionHeader,
+                data: encryptedDataB64,
+                header: decryptionHeaderB64,
             },
         });
     }
-    await HTTPService.put(`${ENDPOINT}/files/magic-metadata`, reqBody, null, {
-        "X-Auth-Token": token,
-    });
+    await HTTPService.put(
+        await apiURL("/files/magic-metadata"),
+        reqBody,
+        null,
+        {
+            "X-Auth-Token": token,
+        },
+    );
     return fileWithUpdatedMagicMetadataList.map(
         ({ file, updatedMagicMetadata }): EnteFile => ({
             ...file,
@@ -275,28 +249,27 @@ export const updateFilePublicMagicMetadata = async (
         return;
     }
     const reqBody: BulkUpdateMagicMetadataRequest = { metadataList: [] };
-    const cryptoWorker = await ComlinkCryptoWorker.getInstance();
     for (const {
         file,
-        updatedPublicMagicMetadata: updatePublicMagicMetadata,
+        updatedPublicMagicMetadata,
     } of fileWithUpdatedPublicMagicMetadataList) {
-        const { file: encryptedPubMagicMetadata } =
-            await cryptoWorker.encryptMetadata(
-                updatePublicMagicMetadata.data,
-                file.key,
-            );
+        const { encryptedDataB64, decryptionHeaderB64 } =
+            await encryptMetadataJSON({
+                jsonValue: updatedPublicMagicMetadata.data,
+                keyB64: file.key,
+            });
         reqBody.metadataList.push({
             id: file.id,
             magicMetadata: {
-                version: updatePublicMagicMetadata.version,
-                count: updatePublicMagicMetadata.count,
-                data: encryptedPubMagicMetadata.encryptedData,
-                header: encryptedPubMagicMetadata.decryptionHeader,
+                version: updatedPublicMagicMetadata.version,
+                count: updatedPublicMagicMetadata.count,
+                data: encryptedDataB64,
+                header: decryptionHeaderB64,
             },
         });
     }
     await HTTPService.put(
-        `${ENDPOINT}/files/public-magic-metadata`,
+        await apiURL("/files/public-magic-metadata"),
         reqBody,
         null,
         {

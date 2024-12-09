@@ -1,40 +1,43 @@
-import { PAGES } from "@ente/accounts/constants/pages";
+import { PAGES } from "@/accounts/constants/pages";
+import { FormPaper } from "@/base/components/FormPaper";
+import { ActivityIndicator } from "@/base/components/mui/ActivityIndicator";
+import { customAPIHost } from "@/base/origins";
 import { LS_KEYS, getData } from "@ente/shared//storage/localStorage";
 import { VerticallyCentered } from "@ente/shared/components/Container";
-import EnteSpinner from "@ente/shared/components/EnteSpinner";
-import FormPaper from "@ente/shared/components/Form/FormPaper";
 import { useRouter } from "next/router";
 import React, { useEffect, useState } from "react";
 import { SignUp } from "../components/SignUp";
 import type { PageProps } from "../types/page";
 
 const Page: React.FC<PageProps> = ({ appContext }) => {
-    const { appName } = appContext;
+    const { showNavBar } = appContext;
 
     const [loading, setLoading] = useState(true);
+    const [host, setHost] = useState<string | undefined>();
 
     const router = useRouter();
 
     useEffect(() => {
+        void customAPIHost().then(setHost);
         const user = getData(LS_KEYS.USER);
         if (user?.email) {
-            router.push(PAGES.VERIFY);
+            void router.push(PAGES.VERIFY);
         }
         setLoading(false);
-        appContext.showNavBar(true);
+        showNavBar(true);
     }, []);
 
     const login = () => {
-        router.push(PAGES.LOGIN);
+        void router.push(PAGES.LOGIN);
     };
 
     return (
         <VerticallyCentered>
             {loading ? (
-                <EnteSpinner />
+                <ActivityIndicator />
             ) : (
                 <FormPaper>
-                    <SignUp login={login} router={router} appName={appName} />
+                    <SignUp {...{ login, router, host }} />
                 </FormPaper>
             )}
         </VerticallyCentered>

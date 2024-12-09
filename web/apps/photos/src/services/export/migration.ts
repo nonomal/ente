@@ -1,45 +1,72 @@
-import { FILE_TYPE } from "@/media/file-type";
+import { ensureElectron } from "@/base/electron";
+import { nameAndExtension } from "@/base/file-name";
+import log from "@/base/log";
+import { downloadManager } from "@/gallery/services/download";
+import type { Collection } from "@/media/collection";
+import { mergeMetadata, type EnteFile } from "@/media/file";
+import { FileType } from "@/media/file-type";
 import { decodeLivePhoto } from "@/media/live-photo";
-import { ensureElectron } from "@/next/electron";
-import { nameAndExtension } from "@/next/file";
-import log from "@/next/log";
-import { wait } from "@/utils/promise";
-import { LS_KEYS, getData } from "@ente/shared/storage/localStorage";
-import type { User } from "@ente/shared/user/types";
-import { getLocalCollections } from "services/collectionService";
-import downloadManager from "services/download";
-import { getAllLocalFiles } from "services/fileService";
-import { Collection } from "types/collection";
-import {
-    CollectionExportNames,
-    ExportProgress,
-    ExportRecord,
-    ExportRecordV0,
-    ExportRecordV1,
-    ExportRecordV2,
-    ExportedCollectionPaths,
-    FileExportNames,
-} from "types/export";
-import { EnteFile } from "types/file";
-import { getNonEmptyPersonalCollections } from "utils/collection";
-import {
-    getIDBasedSortedFiles,
-    getPersonalFiles,
-    mergeMetadata,
-} from "utils/file";
+import { exportMetadataDirectoryName } from "@/new/photos/services/export";
+import { getAllLocalFiles } from "@/new/photos/services/files";
 import {
     safeDirectoryName,
     safeFileName,
     sanitizeFilename,
-} from "utils/native-fs";
+} from "@/new/photos/utils/native-fs";
+import { wait } from "@/utils/promise";
+import { LS_KEYS, getData } from "@ente/shared/storage/localStorage";
+import type { User } from "@ente/shared/user/types";
+import { getLocalCollections } from "services/collectionService";
+import { getIDBasedSortedFiles, getPersonalFiles } from "utils/file";
 import {
-    exportMetadataDirectoryName,
     getCollectionIDFromFileUID,
     getExportRecordFileUID,
     getLivePhotoExportName,
     getMetadataFolderExportPath,
+    type CollectionExportNames,
+    type ExportProgress,
+    type ExportStage,
+    type FileExportNames,
 } from ".";
 import exportService from "./index";
+
+type ExportedCollectionPaths = Record<number, string>;
+
+interface ExportRecordV0 {
+    stage: ExportStage;
+    lastAttemptTimestamp: number;
+    progress: ExportProgress;
+    queuedFiles: string[];
+    exportedFiles: string[];
+    failedFiles: string[];
+}
+
+interface ExportRecordV1 {
+    version: number;
+    stage: ExportStage;
+    lastAttemptTimestamp: number;
+    progress: ExportProgress;
+    queuedFiles: string[];
+    exportedFiles: string[];
+    failedFiles: string[];
+    exportedCollectionPaths: ExportedCollectionPaths;
+}
+
+interface ExportRecordV2 {
+    version: number;
+    stage: ExportStage;
+    lastAttemptTimestamp: number;
+    exportedFiles: string[];
+    exportedCollectionPaths: ExportedCollectionPaths;
+}
+
+export interface ExportRecord {
+    version: number;
+    stage: ExportStage;
+    lastAttemptTimestamp: number;
+    collectionExportNames: CollectionExportNames;
+    fileExportNames: FileExportNames;
+}
 
 export async function migrateExport(
     exportDir: string,
@@ -114,13 +141,11 @@ async function migrationV0ToV1(
     const personalFiles = getIDBasedSortedFiles(
         getPersonalFiles(localFiles, user),
     );
-    const nonEmptyPersonalCollections = getNonEmptyPersonalCollections(
-        localCollections,
-        personalFiles,
-        user,
+    const personalCollections = localCollections.filter(
+        (collection) => collection.owner.id === user?.id,
     );
     await migrateCollectionFolders(
-        nonEmptyPersonalCollections,
+        personalCollections,
         exportDir,
         collectionIDPathMap,
     );
@@ -315,9 +340,8 @@ async function getFileExportNamesFromExportedFiles(
         /*
             For Live Photos we need to download the file to get the image and video name
         */
-        if (file.metadata.fileType === FILE_TYPE.LIVE_PHOTO) {
-            const fileStream = await downloadManager.getFile(file);
-            const fileBlob = await new Response(fileStream).blob();
+        if (file.metadata.fileType === FileType.livePhoto) {
+            const fileBlob = await downloadManager.fileBlob(file);
             const { imageFileName, videoFileName } = await decodeLivePhoto(
                 file.metadata.title,
                 fileBlob,

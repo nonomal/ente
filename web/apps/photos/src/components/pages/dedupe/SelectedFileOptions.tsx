@@ -1,14 +1,12 @@
+import { SelectionBar } from "@/base/components/Navbar";
+import { AppContext } from "@/new/photos/types/context";
 import { FluidContainer } from "@ente/shared/components/Container";
-import { SelectionBar } from "@ente/shared/components/Navbar/SelectionBar";
 import BackButton from "@mui/icons-material/ArrowBackOutlined";
 import CloseIcon from "@mui/icons-material/Close";
 import DeleteIcon from "@mui/icons-material/Delete";
 import { Box, IconButton, Tooltip } from "@mui/material";
 import { t } from "i18next";
-import { AppContext } from "pages/_app";
 import { useContext } from "react";
-import { formatNumber } from "utils/number/format";
-import { getTrashFilesMessage } from "utils/ui";
 
 interface IProps {
     deleteFileHelper: () => void;
@@ -23,13 +21,21 @@ export default function DeduplicateOptions({
     count,
     clearSelection,
 }: IProps) {
-    const { setDialogMessage, isMobile } = useContext(AppContext);
+    const { showMiniDialog } = useContext(AppContext);
 
     const trashHandler = () =>
-        setDialogMessage(getTrashFilesMessage(deleteFileHelper));
+        showMiniDialog({
+            title: t("trash_files_title"),
+            message: t("trash_files_message"),
+            continue: {
+                text: t("move_to_trash"),
+                color: "critical",
+                action: deleteFileHelper,
+            },
+        });
 
     return (
-        <SelectionBar isMobile={isMobile}>
+        <SelectionBar>
             <FluidContainer>
                 {count ? (
                     <IconButton onClick={clearSelection}>
@@ -40,11 +46,9 @@ export default function DeduplicateOptions({
                         <BackButton />
                     </IconButton>
                 )}
-                <Box ml={1.5}>
-                    {formatNumber(count)} {t("SELECTED")}
-                </Box>
+                <Box ml={1.5}>{t("selected_count", { selected: count })}</Box>
             </FluidContainer>
-            <Tooltip title={t("DELETE")}>
+            <Tooltip title={t("delete")}>
                 <IconButton onClick={trashHandler}>
                     <DeleteIcon />
                 </IconButton>
