@@ -1,18 +1,26 @@
-/** @file Dealing with the JSON metadata in Google Takeouts */
+/* eslint-disable @typescript-eslint/dot-notation */
+/** @file Dealing with the JSON metadata sidecar files */
 
-import { ensureElectron } from "@/next/electron";
-import { nameAndExtension } from "@/next/file";
-import log from "@/next/log";
-import { NULL_LOCATION } from "constants/upload";
-import type { Location } from "types/metadata";
-import { readStream } from "utils/native-stream";
-import type { UploadItem } from "./types";
+import { ensureElectron } from "@/base/electron";
+import { nameAndExtension } from "@/base/file-name";
+import log from "@/base/log";
+import { type Location } from "@/base/types";
+import { readStream } from "@/gallery/utils/native-stream";
+import type { UploadItem } from "@/new/photos/services/upload/types";
+import { maybeParseInt } from "@/utils/parse";
 
+/**
+ * The data we read from the JSON metadata sidecar files.
+ *
+ * Originally these were used to read the JSON metadata sidecar files present in
+ * a Google Takeout. However, during our own export, we also write out files
+ * with a similar structure.
+ */
 export interface ParsedMetadataJSON {
-    creationTime: number;
-    modificationTime: number;
-    latitude: number;
-    longitude: number;
+    creationTime?: number;
+    modificationTime?: number;
+    location?: Location;
+    description?: string;
 }
 
 export const MAX_FILE_NAME_LENGTH_GOOGLE_EXPORT = 46;
@@ -22,7 +30,7 @@ export const getMetadataJSONMapKeyForJSON = (
     jsonFileName: string,
 ) => {
     let title = jsonFileName.slice(0, -1 * ".json".length);
-    const endsWithNumberedSuffixWithBrackets = title.match(/\(\d+\)$/);
+    const endsWithNumberedSuffixWithBrackets = /\(\d+\)$/.exec(title);
     if (endsWithNumberedSuffixWithBrackets) {
         title = title.slice(
             0,
@@ -100,60 +108,82 @@ const uploadItemText = async (uploadItem: UploadItem) => {
     }
 };
 
-const NULL_PARSED_METADATA_JSON: ParsedMetadataJSON = {
-    creationTime: null,
-    modificationTime: null,
-    ...NULL_LOCATION,
-};
-
 const parseMetadataJSONText = (text: string) => {
     const metadataJSON: object = JSON.parse(text);
     if (!metadataJSON) {
         return undefined;
     }
 
-    const parsedMetadataJSON = { ...NULL_PARSED_METADATA_JSON };
+    const parsedMetadataJSON: ParsedMetadataJSON = {};
 
-    if (
-        metadataJSON["photoTakenTime"] &&
-        metadataJSON["photoTakenTime"]["timestamp"]
-    ) {
-        parsedMetadataJSON.creationTime =
-            metadataJSON["photoTakenTime"]["timestamp"] * 1000000;
-    } else if (
-        metadataJSON["creationTime"] &&
-        metadataJSON["creationTime"]["timestamp"]
-    ) {
-        parsedMetadataJSON.creationTime =
-            metadataJSON["creationTime"]["timestamp"] * 1000000;
-    }
-    if (
-        metadataJSON["modificationTime"] &&
-        metadataJSON["modificationTime"]["timestamp"]
-    ) {
-        parsedMetadataJSON.modificationTime =
-            metadataJSON["modificationTime"]["timestamp"] * 1000000;
-    }
-    let locationData: Location = { ...NULL_LOCATION };
-    if (
-        metadataJSON["geoData"] &&
-        (metadataJSON["geoData"]["latitude"] !== 0.0 ||
-            metadataJSON["geoData"]["longitude"] !== 0.0)
-    ) {
-        locationData = metadataJSON["geoData"];
-    } else if (
-        metadataJSON["geoDataExif"] &&
-        (metadataJSON["geoDataExif"]["latitude"] !== 0.0 ||
-            metadataJSON["geoDataExif"]["longitude"] !== 0.0)
-    ) {
-        locationData = metadataJSON["geoDataExif"];
-    }
-    if (locationData !== null) {
-        parsedMetadataJSON.latitude = locationData.latitude;
-        parsedMetadataJSON.longitude = locationData.longitude;
-    }
+    parsedMetadataJSON.creationTime =
+        parseGTTimestamp(metadataJSON["photoTakenTime"]) ??
+        parseGTTimestamp(metadataJSON["creationTime"]);
+
+    parsedMetadataJSON.modificationTime = parseGTTimestamp(
+        metadataJSON["modificationTime"],
+    );
+
+    parsedMetadataJSON.location =
+        parseGTLocation(metadataJSON["geoData"]) ??
+        parseGTLocation(metadataJSON["geoDataExif"]);
+
+    parsedMetadataJSON.description = parseGTNonEmptyString(
+        metadataJSON["description"],
+    );
+
     return parsedMetadataJSON;
 };
+
+/**
+ * Parse a nullish epoch seconds timestamp string from a field in a Google
+ * Takeout JSON, converting it into epoch microseconds if it is found.
+ *
+ * Note that the metadata provided by Google does not include the time zone
+ * where the photo was taken, it only has an epoch seconds value. There is an
+ * associated formatted date value (e.g. "17 Feb 2021, 03:22:16 UTC") but that
+ * seems to be in UTC and doesn't have the time zone either.
+ */
+const parseGTTimestamp = (o: unknown): number | undefined => {
+    if (
+        o &&
+        typeof o == "object" &&
+        "timestamp" in o &&
+        typeof o.timestamp == "string"
+    ) {
+        const timestamp = maybeParseInt(o.timestamp);
+        if (timestamp) return timestamp * 1e6;
+    }
+    return undefined;
+};
+
+/**
+ * Parse a (latitude, longitude) location pair field in a Google Takeout JSON.
+ *
+ * Apparently Google puts in (0, 0) to indicate missing data, so this function
+ * only returns a parsed result if both components are present and non-zero.
+ */
+const parseGTLocation = (o: unknown): Location | undefined => {
+    if (
+        o &&
+        typeof o == "object" &&
+        "latitude" in o &&
+        typeof o.latitude == "number" &&
+        "longitude" in o &&
+        typeof o.longitude == "number"
+    ) {
+        const { latitude, longitude } = o;
+        if (latitude !== 0 || longitude !== 0) return { latitude, longitude };
+    }
+    return undefined;
+};
+
+/**
+ * Parse a string from a field in a Google Takeout JSON, treating empty strings
+ * as undefined.
+ */
+const parseGTNonEmptyString = (o: unknown): string | undefined =>
+    o && typeof o == "string" ? o : undefined;
 
 /**
  * Return the matching entry (if any) from {@link parsedMetadataJSONMap} for the

@@ -30,23 +30,24 @@ Learn more at [ente.io](https://ente.io).
 
 ![Screenshots of Ente Photos](.github/assets/photos.png)
 
-Our flagship product. 3x data replication. On device machine learning. Cross
-platform. Private sharing. Collaborative albums. Family plans. Easy import,
-easier export. Background uploads. The list goes on. And of course, all of this,
-while being fully end-to-end encrypted.
+Our flagship product. 3x data replication. Face detection. Semantic search.
+Private sharing. Collaborative albums. Family plans. Easy import, easier export.
+Background uploads. The list goes on. And of course, all of this, while being
+fully end-to-end encrypted across platforms.
 
-Ente Photos is a paid service, but we offer a free trial. You can also clone
-this repository and choose to self host.
+Ente Photos is a paid service, but we offer 5GB of free storage.
+You can also clone this repository and choose to self-host.
 
 <br />
 
 <div align="center">
 
-[<img height="42" src=".github/assets/app-store-badge.svg">](https://apps.apple.com/app/id1542026904)
-[<img height="42" src=".github/assets/play-store-badge.png">](https://play.google.com/store/apps/details?id=io.ente.photos)
-[<img height="42" src=".github/assets/f-droid-badge.png">](https://f-droid.org/packages/io.ente.photos.fdroid/)
-[<img height="42" src=".github/assets/desktop-badge.png">](https://ente.io/download/desktop)
-[<img height="42" src=".github/assets/web-badge.svg">](https://web.ente.io)
+[<img height="40" src=".github/assets/app-store-badge.svg">](https://apps.apple.com/app/id1542026904)
+[<img height="40" src=".github/assets/play-store-badge.png">](https://play.google.com/store/apps/details?id=io.ente.photos)
+[<img height="40" src=".github/assets/f-droid-badge.png">](https://f-droid.org/packages/io.ente.photos.fdroid/)
+[<img height="40" src=".github/assets/obtainium-badge.png">](https://apps.obtainium.imranr.dev/redirect?r=obtainium://app/%7B%22id%22%3A%22io.ente.photos.independent%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2Fente-io%2Fente%22%2C%22author%22%3A%22ente-io%22%2C%22name%22%3A%22Ente%20Photos%22%2C%22preferredApkIndex%22%3A0%2C%22additionalSettings%22%3A%22%7B%5C%22includePrereleases%5C%22%3Afalse%2C%5C%22fallbackToOlderReleases%5C%22%3Atrue%2C%5C%22filterReleaseTitlesByRegEx%5C%22%3A%5C%22%5C%22%2C%5C%22filterReleaseNotesByRegEx%5C%22%3A%5C%22%5C%22%2C%5C%22verifyLatestTag%5C%22%3Afalse%2C%5C%22dontSortReleasesList%5C%22%3Atrue%2C%5C%22useLatestAssetDateAsReleaseDate%5C%22%3Afalse%2C%5C%22releaseTitleAsVersion%5C%22%3Afalse%2C%5C%22trackOnly%5C%22%3Afalse%2C%5C%22versionExtractionRegEx%5C%22%3A%5C%22%5C%22%2C%5C%22matchGroupToUse%5C%22%3A%5C%22%5C%22%2C%5C%22versionDetection%5C%22%3Atrue%2C%5C%22releaseDateAsVersion%5C%22%3Afalse%2C%5C%22useVersionCodeAsOSVersion%5C%22%3Afalse%2C%5C%22apkFilterRegEx%5C%22%3A%5C%22ente-photos*%5C%22%2C%5C%22invertAPKFilter%5C%22%3Afalse%2C%5C%22autoApkFilterByArch%5C%22%3Atrue%2C%5C%22appName%5C%22%3A%5C%22%5C%22%2C%5C%22shizukuPretendToBeGooglePlay%5C%22%3Afalse%2C%5C%22allowInsecure%5C%22%3Afalse%2C%5C%22exemptFromBackgroundUpdates%5C%22%3Afalse%2C%5C%22skipUpdateNotifications%5C%22%3Afalse%2C%5C%22about%5C%22%3A%5C%22%5C%22%7D%22%2C%22overrideSource%22%3Anull%7D)
+[<img height="40" src=".github/assets/desktop-badge.png">](https://ente.io/download/desktop)
+[<img height="40" src=".github/assets/web-badge.svg">](https://web.ente.io)
 
 </div>
 
@@ -67,11 +68,12 @@ want to give back, please check out Ente Photos or spread the word.
 
 <div align="center">
 
-[<img height="42" src=".github/assets/app-store-badge.svg">](https://apps.apple.com/app/id6444121398)
-[<img height="42" src=".github/assets/play-store-badge.png">](https://play.google.com/store/apps/details?id=io.ente.auth)
-[<img height="42" src=".github/assets/f-droid-badge.png">](https://f-droid.org/packages/io.ente.auth/)
-[<img height="42" src=".github/assets/desktop-badge.png">](https://github.com/ente-io/ente/releases?q=tag%3Aauth-v2)
-[<img height="42" src=".github/assets/web-badge.svg">](https://auth.ente.io)
+[<img height="40" src=".github/assets/app-store-badge.svg">](https://apps.apple.com/app/id6444121398)
+[<img height="40" src=".github/assets/play-store-badge.png">](https://play.google.com/store/apps/details?id=io.ente.auth)
+[<img height="40" src=".github/assets/f-droid-badge.png">](https://f-droid.org/packages/io.ente.auth/)
+[<img height="40" src=".github/assets/obtainium-badge.png">](https://apps.obtainium.imranr.dev/redirect?r=obtainium://app/%7B%22id%22%3A%22io.ente.auth.independent%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2Fente-io%2Fente%22%2C%22author%22%3A%22ente-io%22%2C%22name%22%3A%22Ente%20Auth%22%2C%22preferredApkIndex%22%3A0%2C%22additionalSettings%22%3A%22%7B%5C%22includePrereleases%5C%22%3Afalse%2C%5C%22fallbackToOlderReleases%5C%22%3Atrue%2C%5C%22filterReleaseTitlesByRegEx%5C%22%3A%5C%22%5C%22%2C%5C%22filterReleaseNotesByRegEx%5C%22%3A%5C%22%5C%22%2C%5C%22verifyLatestTag%5C%22%3Afalse%2C%5C%22dontSortReleasesList%5C%22%3Atrue%2C%5C%22useLatestAssetDateAsReleaseDate%5C%22%3Afalse%2C%5C%22releaseTitleAsVersion%5C%22%3Afalse%2C%5C%22trackOnly%5C%22%3Afalse%2C%5C%22versionExtractionRegEx%5C%22%3A%5C%22%5C%22%2C%5C%22matchGroupToUse%5C%22%3A%5C%22%5C%22%2C%5C%22versionDetection%5C%22%3Atrue%2C%5C%22releaseDateAsVersion%5C%22%3Afalse%2C%5C%22useVersionCodeAsOSVersion%5C%22%3Afalse%2C%5C%22apkFilterRegEx%5C%22%3A%5C%22ente-auth*%5C%22%2C%5C%22invertAPKFilter%5C%22%3Afalse%2C%5C%22autoApkFilterByArch%5C%22%3Atrue%2C%5C%22appName%5C%22%3A%5C%22%5C%22%2C%5C%22shizukuPretendToBeGooglePlay%5C%22%3Afalse%2C%5C%22allowInsecure%5C%22%3Afalse%2C%5C%22exemptFromBackgroundUpdates%5C%22%3Afalse%2C%5C%22skipUpdateNotifications%5C%22%3Afalse%2C%5C%22about%5C%22%3A%5C%22%5C%22%7D%22%2C%22overrideSource%22%3Anull%7D)
+[<img height="40" src=".github/assets/desktop-badge.png">](https://github.com/ente-io/ente/releases?q=tag%3Aauth-v4)
+[<img height="40" src=".github/assets/web-badge.svg">](https://auth.ente.io)
 
 </div>
 
@@ -99,7 +101,7 @@ connect with the community.
 [![Discord](https://img.shields.io/discord/948937918347608085?style=for-the-badge&logo=Discord&logoColor=white&label=Discord)](https://discord.gg/z2YVKkycX3)
 [![Ente's Blog RSS](https://img.shields.io/badge/blog-rss-F88900?style=for-the-badge&logo=rss&logoColor=white)](https://ente.io/blog/rss.xml)
 
-[![Twitter](.github/assets/twitter.svg)](https://twitter.com/enteio) &nbsp; [![Mastodon](.github/assets/mastodon.svg)](https://mstdn.social/@ente)
+[![Twitter](.github/assets/twitter.svg)](https://twitter.com/enteio) &nbsp; [![Mastodon](.github/assets/mastodon.svg)](https://fosstodon.org/@ente)
 
 ---
 

@@ -5,7 +5,7 @@ client app. This is where Ente started. This is what had the [first
 commit](https://github.com/ente-io/ente/commit/a8cdc811fd20ca4289d8e779c97f08ef5d276e37).
 
     commit a8cdc811fd20ca4289d8e779c97f08ef5d276e37
-    Author: Vishnu Mohandas <vishnumohandas@gmail.com>
+    Author: Vishnu Mohandas <v****@****.***>
     Date:   Wed Mar 25 01:29:36 2020 +0530
 
         Hello world
@@ -46,7 +46,7 @@ You can alternatively install the build from PlayStore or F-Droid.
 
 ## 🧑‍💻 Building from source
 
-1. [Install Flutter v3.22.0](https://flutter.dev/docs/get-started/install).
+1. [Install Flutter v3.24.3](https://flutter.dev/docs/get-started/install).
 
 2. Pull in all submodules with `git submodule update --init --recursive`
 
@@ -86,6 +86,16 @@ for your support.
 If your language is not listed for translation, please [create a GitHub
 issue](https://github.com/ente-io/ente/issues/new?title=Request+for+New+Language+Translation&body=Language+name%3A)
 to have it added.
+
+## Certificate Fingerprints
+ 
+- **SHA1**: E1:60:10:18:B6:B0:2E:A3:74:6F:90:67:50:30:29:75:0E:EF:6D:39
+- **SHA256**: 35:ED:56:81:B7:0B:B3:BD:35:D9:0D:85:6A:F5:69:4C:50:4D:EF:46:AA:D8:3F:77:7B:1C:67:5C:F4:51:35:0B
+
+To verify these fingerprints, use the following command:
+```bash
+apksigner verify --print-certs <path_to_apk>
+```
 
 ## 💚 Contribute
 

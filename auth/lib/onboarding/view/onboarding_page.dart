@@ -90,8 +90,10 @@ class _OnboardingPageState extends State<OnboardingPage> {
           child: SingleChildScrollView(
             child: Center(
               child: ConstrainedBox(
-                constraints:
-                    const BoxConstraints.tightFor(height: 800, width: 450),
+                constraints: BoxConstraints(
+                  minHeight: MediaQuery.of(context).size.height,
+                  maxWidth: 450,
+                ),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
                     vertical: 40.0,
@@ -108,7 +110,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                                     child: Text("Lang"),
                                   ),
                                   onTap: () async {
-                                    final locale = await getLocale();
+                                    final locale = (await getLocale())!;
                                     // ignore: unawaited_futures
                                     routeToPage(
                                       context,
@@ -197,6 +199,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                           child: Center(
                             child: Text(
                               l10n.useOffline,
+                              textAlign: TextAlign.center,
                               style: body.copyWith(
                                 color: Theme.of(context)
                                     .colorScheme
@@ -219,9 +222,10 @@ class _OnboardingPageState extends State<OnboardingPage> {
   }
 
   Future<void> _optForOfflineMode() async {
-    bool canCheckBio = Platform.isMacOS || Platform.isLinux
-        ? true
-        : await LocalAuthentication().canCheckBiometrics;
+    bool canCheckBio = Platform.isMacOS ||
+        Platform.isLinux ||
+        Platform.isWindows ||
+        await LocalAuthentication().canCheckBiometrics;
     if (!canCheckBio) {
       showToast(
         context,

@@ -1,14 +1,27 @@
+import "dart:async";
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import "package:logging/logging.dart";
 import 'package:photo_manager/photo_manager.dart';
 import "package:photos/generated/l10n.dart";
+import "package:photos/l10n/l10n.dart";
 import 'package:photos/services/sync_service.dart';
+import "package:photos/theme/ente_theme.dart";
+import "package:photos/utils/dialog_util.dart";
 import "package:photos/utils/photo_manager_util.dart";
 import "package:styled_text/styled_text.dart";
 
-class GrantPermissionsWidget extends StatelessWidget {
-  const GrantPermissionsWidget({Key? key}) : super(key: key);
+class GrantPermissionsWidget extends StatefulWidget {
+  const GrantPermissionsWidget({super.key});
+
+  @override
+  State<GrantPermissionsWidget> createState() => _GrantPermissionsWidgetState();
+}
+
+class _GrantPermissionsWidgetState extends State<GrantPermissionsWidget> {
+  final Logger _logger = Logger("_GrantPermissionsWidgetState");
+
   @override
   Widget build(BuildContext context) {
     final isLightMode = Theme.of(context).brightness == Brightness.light;
@@ -75,7 +88,7 @@ class GrantPermissionsWidget extends StatelessWidget {
         decoration: BoxDecoration(
           boxShadow: [
             BoxShadow(
-              color: Theme.of(context).colorScheme.background,
+              color: getEnteColorScheme(context).backgroundBase,
               spreadRadius: 190,
               blurRadius: 30,
               offset: const Offset(0, 170),
@@ -92,42 +105,33 @@ class GrantPermissionsWidget extends StatelessWidget {
           key: const ValueKey("grantPermissionButton"),
           child: Text(S.of(context).grantPermission),
           onPressed: () async {
-            final state = await requestPhotoMangerPermissions();
-            if (state == PermissionState.authorized ||
-                state == PermissionState.limited) {
-              await SyncService.instance.onPermissionGranted(state);
-            } else if (state == PermissionState.denied) {
-              final AlertDialog alert = AlertDialog(
-                title: Text(S.of(context).pleaseGrantPermissions),
-                content: Text(
-                  S.of(context).enteCanEncryptAndPreserveFilesOnlyIfYouGrant,
-                ),
-                actions: [
-                  TextButton(
-                    child: Text(
-                      S.of(context).ok,
-                      style: Theme.of(context).textTheme.titleMedium!.copyWith(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                          ),
-                    ),
-                    onPressed: () {
-                      Navigator.of(context, rootNavigator: true).pop('dialog');
-                      if (Platform.isIOS) {
-                        PhotoManager.openSetting();
-                      }
-                    },
-                  ),
-                ],
+            try {
+              final state = await requestPhotoMangerPermissions();
+              _logger.info("Permission state: $state");
+              if (state == PermissionState.authorized ||
+                  state == PermissionState.limited) {
+                await SyncService.instance.onPermissionGranted(state);
+              } else if (state == PermissionState.denied) {
+                await showChoiceDialog(
+                  context,
+                  title: context.l10n.allowPermTitle,
+                  body: context.l10n.allowPermBody,
+                  firstButtonLabel: context.l10n.openSettings,
+                  firstButtonOnTap: () async {
+                    if (Platform.isIOS) {
+                      await PhotoManager.openSetting();
+                    }
+                  },
+                );
+              } else {
+                throw Exception("Unknown permission state: $state");
+              }
+            } catch (e) {
+              _logger.severe(
+                "Failed to request permission: ${e.toString()}",
+                e,
               );
-              // ignore: unawaited_futures
-              showDialog(
-                context: context,
-                builder: (BuildContext context) {
-                  return alert;
-                },
-                barrierColor: Colors.black12,
-              );
+              showGenericErrorDialog(context: context, error: e).ignore();
             }
           },
         ),

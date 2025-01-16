@@ -2,7 +2,7 @@
 
 The Ente CLI is a Command Line Utility for exporting data from
 [Ente](https://ente.io). It also does a few more things, for example, you can
-use it to decrypting the export from Ente Auth.
+use it to decrypt the export from Ente Auth.
 
 ## Install
 
@@ -89,29 +89,17 @@ If you fancy Docker, you can also run the CLI within a container.
 Modify the `docker-compose.yml` and add volume. ``cli-data`` volume is
 mandatory, you can add more volumes for your export directory.
 
-Build the docker image
-
+Build and run the container in detached mode
 ```shell
-docker build -t ente:latest .
+docker-compose up -d --build
 ```
-
 Note that [BuildKit](https://docs.docker.com/go/buildkit/) is needed to build
 this image. If you face this issue, a quick fix is to add `DOCKER_BUILDKIT=1` in
 front of the build command.
 
-Start the container in detached mode
-
-```shell
-docker-compose up -d
-```
-
 `exec` into the container
 ```shell
-docker-compose exec ente /bin/sh
+docker-compose exec ente-cli /bin/sh -c "./ente-cli version"
+docker-compose exec ente-cli /bin/sh -c "./ente-cli account add" 
 ```
 
-#### Directly executing commands
-
-```shell
-docker run -it --rm ente:latest ls
-```

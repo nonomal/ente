@@ -30,9 +30,10 @@ class CodeDisplayStore {
     final tags = <String>{};
     for (final code in codes) {
       if (code.hasError) continue;
+      if (code.isTrashed) continue;
       tags.addAll(code.display.tags);
     }
-    return tags.toList();
+    return tags.toList()..sort();
   }
 
   Future<void> showDeleteTagDialog(BuildContext context, String tag) async {

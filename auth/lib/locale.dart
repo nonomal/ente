@@ -5,21 +5,36 @@ import 'package:shared_preferences/shared_preferences.dart';
 // Add more language to the list only when at least 90% of the strings are
 // translated in the corresponding language.
 const List<Locale> appSupportedLocales = <Locale>[
+  Locale('ar'),
+  Locale('bg'),
+  Locale('ca'),
+  Locale('cs'),
   Locale('de'),
+  Locale('el'),
   Locale('en'),
   Locale('es', 'ES'),
   Locale('fa'),
   Locale('fr'),
+  Locale('hu'),
+  Locale('id'),
   Locale('it'),
   Locale('ja'),
+  Locale('ko'),
+  Locale('lt'),
   Locale('nl'),
   Locale('pl'),
+  Locale('pt'),
   Locale('pt', 'BR'),
   Locale('ru'),
+  Locale('sl'),
+  Locale('sk'),
   Locale('tr'),
+  Locale('uk'),
+  Locale('vi'),
   Locale("zh", "CN"),
 ];
 
+Locale? autoDetectedLocale;
 Locale localResolutionCallBack(locales, supportedLocales) {
   Locale? languageCodeMatch;
   final Map<String, Locale> languageCodeToLocale = {
@@ -29,12 +44,14 @@ Locale localResolutionCallBack(locales, supportedLocales) {
 
   for (Locale locale in locales) {
     if (appSupportedLocales.contains(locale)) {
+      autoDetectedLocale = locale;
       return locale;
     }
 
     if (languageCodeMatch == null &&
         languageCodeToLocale.containsKey(locale.languageCode)) {
       languageCodeMatch = languageCodeToLocale[locale.languageCode];
+      autoDetectedLocale = languageCodeMatch;
     }
   }
 
@@ -42,7 +59,9 @@ Locale localResolutionCallBack(locales, supportedLocales) {
   return languageCodeMatch ?? const Locale('en');
 }
 
-Future<Locale> getLocale() async {
+Future<Locale?> getLocale({
+  bool noFallback = false,
+}) async {
   final String? savedValue =
       (await SharedPreferences.getInstance()).getString('locale');
   // if savedLocale is not null and is supported by the app, return it
@@ -57,6 +76,12 @@ Future<Locale> getLocale() async {
     if (appSupportedLocales.contains(savedLocale)) {
       return savedLocale;
     }
+  }
+  if (autoDetectedLocale != null) {
+    return autoDetectedLocale!;
+  }
+  if (noFallback) {
+    return null;
   }
   return const Locale('en');
 }

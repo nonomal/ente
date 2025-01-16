@@ -1,5 +1,6 @@
 import "dart:convert";
 
+import "package:flutter/cupertino.dart";
 import 'package:photos/models/metadata/common_keys.dart';
 
 const editTimeKey = 'editedTime';
@@ -8,6 +9,7 @@ const captionKey = "caption";
 const uploaderNameKey = "uploaderName";
 const widthKey = 'w';
 const heightKey = 'h';
+const mediaTypeKey = 'mediaType';
 const latKey = "lat";
 const longKey = "long";
 const motionVideoIndexKey = "mvi";
@@ -55,6 +57,11 @@ class PubMagicMetadata {
   // should have exact same hash with should match the constant `blackThumbnailBase64`
   bool? noThumb;
 
+  // null -> not computed
+  // 0 -> normal
+  // 1 -> panorama
+  int? mediaType;
+
   PubMagicMetadata({
     this.editedTime,
     this.editedName,
@@ -66,6 +73,7 @@ class PubMagicMetadata {
     this.long,
     this.mvi,
     this.noThumb,
+    this.mediaType,
   });
 
   factory PubMagicMetadata.fromEncodedJson(String encodedJson) =>
@@ -81,12 +89,21 @@ class PubMagicMetadata {
       editedName: map[editNameKey],
       caption: map[captionKey],
       uploaderName: map[uploaderNameKey],
-      w: map[widthKey],
-      h: map[heightKey],
+      w: safeParseInt(map[widthKey], widthKey),
+      h: safeParseInt(map[heightKey], heightKey),
       lat: map[latKey],
       long: map[longKey],
       mvi: map[motionVideoIndexKey],
       noThumb: map[noThumbKey],
+      mediaType: map[mediaTypeKey],
     );
+  }
+
+  static int? safeParseInt(dynamic value, String key) {
+    if (value == null) return null;
+    if (value is int) return value;
+    debugPrint("PubMagicMetadata key: $key Unexpected value: $value");
+    if (value is String) return int.tryParse(value);
+    return null;
   }
 }

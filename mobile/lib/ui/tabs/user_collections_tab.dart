@@ -5,10 +5,12 @@ import 'package:logging/logging.dart';
 import "package:photos/core/configuration.dart";
 import 'package:photos/core/event_bus.dart';
 import 'package:photos/events/collection_updated_event.dart';
+import "package:photos/events/favorites_service_init_complete_event.dart";
 import 'package:photos/events/local_photos_updated_event.dart';
 import 'package:photos/events/user_logged_out_event.dart';
 import "package:photos/generated/l10n.dart";
 import 'package:photos/models/collection/collection.dart';
+import "package:photos/service_locator.dart";
 import 'package:photos/services/collections_service.dart';
 import "package:photos/theme/ente_theme.dart";
 import "package:photos/ui/collections/button/archived_button.dart";
@@ -43,6 +45,9 @@ class _UserCollectionsTabState extends State<UserCollectionsTab>
   late StreamSubscription<CollectionUpdatedEvent>
       _collectionUpdatesSubscription;
   late StreamSubscription<UserLoggedOutEvent> _loggedOutEvent;
+  late StreamSubscription<FavoritesServiceInitCompleteEvent>
+      _favoritesServiceInitCompleteEvent;
+
   AlbumSortKey? sortKey;
   String _loadReason = "init";
   final _scrollController = ScrollController();
@@ -54,6 +59,7 @@ class _UserCollectionsTabState extends State<UserCollectionsTab>
   static const int _kOnEnteItemLimitCount = 10;
   @override
   void initState() {
+    super.initState();
     _localFilesSubscription =
         Bus.instance.on<LocalPhotosUpdatedEvent>().listen((event) {
       _debouncer.run(() async {
@@ -76,8 +82,14 @@ class _UserCollectionsTabState extends State<UserCollectionsTab>
       _loadReason = event.reason;
       setState(() {});
     });
-    sortKey = LocalSettings.instance.albumSortKey();
-    super.initState();
+    _favoritesServiceInitCompleteEvent =
+        Bus.instance.on<FavoritesServiceInitCompleteEvent>().listen((event) {
+      _debouncer.run(() async {
+        _loadReason = event.reason;
+        setState(() {});
+      });
+    });
+    sortKey = localSettings.albumSortKey();
   }
 
   @override
@@ -266,7 +278,7 @@ class _UserCollectionsTabState extends State<UserCollectionsTab>
               );
               if (selectedValue != null) {
                 sortKey = AlbumSortKey.values[selectedValue];
-                await LocalSettings.instance.setAlbumSortKey(sortKey!);
+                await localSettings.setAlbumSortKey(sortKey!);
                 setState(() {});
               }
             },
@@ -285,8 +297,9 @@ class _UserCollectionsTabState extends State<UserCollectionsTab>
     _localFilesSubscription.cancel();
     _collectionUpdatesSubscription.cancel();
     _loggedOutEvent.cancel();
+    _favoritesServiceInitCompleteEvent.cancel();
     _scrollController.dispose();
-    _debouncer.cancelDebounce();
+    _debouncer.cancelDebounceTimer();
     super.dispose();
   }
 

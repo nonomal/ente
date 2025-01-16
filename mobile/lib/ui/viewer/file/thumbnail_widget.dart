@@ -18,12 +18,17 @@ import 'package:photos/models/file/trash_file.dart';
 import 'package:photos/services/collections_service.dart';
 import 'package:photos/services/favorites_service.dart';
 import 'package:photos/ui/viewer/file/file_icons_widget.dart';
+import "package:photos/ui/viewer/gallery/component/group/type.dart";
+import "package:photos/ui/viewer/gallery/state/gallery_context_state.dart";
 import 'package:photos/utils/file_util.dart';
 import 'package:photos/utils/thumbnail_util.dart';
 
 class ThumbnailWidget extends StatefulWidget {
   final EnteFile file;
   final BoxFit fit;
+
+  /// Returns ThumbnailWidget without any overlay icons if true.
+  final bool rawThumbnail;
   final bool shouldShowSyncStatus;
   final bool shouldShowArchiveStatus;
   final bool shouldShowPinIcon;
@@ -35,10 +40,16 @@ class ThumbnailWidget extends StatefulWidget {
   final bool shouldShowOwnerAvatar;
   final bool shouldShowFavoriteIcon;
 
+  ///On video thumbnails, shows the video duration if true. If false,
+  ///shows a centered play icon.
+  final bool shouldShowVideoDuration;
+  final bool shouldShowVideoOverlayIcon;
+
   ThumbnailWidget(
     this.file, {
     Key? key,
     this.fit = BoxFit.cover,
+    this.rawThumbnail = false,
     this.shouldShowSyncStatus = true,
     this.shouldShowLivePhotoOverlay = false,
     this.shouldShowArchiveStatus = false,
@@ -49,6 +60,8 @@ class ThumbnailWidget extends StatefulWidget {
     this.serverLoadDeferDuration,
     this.thumbnailSize = thumbnailSmallSize,
     this.shouldShowFavoriteIcon = true,
+    this.shouldShowVideoDuration = false,
+    this.shouldShowVideoOverlayIcon = true,
   }) : super(key: key ?? Key(file.tag));
 
   @override
@@ -129,6 +142,9 @@ class _ThumbnailWidgetState extends State<ThumbnailWidget> {
     // If yes, parent thumbnail widget can be stateless
     Widget? content;
     if (image != null) {
+      if (widget.rawThumbnail) {
+        return image;
+      }
       final List<Widget> contentChildren = [image];
       if (widget.shouldShowFavoriteIcon) {
         if (FavoritesService.instance.isFavoriteCache(
@@ -140,7 +156,12 @@ class _ThumbnailWidgetState extends State<ThumbnailWidget> {
       }
 
       if (widget.file.fileType == FileType.video) {
-        contentChildren.add(const VideoOverlayIcon());
+        if (widget.shouldShowVideoDuration) {
+          contentChildren
+              .add(VideoOverlayDuration(duration: widget.file.duration!));
+        } else if (widget.shouldShowVideoOverlayIcon) {
+          contentChildren.add(const VideoOverlayIcon());
+        }
       } else if (widget.shouldShowLivePhotoOverlay &&
           widget.file.isLiveOrMotionPhoto) {
         contentChildren.add(const LivePhotoOverlayIcon());
@@ -178,6 +199,10 @@ class _ThumbnailWidgetState extends State<ThumbnailWidget> {
 
     if (widget.file.isTrash) {
       viewChildren.add(TrashedFileOverlayText(widget.file as TrashFile));
+    } else if (GalleryContextState.of(context)?.type == GroupType.size) {
+      viewChildren.add(FileSizeOverlayText(widget.file));
+    } else if (widget.file.debugCaption != null) {
+      viewChildren.add(FileOverlayText(widget.file.debugCaption!));
     }
     // todo: Move this icon overlay to the collection widget.
     if (widget.shouldShowArchiveStatus) {

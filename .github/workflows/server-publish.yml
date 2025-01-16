@@ -1,4 +1,4 @@
-name: "Publish (server)"
+name: "Publish ghcr (server)"
 
 on:
     # Run manually, providing it the commit.
@@ -33,13 +33,12 @@ jobs:
                   registry: ghcr.io
                   enableBuildKit: true
                   multiPlatform: true
-                  platform: linux/amd64,linux/arm64,linux/arm/v7
+                  platform: linux/amd64,linux/arm64
                   buildArgs: GIT_COMMIT=${{ inputs.commit }}
                   tags: ${{ inputs.commit }}, latest
                   username: ${{ github.actor }}
                   password: ${{ secrets.GITHUB_TOKEN }}
 
-            - name: Tag as server/ghcr
+            - name: Update branch server/ghcr to point to source commit
               run: |
-                  git tag -f server/ghcr
-                  git push -f origin server/ghcr
+                  git push -f origin HEAD:refs/heads/server/ghcr

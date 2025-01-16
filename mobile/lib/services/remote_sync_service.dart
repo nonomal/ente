@@ -30,7 +30,6 @@ import 'package:photos/services/ignored_files_service.dart';
 import 'package:photos/services/local_file_update_service.dart';
 import "package:photos/services/notification_service.dart";
 import 'package:photos/services/sync_service.dart';
-import 'package:photos/services/trash_sync_service.dart';
 import 'package:photos/utils/diff_fetcher.dart';
 import 'package:photos/utils/file_uploader.dart';
 import 'package:photos/utils/file_util.dart';
@@ -121,13 +120,7 @@ class RemoteSyncService {
         await syncDeviceCollectionFilesForUpload();
       }
       await _pullDiff();
-      // sync trash but consume error during initial launch.
-      // this is to ensure that we don't pause upload due to any error during
-      // the trash sync. Impact: We may end up re-uploading a file which was
-      // recently trashed.
-      await TrashSyncService.instance
-          .syncTrash()
-          .onError((e, s) => _logger.severe('trash sync failed', e, s));
+      await trashSyncService.syncTrash();
       if (!hasSyncedBefore) {
         await _prefs.setBool(_isFirstRemoteSyncDone, true);
         await syncDeviceCollectionFilesForUpload();
@@ -313,13 +306,23 @@ class RemoteSyncService {
     _logger.info("[Collection-$collectionID] synced");
   }
 
+  Future<void> joinAndSyncCollection(
+    BuildContext context,
+    int collectionID,
+  
+  ) async {
+    await _collectionsService.joinPublicCollection(context, collectionID);
+    await _collectionsService.sync();
+    await _syncCollectionDiff(collectionID, 0);
+  }
+
   Future<void> _syncCollectionDiffDelete(Diff diff, int collectionID) async {
     final fileIDs = diff.deletedFiles.map((f) => f.uploadedFileID!).toList();
     final localDeleteCount =
         await _db.deleteFilesFromCollection(collectionID, fileIDs);
     if (localDeleteCount > 0) {
       final collectionFiles =
-          (await _db.getFilesFromIDs(fileIDs)).values.toList();
+          (await _db.getFileIDToFileFromIDs(fileIDs)).values.toList();
       collectionFiles.removeWhere((f) => f.collectionID != collectionID);
       Bus.instance.fire(
         CollectionUpdatedEvent(
@@ -581,7 +584,9 @@ class RemoteSyncService {
     _ignoredUploads = 0;
     final int toBeUploaded = filesToBeUploaded.length + updatedFileIDs.length;
     if (toBeUploaded > 0) {
-      Bus.instance.fire(SyncStatusUpdate(SyncStatus.preparingForUpload));
+      Bus.instance.fire(
+        SyncStatusUpdate(SyncStatus.preparingForUpload, total: toBeUploaded),
+      );
       await _uploader.verifyMediaLocationAccess();
       await _uploader.checkNetworkForUpload();
       // verify if files upload is allowed based on their subscription plan and

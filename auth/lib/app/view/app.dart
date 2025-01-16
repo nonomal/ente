@@ -10,6 +10,7 @@ import 'package:ente_auth/events/signed_out_event.dart';
 import "package:ente_auth/l10n/l10n.dart";
 import 'package:ente_auth/locale.dart';
 import "package:ente_auth/onboarding/view/onboarding_page.dart";
+import 'package:ente_auth/services/authenticator_service.dart';
 import 'package:ente_auth/services/update_service.dart';
 import 'package:ente_auth/services/user_service.dart';
 import 'package:ente_auth/services/window_listener_service.dart';
@@ -22,7 +23,7 @@ import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 
 class App extends StatefulWidget {
-  final Locale locale;
+  final Locale? locale;
   const App({super.key, this.locale = const Locale("en")});
 
   static void setLocale(BuildContext context, Locale newLocale) {
@@ -34,7 +35,8 @@ class App extends StatefulWidget {
   State<App> createState() => _AppState();
 }
 
-class _AppState extends State<App> with WindowListener, TrayListener {
+class _AppState extends State<App>
+    with WindowListener, TrayListener, WidgetsBindingObserver {
   late StreamSubscription<SignedOutEvent> _signedOutEvent;
   late StreamSubscription<SignedInEvent> _signedInEvent;
   Locale? locale;
@@ -56,6 +58,7 @@ class _AppState extends State<App> with WindowListener, TrayListener {
   void initState() {
     initWindowManager();
     initTrayManager();
+    WidgetsBinding.instance.addObserver(this);
 
     _signedOutEvent = Bus.instance.on<SignedOutEvent>().listen((event) {
       if (mounted) {
@@ -69,7 +72,7 @@ class _AppState extends State<App> with WindowListener, TrayListener {
       }
     });
     locale = widget.locale;
-    UpdateService.instance.shouldUpdate().then((shouldUpdate) {
+    UpdateService.instance.showUpdateNotification().then((shouldUpdate) {
       if (shouldUpdate) {
         Future.delayed(Duration.zero, () {
           showDialog(
@@ -99,8 +102,20 @@ class _AppState extends State<App> with WindowListener, TrayListener {
   }
 
   @override
+  Future<void> didChangeAppLifecycleState(AppLifecycleState state) async {
+    if (state == AppLifecycleState.resumed) {
+      if (Configuration.instance.hasConfiguredAccount()) {
+        AuthenticatorService.instance.onlineSync().ignore();
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    if (Platform.isAndroid || kDebugMode) {
+    if (Platform.isAndroid ||
+        Platform.isWindows ||
+        Platform.isLinux ||
+        kDebugMode) {
       return AdaptiveTheme(
         light: lightThemeData,
         dark: darkThemeData,

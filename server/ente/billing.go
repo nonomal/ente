@@ -11,13 +11,13 @@ import (
 
 const (
 	// FreePlanStorage is the amount of storage in free plan
-	FreePlanStorage = 5 * 1024 * 1024 * 1024
+	FreePlanStorage int64 = 5 * 1024 * 1024 * 1024
 	// FreePlanProductID is the product ID of free plan
 	FreePlanProductID = "free"
 	// FreePlanTransactionID is the dummy transaction ID for the free plan
 	FreePlanTransactionID = "none"
-	// TrialPeriodDuration is the duration of the free trial
-	TrialPeriodDuration = 365
+	// TrialPeriodDuration is the duration (in years) of the free trial
+	TrialPeriodDuration = 100
 	// TrialPeriod is the unit for the duration of the free trial
 	TrialPeriod = "days"
 
@@ -27,9 +27,11 @@ const (
 	// PeriodMonth is the unit for the duration of the monthly plan
 	PeriodMonth = "month"
 
-	Period3Years = "3years"
+	Period3Years = "3"
 
-	Period5Years = "5years"
+	Period5Years = "5"
+	
+	Period10Years = "10"
 
 	// FamilyPlanProductID is the product ID of family (internal employees & their friends & family) plan
 	FamilyPlanProductID = "family"
@@ -50,7 +52,7 @@ const (
 	SubscriptionEndedEmailTemplate = "subscription_ended.html"
 
 	// Subject for `SubscriptionEndedEmailTemplate`.
-	SubscriptionEndedEmailSubject = "Your subscription to ente Photos has ended"
+	SubscriptionEndedEmailSubject = "Your subscription to Ente Photos has ended"
 )
 
 // PaymentProvider represents the payment provider via which a purchase was made
@@ -110,7 +112,7 @@ type BillingPlan struct {
 }
 
 type FreePlan struct {
-	Storage  int    `json:"storage"`
+	Storage  int64  `json:"storage"`
 	Duration int    `json:"duration"`
 	Period   string `json:"period"`
 }
