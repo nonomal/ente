@@ -3,6 +3,7 @@ import "dart:io";
 import "dart:math";
 
 import "package:computer/computer.dart";
+import "package:flutter/foundation.dart";
 import "package:logging/logging.dart";
 import "package:photos/core/constants.dart";
 import "package:photos/core/event_bus.dart";
@@ -13,39 +14,57 @@ import "package:photos/models/file/file.dart";
 import "package:photos/models/local_entity_data.dart";
 import "package:photos/models/location/location.dart";
 import 'package:photos/models/location_tag/location_tag.dart';
-import "package:photos/services/entity_service.dart";
+import "package:photos/service_locator.dart";
 import "package:photos/services/remote_assets_service.dart";
 import "package:shared_preferences/shared_preferences.dart";
 
 class LocationService {
-  late SharedPreferences prefs;
+  final SharedPreferences prefs;
   final Logger _logger = Logger((LocationService).toString());
   final Computer _computer = Computer.shared();
 
-  LocationService._privateConstructor();
-
-  static final LocationService instance = LocationService._privateConstructor();
+  // If the discovery section is loaded before the cities are loaded, then we
+  // need to refresh the discovery section after the cities are loaded.
+  bool reloadLocationDiscoverySection = false;
 
   static const kCitiesRemotePath = "https://static.ente.io/world_cities.json";
 
   List<City> _cities = [];
 
-  void init(SharedPreferences preferences) {
-    prefs = preferences;
-    _loadCities();
+  LocationService(this.prefs) {
+    debugPrint('LocationService constructor');
+    Future.delayed(const Duration(seconds: 3), () {
+      _loadCities();
+    });
   }
 
   Future<Iterable<LocalEntity<LocationTag>>> _getStoredLocationTags() async {
-    final data = await EntityService.instance.getEntities(EntityType.location);
+    final data = await entityService.getEntities(EntityType.location);
     return data.map(
       (e) => LocalEntity(LocationTag.fromJson(json.decode(e.data)), e.id),
     );
+  }
+
+  Future<Map<LocationTag, int>> getLocationTagsToOccurance(
+    List<EnteFile> files,
+  ) async {
+    final locationTagEntities = await locationService.getLocationTags();
+
+    final locationTagToOccurrence = await _computer.compute(
+      _getLocationTagsToOccurenceForIsolate,
+      param: {"files": files, "locationTagEntities": locationTagEntities},
+    );
+
+    return locationTagToOccurrence;
   }
 
   Future<Map<City, List<EnteFile>>> getFilesInCity(
     List<EnteFile> allFiles,
     String query,
   ) async {
+    if (allFiles.isEmpty && query.isEmpty) {
+      reloadLocationDiscoverySection = true;
+    }
     final EnteWatch w = EnteWatch("cities_search")..start();
     w.log('start for files ${allFiles.length} and query $query');
     final result = await _computer.compute(
@@ -80,7 +99,7 @@ class LocationService {
 
     try {
       final a =
-          (radius * _scaleFactor(centerPoint.latitude!)) / kilometersPerDegree;
+          (radius * scaleFactor(centerPoint.latitude!)) / kilometersPerDegree;
       final b = radius / kilometersPerDegree;
       final locationTag = LocationTag(
         name: location,
@@ -89,8 +108,10 @@ class LocationService {
         bSquare: b * b,
         centerPoint: centerPoint,
       );
-      await EntityService.instance
-          .addOrUpdate(EntityType.location, json.encode(locationTag.toJson()));
+      await entityService.addOrUpdate(
+        EntityType.location,
+        locationTag.toJson(),
+      );
       Bus.instance.fire(LocationTagUpdatedEvent(LocTagEventType.add));
     } catch (e, s) {
       _logger.severe("Failed to add location tag", e, s);
@@ -167,7 +188,7 @@ class LocationService {
         return;
       }
       final a =
-          (radius * _scaleFactor(centerPoint.latitude!)) / kilometersPerDegree;
+          (radius * scaleFactor(centerPoint.latitude!)) / kilometersPerDegree;
       final b = radius / kilometersPerDegree;
       final updatedLoationTag = locationTagEntity.item.copyWith(
         centerPoint: centerPoint,
@@ -177,9 +198,9 @@ class LocationService {
         name: name,
       );
 
-      await EntityService.instance.addOrUpdate(
+      await entityService.addOrUpdate(
         EntityType.location,
-        json.encode(updatedLoationTag.toJson()),
+        updatedLoationTag.toJson(),
         id: locationTagEntity.id,
       );
       Bus.instance.fire(
@@ -198,7 +219,7 @@ class LocationService {
 
   Future<void> deleteLocationTag(String locTagEntityId) async {
     try {
-      await EntityService.instance.deleteEntry(
+      await entityService.deleteEntry(
         locTagEntityId,
       );
       Bus.instance.fire(
@@ -221,13 +242,52 @@ class LocationService {
           await _computer.compute(parseCities, param: {"filePath": file.path});
       final endTime = DateTime.now();
       _logger.info(
-        "Loaded cities in ${(endTime.millisecondsSinceEpoch - startTime.millisecondsSinceEpoch)}ms",
+        "Loaded cities in ${(endTime.millisecondsSinceEpoch - startTime.millisecondsSinceEpoch)}ms, reloadingDiscovery: $reloadLocationDiscoverySection",
       );
-      _logger.info("Loaded cities");
+      if (reloadLocationDiscoverySection) {
+        reloadLocationDiscoverySection = false;
+        Bus.instance
+            .fire(LocationTagUpdatedEvent(LocTagEventType.dataSetLoaded));
+      }
     } catch (e, s) {
       _logger.severe("Failed to load cities", e, s);
     }
   }
+}
+
+Map<LocationTag, int> _getLocationTagsToOccurenceForIsolate(
+  Map args,
+) {
+  final List<EnteFile> files = args["files"];
+
+  final locationTagToOccurence = <LocationTag, int>{};
+  final locationTagEntities =
+      args["locationTagEntities"] as Iterable<LocalEntity<LocationTag>>;
+
+  for (EnteFile file in files) {
+    if (file.uploadedFileID == null ||
+        file.uploadedFileID == -1 ||
+        !file.hasLocation) {
+      continue;
+    }
+    for (LocalEntity<LocationTag> locationTagEntity in locationTagEntities) {
+      final locationTag = locationTagEntity.item;
+      final fileCoordinates = file.location!;
+      if (isFileInsideLocationTag(
+        locationTag.centerPoint,
+        fileCoordinates,
+        locationTag.radius,
+      )) {
+        locationTagToOccurence.update(
+          locationTag,
+          (value) => value + 1,
+          ifAbsent: () => 1,
+        );
+      }
+    }
+  }
+
+  return locationTagToOccurence;
 }
 
 Future<List<City>> parseCities(Map args) async {
@@ -274,8 +334,7 @@ bool isFileInsideLocationTag(
   Location fileCoordinates,
   double radius,
 ) {
-  final a =
-      (radius * _scaleFactor(centerPoint.latitude!)) / kilometersPerDegree;
+  final a = (radius * scaleFactor(centerPoint.latitude!)) / kilometersPerDegree;
   final b = radius / kilometersPerDegree;
   final x = centerPoint.latitude! - fileCoordinates.latitude!;
   final y = centerPoint.longitude! - fileCoordinates.longitude!;
@@ -289,7 +348,7 @@ bool isFileInsideLocationTag(
 ///in the magnitude of the latitude on the caritesian plane. When latitude is
 ///0 degrees, the ellipse is a circle with a = b = r. When latitude incrases,
 ///the major axis (a) has to be scaled by the secant of the latitude.
-double _scaleFactor(double lat) {
+double scaleFactor(double lat) {
   return 1 / cos(lat * (pi / 180));
 }
 

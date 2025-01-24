@@ -1,3 +1,5 @@
+import type { CastPayload } from "./pair";
+
 export interface CastData {
     /** The ID of the callection we are casting. */
     collectionID: string;
@@ -12,15 +14,19 @@ export interface CastData {
  *
  * We will read in back when we start the slideshow.
  */
-export const storeCastData = (payload: unknown) => {
+export const storeCastData = (payload: CastPayload | undefined) => {
     if (!payload || typeof payload != "object")
         throw new Error("Unexpected cast data");
 
     // Iterate through all the keys of the payload object and save them to
     // localStorage. We don't validate here, we'll validate when we read these
     // values back in `readCastData`.
-    for (const key in payload) {
-        window.localStorage.setItem(key, payload[key]);
+    for (const [key, value] of Object.entries(payload)) {
+        if (typeof value == "string" || typeof value == "number") {
+            localStorage.setItem(key, value.toString());
+        } else {
+            localStorage.removeItem(key);
+        }
     }
 };
 

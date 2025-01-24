@@ -178,13 +178,10 @@ func (c *Controller) RevokeInvite(ctx context.Context, adminID int64, id uuid.UU
 }
 
 func (c *Controller) CloseFamily(ctx context.Context, adminID int64) error {
-	familyMembers, err := c.FamilyRepo.GetMembersWithStatus(adminID, repo.ActiveFamilyMemberStatus)
+	logger := logrus.WithField("adminID", adminID).WithField("operation", "CloseFamily")
+	err := c.removeMembers(ctx, adminID, logger)
 	if err != nil {
-		return stacktrace.Propagate(err, "")
-	}
-	if len(familyMembers) != 1 {
-		msg := fmt.Sprintf("can not close family with %d members", len(familyMembers))
-		return stacktrace.Propagate(ente.NewBadRequestWithMessage(msg), "")
+		return stacktrace.Propagate(err, "failed to remove members")
 	}
 	err = c.FamilyRepo.CloseFamily(ctx, adminID)
 	if err != nil {
@@ -220,18 +217,18 @@ func (c *Controller) sendNotification(ctx context.Context, adminUserID int64, me
 
 	if newStatus == ente.INVITED {
 		templateName = InviteTemplate
-		title = "You've been invited to join a family on ente!"
+		title = "You've been invited to join a family on Ente!"
 		emailTo = memberUser.Email
 		inlineImage["content"] = HappyHeaderImage
 	} else if newStatus == ente.REMOVED {
 		emailTo = memberUser.Email
 		templateName = RemovedTemplate
-		title = "You have been removed from the family account on ente"
+		title = "You have been removed from the family account on Ente"
 		inlineImage["content"] = SadHeaderImage
 	} else if newStatus == ente.LEFT {
 		emailTo = adminUser.Email
 		templateName = LeftTemplate
-		title = fmt.Sprintf("%s has left your family on ente", memberUser.Email)
+		title = fmt.Sprintf("%s has left your family on Ente", memberUser.Email)
 		inlineImage["content"] = SadHeaderImage
 	} else if newStatus == ente.ACCEPTED {
 		emailTo = adminUser.Email

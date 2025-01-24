@@ -22,16 +22,16 @@ import 'package:ente_auth/store/code_store.dart';
 import 'package:ente_auth/ui/tools/app_lock.dart';
 import 'package:ente_auth/ui/tools/lock_screen.dart';
 import 'package:ente_auth/ui/utils/icon_utils.dart';
+import 'package:ente_auth/utils/directory_utils.dart';
+import 'package:ente_auth/utils/lock_screen_settings.dart';
 import 'package:ente_auth/utils/platform_util.dart';
 import 'package:ente_auth/utils/window_protocol_handler.dart';
 import 'package:ente_crypto_dart/ente_crypto_dart.dart';
 import 'package:flutter/foundation.dart';
 import "package:flutter/material.dart";
-import 'package:flutter/scheduler.dart';
 import 'package:flutter_displaymode/flutter_displaymode.dart';
 import 'package:logging/logging.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:privacy_screen/privacy_screen.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -66,38 +66,57 @@ Future<void> initSystemTray() async {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  initSystemTray().ignore();
-
   if (PlatformUtil.isDesktop()) {
     await windowManager.ensureInitialized();
     await WindowListenerService.instance.init();
     WindowOptions windowOptions = WindowOptions(
       size: WindowListenerService.instance.getWindowSize(),
+      maximumSize: const Size(8192, 8192),
     );
     await windowManager.waitUntilReadyToShow(windowOptions, () async {
+      await DirectoryUtils.migrateNamingChanges();
       await windowManager.show();
       await windowManager.focus();
+      initSystemTray().ignore();
     });
   }
+
   await _runInForeground();
-  await _setupPrivacyScreen();
   if (Platform.isAndroid) {
     FlutterDisplayMode.setHighRefreshRate().ignore();
   }
 }
 
+// Future<void> whiteListLetsEncryptRootCA() async {
+//   try {
+//     // https://stackoverflow.com/a/71090239
+//     // https://github.com/ente-io/ente/issues/2178
+//     ByteData data =
+//         await PlatformAssetBundle().load('assets/ca/lets-encrypt-r3.pem');
+//     SecurityContext.defaultContext
+//         .setTrustedCertificatesBytes(data.buffer.asUint8List());
+//   } catch (e) {
+//     _logger.severe("Failed to whitelist Let's Encrypt Root CA", e);
+//   }
+// }
+
 Future<void> _runInForeground() async {
   final savedThemeMode = _themeMode(await AdaptiveTheme.getThemeMode());
   return await _runWithLogs(() async {
     _logger.info("Starting app in foreground");
-    await _init(false, via: 'mainMethod');
-    final Locale locale = await getLocale();
+    try {
+      await _init(false, via: 'mainMethod');
+    } catch (e, s) {
+      _logger.severe("Failed to init", e, s);
+      rethrow;
+    }
+    final Locale? locale = await getLocale(noFallback: true);
     unawaited(UpdateService.instance.showUpdateNotification());
     runApp(
       AppLock(
         builder: (args) => App(locale: locale),
         lockScreen: const LockScreen(),
-        enabled: Configuration.instance.shouldShowLockScreen(),
+        enabled: await Configuration.instance.shouldShowLockScreen(),
         locale: locale,
         lightTheme: lightThemeData,
         darkTheme: darkThemeData,
@@ -132,7 +151,7 @@ Future _runWithLogs(Function() function, {String prefix = ""}) async {
 }
 
 void _registerWindowsProtocol() {
-  const kWindowsScheme = 'ente';
+  const kWindowsScheme = 'enteauth';
   // Register our protocol only on Windows platform
   if (!kIsWeb && Platform.isWindows) {
     WindowsProtocolHandler()
@@ -142,7 +161,7 @@ void _registerWindowsProtocol() {
 
 Future<void> _init(bool bool, {String? via}) async {
   _registerWindowsProtocol();
-  await initCryptoUtil();
+  await CryptoUtil.init();
 
   await PreferenceService.instance.init();
   await CodeStore.instance.init();
@@ -156,24 +175,5 @@ Future<void> _init(bool bool, {String? via}) async {
   await NotificationService.instance.init();
   await UpdateService.instance.init();
   await IconUtils.instance.init();
-}
-
-Future<void> _setupPrivacyScreen() async {
-  if (!PlatformUtil.isMobile() || kDebugMode) return;
-  final brightness =
-      SchedulerBinding.instance.platformDispatcher.platformBrightness;
-  bool isInDarkMode = brightness == Brightness.dark;
-  await PrivacyScreen.instance.enable(
-    iosOptions: const PrivacyIosOptions(
-      enablePrivacy: true,
-      privacyImageName: "LaunchImage",
-      lockTrigger: IosLockTrigger.didEnterBackground,
-    ),
-    androidOptions: const PrivacyAndroidOptions(
-      enableSecure: true,
-    ),
-    backgroundColor: isInDarkMode ? Colors.black : Colors.white,
-    blurEffect:
-        isInDarkMode ? PrivacyBlurEffect.dark : PrivacyBlurEffect.extraLight,
-  );
+  await LockScreenSettings.instance.init();
 }

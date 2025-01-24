@@ -40,4 +40,6 @@ android/.settings/
 .env
 
 fastlane/report.xml
-TensorFlowLiteC.framework
+
+# Android related
+android/app/build/

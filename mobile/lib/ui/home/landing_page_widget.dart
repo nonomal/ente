@@ -9,7 +9,7 @@ import 'package:photos/core/configuration.dart';
 import 'package:photos/ente_theme_data.dart';
 import "package:photos/generated/l10n.dart";
 import "package:photos/l10n/l10n.dart";
-import 'package:photos/services/update_service.dart';
+import "package:photos/service_locator.dart";
 import 'package:photos/ui/account/email_entry_page.dart';
 import 'package:photos/ui/account/login_page.dart';
 import 'package:photos/ui/account/password_entry_page.dart';
@@ -89,7 +89,7 @@ class _LandingPageWidgetState extends State<LandingPageWidget> {
                       child: Text("Lang"),
                     ),
                     onTap: () async {
-                      final locale = await getLocale();
+                      final locale = (await getLocale())!;
                       // ignore: unawaited_futures
                       routeToPage(
                         context,
@@ -224,7 +224,7 @@ class _LandingPageWidgetState extends State<LandingPageWidget> {
   }
 
   Future<void> _navigateToSignUpPage() async {
-    UpdateService.instance.hideChangeLog().ignore();
+    updateService.hideChangeLog().ignore();
     Widget page;
     if (Configuration.instance.getEncryptedToken() == null) {
       page = const EmailEntryPage();
@@ -254,7 +254,7 @@ class _LandingPageWidgetState extends State<LandingPageWidget> {
   }
 
   void _navigateToSignInPage() {
-    UpdateService.instance.hideChangeLog().ignore();
+    updateService.hideChangeLog().ignore();
     Widget page;
     if (Configuration.instance.getEncryptedToken() == null) {
       page = const LoginPage();
@@ -289,11 +289,11 @@ class _LandingPageWidgetState extends State<LandingPageWidget> {
         context: context,
         title: S.of(context).pleaseLoginAgain,
         body: S.of(context).autoLogoutMessage,
-        buttons: const [
+        buttons: [
           ButtonWidget(
             buttonType: ButtonType.neutral,
             buttonAction: ButtonAction.first,
-            labelText: "OK",
+            labelText: S.of(context).ok,
             isInAlert: true,
           ),
         ],

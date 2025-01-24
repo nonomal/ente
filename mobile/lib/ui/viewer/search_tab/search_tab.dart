@@ -3,11 +3,14 @@ import "package:flutter/foundation.dart";
 import "package:flutter/material.dart";
 import "package:flutter_animate/flutter_animate.dart";
 import "package:logging/logging.dart";
+import "package:photos/generated/l10n.dart";
 import "package:photos/models/search/album_search_result.dart";
 import "package:photos/models/search/generic_search_result.dart";
 import "package:photos/models/search/index_of_indexed_stack.dart";
 import "package:photos/models/search/search_result.dart";
 import "package:photos/models/search/search_types.dart";
+import "package:photos/service_locator.dart";
+import "package:photos/services/user_remote_flag_service.dart";
 import "package:photos/states/all_sections_examples_state.dart";
 import "package:photos/ui/common/loading_widget.dart";
 import "package:photos/ui/viewer/search/result/no_result_widget.dart";
@@ -15,15 +18,14 @@ import "package:photos/ui/viewer/search/search_suggestions.dart";
 import "package:photos/ui/viewer/search/tab_empty_state.dart";
 import 'package:photos/ui/viewer/search_tab/albums_section.dart';
 import "package:photos/ui/viewer/search_tab/contacts_section.dart";
-import "package:photos/ui/viewer/search_tab/descriptions_section.dart";
 import "package:photos/ui/viewer/search_tab/file_type_section.dart";
 import "package:photos/ui/viewer/search_tab/locations_section.dart";
+import "package:photos/ui/viewer/search_tab/magic_section.dart";
 import "package:photos/ui/viewer/search_tab/moments_section.dart";
 import "package:photos/ui/viewer/search_tab/people_section.dart";
-import "package:photos/utils/local_settings.dart";
 
 class SearchTab extends StatefulWidget {
-  const SearchTab({Key? key}) : super(key: key);
+  const SearchTab({super.key});
 
   @override
   State<SearchTab> createState() => _SearchTabState();
@@ -82,7 +84,6 @@ class _AllSearchSectionsState extends State<AllSearchSections> {
   @override
   Widget build(BuildContext context) {
     final searchTypes = SectionType.values.toList(growable: true);
-    searchTypes.remove(SectionType.content);
 
     return Padding(
       padding: const EdgeInsets.only(top: 8),
@@ -103,7 +104,10 @@ class _AllSearchSectionsState extends State<AllSearchSections> {
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 72),
                     child: Text(
-                      'Sections length mismatch: ${snapshot.data!.length} != ${searchTypes.length}',
+                      S.of(context).searchSectionsLengthMismatch(
+                            snapshot.data!.length,
+                            searchTypes.length,
+                          ),
                     ),
                   );
                 }
@@ -115,7 +119,9 @@ class _AllSearchSectionsState extends State<AllSearchSections> {
                   itemBuilder: (context, index) {
                     switch (searchTypes[index]) {
                       case SectionType.face:
-                        if (!LocalSettings.instance.isFaceIndexingEnabled) {
+                        if (!userRemoteFlagService.getCachedBoolValue(
+                          UserRemoteFlagService.mlEnabled,
+                        )) {
                           return const SizedBox.shrink();
                         }
                         return PeopleSection(
@@ -130,11 +136,6 @@ class _AllSearchSectionsState extends State<AllSearchSections> {
                         );
                       case SectionType.moment:
                         return MomentsSection(
-                          snapshot.data!.elementAt(index)
-                              as List<GenericSearchResult>,
-                        );
-                      case SectionType.fileCaption:
-                        return DescriptionsSection(
                           snapshot.data!.elementAt(index)
                               as List<GenericSearchResult>,
                         );
@@ -153,8 +154,11 @@ class _AllSearchSectionsState extends State<AllSearchSections> {
                           snapshot.data!.elementAt(index)
                               as List<GenericSearchResult>,
                         );
-                      default:
-                        const SizedBox.shrink();
+                      case SectionType.magic:
+                        return MagicSection(
+                          snapshot.data!.elementAt(index)
+                              as List<GenericSearchResult>,
+                        );
                     }
                   },
                 )
@@ -180,7 +184,7 @@ class _AllSearchSectionsState extends State<AllSearchSections> {
                 if (kDebugMode) {
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 72),
-                    child: Text('Error: ${snapshot.error}'),
+                    child: Text(S.of(context).error + ': ${snapshot.error}'),
                   );
                 }
                 //Errors are handled and this else if condition will be false always

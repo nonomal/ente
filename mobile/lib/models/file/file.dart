@@ -13,6 +13,7 @@ import "package:photos/service_locator.dart";
 import 'package:photos/utils/date_time_util.dart';
 import 'package:photos/utils/exif_util.dart';
 import 'package:photos/utils/file_uploader_util.dart';
+import "package:photos/utils/panorama_util.dart";
 
 //Todo: files with no location data have lat and long set to 0.0. This should ideally be null.
 class EnteFile {
@@ -179,6 +180,16 @@ class EnteFile {
             hasExifTime = true;
             creationTime = exifTime.microsecondsSinceEpoch;
           }
+          mediaUploadData.isPanorama = checkPanoramaFromEXIF(null, exifData);
+
+          if (mediaUploadData.isPanorama != true) {
+            try {
+              final xmpData = await getXmp(mediaUploadData.sourceFile!);
+              mediaUploadData.isPanorama = checkPanoramaFromXMP(xmpData);
+            } catch (_) {}
+
+            mediaUploadData.isPanorama ??= false;
+          }
         }
         if (Platform.isAndroid) {
           //Fix for missing location data in lower android versions.
@@ -254,9 +265,41 @@ class EnteFile {
     }
   }
 
+  String get publicDownloadUrl {
+    if (localFileServer.isNotEmpty) {
+      return "$localFileServer/$uploadedFileID";
+    }
+    final endpoint = Configuration.instance.getHttpEndpoint();
+    if (endpoint != kDefaultProductionEndpoint || flagService.disableCFWorker) {
+      return endpoint +
+          "/public-collection/files/download/" +
+          uploadedFileID.toString();
+    } else {
+      return "https://public-albums.ente.io/download/?fileID=" +
+          uploadedFileID.toString();
+    }
+  }
+
+  String get pubPreviewUrl {
+    if (localFileServer.isNotEmpty) {
+      return "$localFileServer/thumb/$uploadedFileID";
+    }
+    final endpoint = Configuration.instance.getHttpEndpoint();
+    if (endpoint != kDefaultProductionEndpoint || flagService.disableCFWorker) {
+      return endpoint +
+          "/public-collection/files/preview/" +
+          uploadedFileID.toString();
+    } else {
+      return "https://public-albums.ente.io/preview/?fileID=" +
+          uploadedFileID.toString();
+    }
+  }
+
   String? get caption {
     return pubMagicMetadata?.caption;
   }
+
+  String? debugCaption;
 
   String get thumbnailUrl {
     if (localFileServer.isNotEmpty) {

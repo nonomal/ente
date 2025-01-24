@@ -1,19 +1,16 @@
-import { ensure } from "@/utils/ensure";
-import { wait } from "@/utils/promise";
-import { changeEmail, sendOTTForEmailChange } from "@ente/accounts/api/user";
-import { PAGES } from "@ente/accounts/constants/pages";
 import {
-    APP_HOMES,
-    appNameToAppNameOld,
-    type APPS,
-} from "@ente/shared/apps/constants";
+    AccountsPageContents,
+    AccountsPageFooter,
+    AccountsPageTitle,
+} from "@/accounts/components/layouts/centered-paper";
+import { appHomeRoute } from "@/accounts/services/redirect";
+import { changeEmail, sendOTT } from "@/accounts/services/user";
+import { LinkButton } from "@/base/components/LinkButton";
+import { LoadingButton } from "@/base/components/mui/LoadingButton";
+import { isHTTPErrorWithStatus } from "@/base/http";
+import log from "@/base/log";
 import { VerticallyCentered } from "@ente/shared/components/Container";
-import FormPaper from "@ente/shared/components/Form/FormPaper";
-import FormPaperFooter from "@ente/shared/components/Form/FormPaper/Footer";
-import FormPaperTitle from "@ente/shared/components/Form/FormPaper/Title";
-import LinkButton from "@ente/shared/components/LinkButton";
-import SubmitButton from "@ente/shared/components/SubmitButton";
-import { LS_KEYS, getData, setData } from "@ente/shared/storage/localStorage";
+import { LS_KEYS, getData, setLSUser } from "@ente/shared/storage/localStorage";
 import { Alert, Box, TextField } from "@mui/material";
 import { Formik, type FormikHelpers } from "formik";
 import { t } from "i18next";
@@ -21,29 +18,22 @@ import { useRouter } from "next/router";
 import { useEffect, useState } from "react";
 import { Trans } from "react-i18next";
 import * as Yup from "yup";
-import type { PageProps } from "../types/page";
 
-const Page: React.FC<PageProps> = ({ appContext }) => {
-    const { appName } = appContext;
-
-    const appNameOld = appNameToAppNameOld(appName);
-
+const Page: React.FC = () => {
     const router = useRouter();
 
     useEffect(() => {
         const user = getData(LS_KEYS.USER);
         if (!user?.token) {
-            router.push(PAGES.ROOT);
+            void router.push("/");
         }
     }, []);
 
     return (
-        <VerticallyCentered>
-            <FormPaper>
-                <FormPaperTitle>{t("CHANGE_EMAIL")}</FormPaperTitle>
-                <ChangeEmailForm appName={appNameOld} />
-            </FormPaper>
-        </VerticallyCentered>
+        <AccountsPageContents>
+            <AccountsPageTitle>{t("change_email")}</AccountsPageTitle>
+            <ChangeEmailForm />
+        </AccountsPageContents>
     );
 };
 
@@ -54,12 +44,11 @@ interface formValues {
     ott?: string;
 }
 
-function ChangeEmailForm({ appName }: { appName: APPS }) {
+const ChangeEmailForm: React.FC = () => {
     const [loading, setLoading] = useState(false);
     const [ottInputVisible, setShowOttInputVisibility] = useState(false);
     const [email, setEmail] = useState<string | null>(null);
     const [showMessage, setShowMessage] = useState(false);
-    const [success, setSuccess] = useState(false);
 
     const router = useRouter();
 
@@ -69,7 +58,7 @@ function ChangeEmailForm({ appName }: { appName: APPS }) {
     ) => {
         try {
             setLoading(true);
-            await sendOTTForEmailChange(email);
+            await sendOTT(email, "change");
             setEmail(email);
             setShowOttInputVisibility(true);
             setShowMessage(true);
@@ -79,7 +68,13 @@ function ChangeEmailForm({ appName }: { appName: APPS }) {
             //     ottInputRef.current?.focus();
             // }, 250);
         } catch (e) {
-            setFieldError("email", t("EMAIl_ALREADY_OWNED"));
+            log.error(e);
+            setFieldError(
+                "email",
+                isHTTPErrorWithStatus(e, 403)
+                    ? t("email_already_taken")
+                    : t("generic_error"),
+            );
         }
         setLoading(false);
     };
@@ -90,22 +85,18 @@ function ChangeEmailForm({ appName }: { appName: APPS }) {
     ) => {
         try {
             setLoading(true);
-            await changeEmail(email, ensure(ott));
-            setData(LS_KEYS.USER, { ...getData(LS_KEYS.USER), email });
+            await changeEmail(email, ott!);
+            await setLSUser({ ...getData(LS_KEYS.USER), email });
             setLoading(false);
-            setSuccess(true);
-            await wait(1000);
-            goToApp();
+            void goToApp();
         } catch (e) {
+            log.error(e);
             setLoading(false);
-            setFieldError("ott", t("INCORRECT_CODE"));
+            setFieldError("ott", t("incorrect_code"));
         }
     };
 
-    const goToApp = () => {
-        // TODO: Refactor the type of APP_HOMES to not require the ??
-        router.push(APP_HOMES.get(appName) ?? "/");
-    };
+    const goToApp = () => router.push(appHomeRoute);
 
     return (
         <Formik<formValues>
@@ -114,14 +105,14 @@ function ChangeEmailForm({ appName }: { appName: APPS }) {
                 ottInputVisible
                     ? Yup.object().shape({
                           email: Yup.string()
-                              .email(t("EMAIL_ERROR"))
-                              .required(t("REQUIRED")),
-                          ott: Yup.string().required(t("REQUIRED")),
+                              .email(t("invalid_email_error"))
+                              .required(t("required")),
+                          ott: Yup.string().required(t("required")),
                       })
                     : Yup.object().shape({
                           email: Yup.string()
-                              .email(t("EMAIL_ERROR"))
-                              .required(t("REQUIRED")),
+                              .email(t("invalid_email_error"))
+                              .required(t("required")),
                       })
             }
             validateOnChange={false}
@@ -136,12 +127,12 @@ function ChangeEmailForm({ appName }: { appName: APPS }) {
                             onClose={() => setShowMessage(false)}
                         >
                             <Trans
-                                i18nKey="EMAIL_SENT"
+                                i18nKey="email_sent"
                                 components={{
                                     a: (
                                         <Box
-                                            color="text.muted"
                                             component={"span"}
+                                            sx={{ color: "text.muted" }}
                                         />
                                     ),
                                 }}
@@ -153,23 +144,25 @@ function ChangeEmailForm({ appName }: { appName: APPS }) {
                         <VerticallyCentered>
                             <TextField
                                 fullWidth
-                                InputProps={{
-                                    readOnly: ottInputVisible,
-                                }}
                                 type="email"
-                                label={t("ENTER_EMAIL")}
+                                label={t("enter_email")}
                                 value={values.email}
                                 onChange={handleChange("email")}
                                 error={Boolean(errors.email)}
                                 helperText={errors.email}
                                 autoFocus
                                 disabled={loading}
+                                slotProps={{
+                                    input: {
+                                        readOnly: ottInputVisible,
+                                    },
+                                }}
                             />
                             {ottInputVisible && (
                                 <TextField
                                     fullWidth
                                     type="text"
-                                    label={t("ENTER_OTT")}
+                                    label={t("verification_code")}
                                     value={values.ott}
                                     onChange={handleChange("ott")}
                                     error={Boolean(errors.ott)}
@@ -177,39 +170,32 @@ function ChangeEmailForm({ appName }: { appName: APPS }) {
                                     disabled={loading}
                                 />
                             )}
-                            <SubmitButton
-                                success={success}
-                                sx={{ mt: 2 }}
+                            <LoadingButton
+                                fullWidth
+                                color="accent"
+                                type="submit"
+                                sx={{ mt: 2, mb: 4 }}
                                 loading={loading}
-                                buttonText={
-                                    !ottInputVisible
-                                        ? t("SEND_OTT")
-                                        : t("VERIFY")
-                                }
-                            />
+                            >
+                                {!ottInputVisible ? t("send_otp") : t("verify")}
+                            </LoadingButton>
                         </VerticallyCentered>
                     </form>
 
-                    <FormPaperFooter
-                        style={{
-                            justifyContent: ottInputVisible
-                                ? "space-between"
-                                : "normal",
-                        }}
-                    >
+                    <AccountsPageFooter>
                         {ottInputVisible && (
                             <LinkButton
                                 onClick={() => setShowOttInputVisibility(false)}
                             >
-                                {t("CHANGE_EMAIL")}?
+                                {t("change_email")}?
                             </LinkButton>
                         )}
                         <LinkButton onClick={goToApp}>
-                            {t("GO_BACK")}
+                            {t("go_back")}
                         </LinkButton>
-                    </FormPaperFooter>
+                    </AccountsPageFooter>
                 </>
             )}
         </Formik>
     );
-}
+};

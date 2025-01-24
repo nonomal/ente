@@ -1,6 +1,6 @@
 name: "Release"
 
-# Build the ente-io/ente's desktop/rc branch and create/update a draft release.
+# Build the desktop app with code from ente-io/ente and create/update a release.
 #
 # For more details, see `docs/release.md` in ente-io/ente.
 
@@ -12,14 +12,15 @@ on:
                 description: "Branch (ente-io/ente) to build"
                 type: string
     schedule:
-        # Run everyday at ~8:00 AM IST (except Sundays).
+        # Run every weekday at ~8:00 AM IST.
         # See: [Note: Run workflow every 24 hours]
         #
-        - cron: "45 2 * * 1-6"
+        - cron: "45 2 * * 1-5"
     push:
-        # Run when a tag matching the pattern "v*"" is pushed.
+        # Run when a tag matching the pattern "vd.d.d" is pushed. In particular,
+        # this excludes the "-beta" tags.
         tags:
-            - "v*"
+            - "v[0-9]+.[0-9]+.[0-9]+"
 
 jobs:
     release:
@@ -59,14 +60,38 @@ jobs:
             - name: Install dependencies
               run: yarn install
 
+            - name: Create universal ffmpeg binaries for macOS
+              if: startsWith(matrix.os, 'macos')
+              # Currently, the ffmpeg-static binaries are not universal (Not
+              # their fault, we thank them for their useful package, the issue
+              # is that there don't seem to be well known upstream sources that
+              # provide a universal binary).
+              #
+              # As a workaround, we invoke ffmpeg-static twice to download both
+              # the Intel and ARM binaries, and combine them into a single
+              # universal binary using lipo.
+              #
+              # Note that the yarn install will run again, as part of the
+              # "build:ci" step, so we're relying on ffmpeg-static install.js's
+              # behaviour of not overwriting the existing file named `ffmpeg`.
+              run: |
+                  rm -f node_modules/ffmpeg-static/ffmpeg
+                  npm_config_arch=arm64 yarn add --check-files ffmpeg-static
+                  mv node_modules/ffmpeg-static/ffmpeg ffmpeg-arm64
+                  npm_config_arch=x64 yarn add --check-files ffmpeg-static
+                  mv node_modules/ffmpeg-static/ffmpeg ffmpeg-x64
+                  lipo -create ffmpeg-arm64 ffmpeg-x64 -output node_modules/ffmpeg-static/ffmpeg
+                  rm ffmpeg-arm64 ffmpeg-x64
+                  file node_modules/ffmpeg-static/ffmpeg  # print what we ended up with
+
             - name: Install libarchive-tools for pacman build
               if: startsWith(matrix.os, 'ubuntu')
               # See:
               # https://github.com/electron-userland/electron-builder/issues/4181
-              run: sudo apt-get install libarchive-tools
+              run: sudo apt-get update && sudo apt-get install libarchive-tools
 
             - name: Build
-              uses: ente-io/action-electron-builder@v1.0.0
+              uses: ente-io/action-electron-builder@eff78a1d33bdab4c54ede0e5cdc71e0c2cf803e2
               with:
                   package_root: desktop
                   build_script_name: build:ci

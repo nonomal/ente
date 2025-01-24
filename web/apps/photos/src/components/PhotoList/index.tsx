@@ -1,16 +1,15 @@
-import { FlexWrapper } from "@ente/shared/components/Container";
-import { formatDate, getDate, isSameDay } from "@ente/shared/time/format";
-import { Box, Checkbox, Link, Typography, styled } from "@mui/material";
+import { assertionFailed } from "@/base/assert";
+import { EnteFile } from "@/media/file";
 import {
-    DATE_CONTAINER_HEIGHT,
     GAP_BTW_TILES,
     IMAGE_CONTAINER_MAX_HEIGHT,
     IMAGE_CONTAINER_MAX_WIDTH,
     MIN_COLUMNS,
-    SIZE_AND_COUNT_CONTAINER_HEIGHT,
-    SPACE_BTW_DATES,
-    SPACE_BTW_DATES_TO_IMAGE_CONTAINER_WIDTH_RATIO,
-} from "constants/gallery";
+} from "@/new/photos/components/PhotoList";
+import { FlexWrapper } from "@ente/shared/components/Container";
+import { formatDate } from "@ente/shared/time/format";
+import { Box, Checkbox, Link, Typography, styled } from "@mui/material";
+import type { PhotoFrameProps } from "components/PhotoFrame";
 import { t } from "i18next";
 import memoize from "memoize-one";
 import { GalleryContext } from "pages/gallery";
@@ -21,12 +20,14 @@ import {
     ListChildComponentProps,
     areEqual,
 } from "react-window";
-import { EnteFile } from "types/file";
 import { handleSelectCreator } from "utils/photoFrame";
 import { PublicCollectionGalleryContext } from "utils/publicCollectionGallery";
-import { formattedByteSize } from "utils/units";
 
-const A_DAY = 24 * 60 * 60 * 1000;
+export const DATE_CONTAINER_HEIGHT = 48;
+export const SPACE_BTW_DATES = 44;
+
+const SPACE_BTW_DATES_TO_IMAGE_CONTAINER_WIDTH_RATIO = 0.244;
+
 const FOOTER_HEIGHT = 90;
 const ALBUM_FOOTER_HEIGHT = 75;
 const ALBUM_FOOTER_HEIGHT_WITH_REFERRAL = 113;
@@ -34,7 +35,6 @@ const ALBUM_FOOTER_HEIGHT_WITH_REFERRAL = 113;
 export enum ITEM_TYPE {
     TIME = "TIME",
     FILE = "FILE",
-    SIZE_AND_COUNT = "SIZE_AND_COUNT",
     HEADER = "HEADER",
     FOOTER = "FOOTER",
     MARKETING_FOOTER = "MARKETING_FOOTER",
@@ -120,7 +120,6 @@ const ListContainer = styled(Box, {
     grid-template-columns: ${(props) => props.gridTemplateColumns};
     grid-column-gap: ${GAP_BTW_TILES}px;
     width: 100%;
-    color: #fff;
     padding: 0 24px;
     @media (max-width: ${IMAGE_CONTAINER_MAX_WIDTH * MIN_COLUMNS}px) {
         padding: 0 4px;
@@ -131,18 +130,15 @@ const ListItemContainer = styled(FlexWrapper)<{ span: number }>`
     grid-column: span ${(props) => props.span};
 `;
 
-const DateContainer = styled(ListItemContainer)`
+const DateContainer = styled(ListItemContainer)(
+    ({ theme }) => `
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     height: ${DATE_CONTAINER_HEIGHT}px;
-    color: ${({ theme }) => theme.colors.text.muted};
-`;
-
-const SizeAndCountContainer = styled(DateContainer)`
-    margin-top: 1rem;
-    height: ${SIZE_AND_COUNT_CONTAINER_HEIGHT}px;
-`;
+    color: ${theme.vars.palette.text.muted};
+`,
+);
 
 const FooterContainer = styled(ListItemContainer)`
     margin-bottom: 0.75rem;
@@ -150,14 +146,15 @@ const FooterContainer = styled(ListItemContainer)`
         font-size: 12px;
         margin-bottom: 0.5rem;
     }
-    color: #979797;
     text-align: center;
     justify-content: center;
     align-items: flex-end;
     margin-top: calc(2rem + 20px);
 `;
 
-const AlbumFooterContainer = styled(ListItemContainer)<{
+const AlbumFooterContainer = styled(ListItemContainer, {
+    shouldForwardProp: (propName) => propName != "hasReferral",
+})<{
     hasReferral: boolean;
 }>`
     margin-top: 48px;
@@ -166,7 +163,8 @@ const AlbumFooterContainer = styled(ListItemContainer)<{
     justify-content: center;
 `;
 
-const FullStretchContainer = styled(Box)`
+const FullStretchContainer = styled("div")(
+    ({ theme }) => `
     margin: 0 -24px;
     width: calc(100% + 46px);
     left: -24px;
@@ -175,16 +173,16 @@ const FullStretchContainer = styled(Box)`
         width: calc(100% + 6px);
         left: -4px;
     }
-    background-color: ${({ theme }) => theme.colors.accent.A500};
-`;
+    background-color: ${theme.vars.palette.accent.main};
+`,
+);
 
 const NothingContainer = styled(ListItemContainer)`
-    color: #979797;
     text-align: center;
     justify-content: center;
 `;
 
-interface Props {
+type Props = Pick<PhotoFrameProps, "mode" | "modePlus"> & {
     height: number;
     width: number;
     displayFiles: EnteFile[];
@@ -193,9 +191,10 @@ interface Props {
         file: EnteFile,
         index: number,
         isScrolling?: boolean,
-    ) => JSX.Element;
+    ) => React.JSX.Element;
     activeCollectionID: number;
-}
+    activePersonID?: string;
+};
 
 interface ItemData {
     timeStampList: TimeStampListItem[];
@@ -204,7 +203,7 @@ interface ItemData {
     renderListItem: (
         timeStampListItem: TimeStampListItem,
         isScrolling?: boolean,
-    ) => JSX.Element;
+    ) => React.JSX.Element;
 }
 
 const createItemData = memoize(
@@ -215,7 +214,7 @@ const createItemData = memoize(
         renderListItem: (
             timeStampListItem: TimeStampListItem,
             isScrolling?: boolean,
-        ) => JSX.Element,
+        ) => React.JSX.Element,
     ): ItemData => ({
         timeStampList,
         columns,
@@ -248,13 +247,19 @@ const PhotoListRow = React.memo(
     areEqual,
 );
 
+/**
+ * TODO: Rename me to FileList.
+ */
 export function PhotoList({
     height,
     width,
+    mode,
+    modePlus,
     displayFiles,
     showAppDownloadBanner,
     getThumbnail,
     activeCollectionID,
+    activePersonID,
 }: Props) {
     const galleryContext = useContext(GalleryContext);
     const publicCollectionGalleryContext = useContext(
@@ -317,7 +322,7 @@ export function PhotoList({
                 timeStampList.push(getEmptyListItem());
             }
             timeStampList.push(getVacuumItem(timeStampList));
-            if (publicCollectionGalleryContext.accessedThroughSharedURL) {
+            if (publicCollectionGalleryContext.credentials) {
                 if (publicCollectionGalleryContext.photoListFooter) {
                     timeStampList.push(
                         getPhotoListFooter(
@@ -388,7 +393,7 @@ export function PhotoList({
             if (hasFooter) {
                 return timeStampList;
             }
-            if (publicCollectionGalleryContext.accessedThroughSharedURL) {
+            if (publicCollectionGalleryContext.credentials) {
                 if (publicCollectionGalleryContext.photoListFooter) {
                     return [
                         ...timeStampList,
@@ -405,7 +410,7 @@ export function PhotoList({
             }
         });
     }, [
-        publicCollectionGalleryContext.accessedThroughSharedURL,
+        publicCollectionGalleryContext.credentials,
         showAppDownloadBanner,
         publicCollectionGalleryContext.photoListFooter,
     ]);
@@ -503,16 +508,19 @@ export function PhotoList({
             itemType: ITEM_TYPE.OTHER,
             item: (
                 <NothingContainer span={columns}>
-                    <div>{t("NOTHING_HERE")}</div>
+                    <Typography sx={{ color: "text.faint" }}>
+                        {t("nothing_here")}
+                    </Typography>
                 </NothingContainer>
             ),
             id: "empty-list-banner",
             height: height - 48,
         };
     };
+
     const getVacuumItem = (timeStampList) => {
         let footerHeight;
-        if (publicCollectionGalleryContext.accessedThroughSharedURL) {
+        if (publicCollectionGalleryContext.credentials) {
             footerHeight = publicCollectionGalleryContext.referralCode
                 ? ALBUM_FOOTER_HEIGHT_WITH_REFERRAL
                 : ALBUM_FOOTER_HEIGHT;
@@ -543,22 +551,22 @@ export function PhotoList({
             height: FOOTER_HEIGHT,
             item: (
                 <FooterContainer span={columns}>
-                    <Typography variant="small">
+                    <Typography variant="small" sx={{ color: "text.faint" }}>
                         <Trans
-                            i18nKey={"INSTALL_MOBILE_APP"}
+                            i18nKey={"install_mobile_app"}
                             components={{
                                 a: (
                                     <Link
                                         href="https://play.google.com/store/apps/details?id=io.ente.photos"
                                         target="_blank"
-                                        rel="noreferrer"
+                                        rel="noopener"
                                     />
                                 ),
                                 b: (
                                     <Link
                                         href="https://apps.apple.com/in/app/ente-photos/id1542026904"
                                         target="_blank"
-                                        rel="noreferrer"
+                                        rel="noopener"
                                     />
                                 ),
                             }}
@@ -580,23 +588,42 @@ export function PhotoList({
                     span={columns}
                     hasReferral={!!publicCollectionGalleryContext.referralCode}
                 >
-                    <Box width={"100%"}>
-                        <Typography variant="small" display={"block"}>
-                            {t("SHARED_USING")}{" "}
-                            <Link target="_blank" href={"https://ente.io"}>
-                                ente.io
-                            </Link>
-                        </Typography>
+                    {/* Make the entire area tappable, otherwise it is hard to
+                        get at on mobile devices. */}
+                    <Box sx={{ width: "100%" }}>
+                        <Link
+                            color="text.base"
+                            sx={{ "&:hover": { color: "inherit" } }}
+                            target="_blank"
+                            href={"https://ente.io"}
+                        >
+                            <Typography variant="small">
+                                <Trans
+                                    i18nKey="shared_using"
+                                    components={{
+                                        a: (
+                                            <Typography
+                                                variant="small"
+                                                component="span"
+                                                sx={{ color: "accent.main" }}
+                                            />
+                                        ),
+                                    }}
+                                    values={{ url: "ente.io" }}
+                                />
+                            </Typography>
+                        </Link>
                         {publicCollectionGalleryContext.referralCode ? (
                             <FullStretchContainer>
                                 <Typography
                                     sx={{
                                         marginTop: "12px",
                                         padding: "8px",
+                                        color: "accent.contrastText",
                                     }}
                                 >
                                     <Trans
-                                        i18nKey={"SHARING_REFERRAL_CODE"}
+                                        i18nKey={"sharing_referral_code"}
                                         values={{
                                             referralCode:
                                                 publicCollectionGalleryContext.referralCode,
@@ -610,12 +637,9 @@ export function PhotoList({
             ),
         };
     };
+
     /**
      * Checks and merge multiple dates into a single row.
-     *
-     * @param items
-     * @param columns
-     * @returns
      */
     const mergeTimeStampList = (
         items: TimeStampListItem[],
@@ -697,8 +721,6 @@ export function PhotoList({
         switch (timeStampList[index].itemType) {
             case ITEM_TYPE.TIME:
                 return DATE_CONTAINER_HEIGHT;
-            case ITEM_TYPE.SIZE_AND_COUNT:
-                return SIZE_AND_COUNT_CONTAINER_HEIGHT;
             case ITEM_TYPE.FILE:
                 return listItemHeight;
             default:
@@ -755,7 +777,9 @@ export function PhotoList({
 
     const handleSelect = handleSelectCreator(
         galleryContext.setSelectedFiles,
+        mode,
         activeCollectionID,
+        activePersonID,
     );
 
     const onChangeSelectAllCheckBox = (date: string) => {
@@ -799,7 +823,6 @@ export function PhotoList({
                                         }
                                         size="small"
                                         sx={{ pl: 0 }}
-                                        disableRipple={true}
                                     />
                                 )}
                                 {item.date}
@@ -819,18 +842,10 @@ export function PhotoList({
                                 }
                                 size="small"
                                 sx={{ pl: 0 }}
-                                disableRipple={true}
                             />
                         )}
                         {listItem.date}
                     </DateContainer>
-                );
-            case ITEM_TYPE.SIZE_AND_COUNT:
-                return (
-                    <SizeAndCountContainer span={columns}>
-                        {listItem.fileCount} {t("FILES")},{" "}
-                        {formattedByteSize(listItem.fileSize || 0)} {t("EACH")}
-                    </SizeAndCountContainer>
                 );
             case ITEM_TYPE.FILE: {
                 const ret = listItem.items.map((item, idx) =>
@@ -870,9 +885,25 @@ export function PhotoList({
         renderListItem,
     );
 
+    // The old, mode unaware, behaviour.
+    let key = `${activeCollectionID}`;
+    if (modePlus) {
+        // If the new experimental modePlus prop is provided, use it to derive a
+        // mode specific key.
+        if (modePlus == "search") {
+            key = "search";
+        } else if (modePlus == "people") {
+            if (!activePersonID) {
+                assertionFailed();
+            } else {
+                key = activePersonID;
+            }
+        }
+    }
+
     return (
         <List
-            key={`${activeCollectionID}`}
+            key={key}
             itemData={itemData}
             ref={listRef}
             itemSize={getItemSize(timeStampList)}
@@ -887,3 +918,24 @@ export function PhotoList({
         </List>
     );
 }
+
+const A_DAY = 24 * 60 * 60 * 1000;
+
+const getDate = (item: EnteFile) => {
+    const currentDate = item.metadata.creationTime / 1000;
+    const date = isSameDay(new Date(currentDate), new Date())
+        ? t("TODAY")
+        : isSameDay(new Date(currentDate), new Date(Date.now() - A_DAY))
+          ? t("YESTERDAY")
+          : formatDate(currentDate);
+
+    return date;
+};
+
+const isSameDay = (first: Date, second: Date) => {
+    return (
+        first.getFullYear() === second.getFullYear() &&
+        first.getMonth() === second.getMonth() &&
+        first.getDate() === second.getDate()
+    );
+};

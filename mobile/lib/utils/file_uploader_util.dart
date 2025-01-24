@@ -15,12 +15,15 @@ import 'package:photo_manager/photo_manager.dart';
 import 'package:photos/core/configuration.dart';
 import 'package:photos/core/constants.dart';
 import 'package:photos/core/errors.dart';
+import "package:photos/models/ffmpeg/ffprobe_props.dart";
+import "package:photos/models/file/extensions/file_props.dart";
 import 'package:photos/models/file/file.dart';
 import 'package:photos/models/file/file_type.dart';
 import "package:photos/models/location/location.dart";
 import "package:photos/models/metadata/file_magic.dart";
 import "package:photos/services/file_magic_service.dart";
 import 'package:photos/utils/crypto_util.dart';
+import "package:photos/utils/exif_util.dart";
 import 'package:photos/utils/file_util.dart';
 import "package:uuid/uuid.dart";
 import 'package:video_thumbnail/video_thumbnail.dart';
@@ -41,6 +44,8 @@ class MediaUploadData {
   // For iOS, this value will be always null.
   final int? motionPhotoStartIndex;
 
+  bool? isPanorama;
+
   MediaUploadData(
     this.sourceFile,
     this.thumbnail,
@@ -49,6 +54,7 @@ class MediaUploadData {
     this.height,
     this.width,
     this.motionPhotoStartIndex,
+    this.isPanorama,
   });
 }
 
@@ -110,7 +116,7 @@ Future<MediaUploadData> _getMediaUploadDataFromAssetFile(EnteFile file) async {
     );
   }
   // h4ck to fetch location data if missing (thank you Android Q+) lazily only during uploads
-  await _decorateEnteFileData(file, asset);
+  await _decorateEnteFileData(file, asset, sourceFile);
   fileHash = CryptoUtil.bin2base64(await CryptoUtil.getHash(sourceFile));
 
   if (file.fileType == FileType.livePhoto && Platform.isIOS) {
@@ -154,8 +160,11 @@ Future<MediaUploadData> _getMediaUploadDataFromAssetFile(EnteFile file) async {
   int? motionPhotoStartingIndex;
   if (Platform.isAndroid && asset.type == AssetType.image) {
     try {
-      motionPhotoStartingIndex =
-          (await MotionPhotos(sourceFile.path).getMotionVideoIndex())?.start;
+      motionPhotoStartingIndex = await Computer.shared().compute(
+        motionVideoIndex,
+        param: {'path': sourceFile.path},
+        taskName: 'motionPhotoIndex',
+      );
     } catch (e) {
       _logger.severe('error while detecthing motion photo start index', e);
     }
@@ -171,6 +180,11 @@ Future<MediaUploadData> _getMediaUploadDataFromAssetFile(EnteFile file) async {
   );
 }
 
+Future<int?> motionVideoIndex(Map<String, dynamic> args) async {
+  final String path = args['path'];
+  return (await MotionPhotos(path).getMotionVideoIndex())?.start;
+}
+
 Future<void> _computeZip(Map<String, dynamic> args) async {
   final String zipPath = args['zipPath'];
   final String imagePath = args['imagePath'];
@@ -179,7 +193,7 @@ Future<void> _computeZip(Map<String, dynamic> args) async {
   encoder.create(zipPath);
   await encoder.addFile(File(imagePath), "image" + extension(imagePath));
   await encoder.addFile(File(videoPath), "video" + extension(videoPath));
-  encoder.close();
+  await encoder.close();
 }
 
 Future<void> zip({
@@ -266,7 +280,11 @@ void _assertFileType(AssetEntity asset, EnteFile file) {
   );
 }
 
-Future<void> _decorateEnteFileData(EnteFile file, AssetEntity asset) async {
+Future<void> _decorateEnteFileData(
+  EnteFile file,
+  AssetEntity asset,
+  File sourceFile,
+) async {
   // h4ck to fetch location data if missing (thank you Android Q+) lazily only during uploads
   if (file.location == null ||
       (file.location!.latitude == 0 && file.location!.longitude == 0)) {
@@ -274,7 +292,12 @@ Future<void> _decorateEnteFileData(EnteFile file, AssetEntity asset) async {
     file.location =
         Location(latitude: latLong.latitude, longitude: latLong.longitude);
   }
-
+  if (!file.hasLocation && file.isVideo && Platform.isAndroid) {
+    final FFProbeProps? props = await getVideoPropsAsync(sourceFile);
+    if (props != null && props.location != null) {
+      file.location = props.location;
+    }
+  }
   if (file.title == null || file.title!.isEmpty) {
     _logger.warning("Title was missing ${file.tag}");
     file.title = await asset.titleAsync;
@@ -327,7 +350,8 @@ Future<MediaUploadData> _getMediaUploadDataFromAppCache(EnteFile file) async {
     Map<String, int>? dimensions;
     if (file.fileType == FileType.image) {
       dimensions = await getImageHeightAndWith(imagePath: localPath);
-    } else {
+    } else if (thumbnailData != null) {
+      // the thumbnail null check is to ensure that we are able to generate thum
       // for video, we need to use the thumbnail data with any max width/height
       final thumbnailFilePath = await VideoThumbnail.thumbnailFile(
         video: localPath,
@@ -346,7 +370,7 @@ Future<MediaUploadData> _getMediaUploadDataFromAppCache(EnteFile file) async {
       width: dimensions?['width'],
     );
   } catch (e, s) {
-    _logger.severe("failed to generate thumbnail", e, s);
+    _logger.warning("failed to generate thumbnail", e, s);
     throw InvalidFileError(
       "thumbnail failed for appCache fileType: ${file.fileType.toString()}",
       InvalidReason.thumbnailMissing,
@@ -391,14 +415,19 @@ Future<Uint8List?> getThumbnailFromInAppCacheFile(EnteFile file) async {
     return null;
   }
   if (file.fileType == FileType.video) {
-    final thumbnailFilePath = await VideoThumbnail.thumbnailFile(
-      video: localFile.path,
-      imageFormat: ImageFormat.JPEG,
-      thumbnailPath: (await getTemporaryDirectory()).path,
-      maxWidth: thumbnailLargeSize,
-      quality: 80,
-    );
-    localFile = File(thumbnailFilePath!);
+    try {
+      final thumbnailFilePath = await VideoThumbnail.thumbnailFile(
+        video: localFile.path,
+        imageFormat: ImageFormat.JPEG,
+        thumbnailPath: (await getTemporaryDirectory()).path,
+        maxWidth: thumbnailLargeSize,
+        quality: 80,
+      );
+      localFile = File(thumbnailFilePath!);
+    } catch (e) {
+      _logger.warning('Failed to generate video thumbnail', e);
+      return null;
+    }
   }
   var thumbnailData = await localFile.readAsBytes();
   int compressionAttempts = 0;

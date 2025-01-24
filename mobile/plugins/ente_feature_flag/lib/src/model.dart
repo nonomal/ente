@@ -8,20 +8,22 @@ class RemoteFlags {
   final bool disableCFWorker;
   final bool mapEnabled;
   final bool faceSearchEnabled;
-  final bool passKeyEnabled;
   final bool recoveryKeyVerified;
   final bool internalUser;
   final bool betaUser;
+  final bool enableMobMultiPart;
+  final String castUrl;
 
   RemoteFlags({
     required this.enableStripe,
     required this.disableCFWorker,
     required this.mapEnabled,
     required this.faceSearchEnabled,
-    required this.passKeyEnabled,
     required this.recoveryKeyVerified,
     required this.internalUser,
     required this.betaUser,
+    required this.enableMobMultiPart,
+    required this.castUrl,
   });
 
   static RemoteFlags defaultValue = RemoteFlags(
@@ -29,10 +31,11 @@ class RemoteFlags {
     disableCFWorker: false,
     mapEnabled: false,
     faceSearchEnabled: false,
-    passKeyEnabled: false,
     recoveryKeyVerified: false,
     internalUser: kDebugMode,
     betaUser: kDebugMode,
+    enableMobMultiPart: false,
+    castUrl: "https://cast.ente.io",
   );
 
   String toJson() => json.encode(toMap());
@@ -42,10 +45,11 @@ class RemoteFlags {
       'disableCFWorker': disableCFWorker,
       'mapEnabled': mapEnabled,
       'faceSearchEnabled': faceSearchEnabled,
-      'passKeyEnabled': passKeyEnabled,
       'recoveryKeyVerified': recoveryKeyVerified,
       'internalUser': internalUser,
       'betaUser': betaUser,
+      'enableMobMultiPart': enableMobMultiPart,
+      'castUrl': castUrl,
     };
   }
 
@@ -56,11 +60,13 @@ class RemoteFlags {
       mapEnabled: map['mapEnabled'] ?? defaultValue.mapEnabled,
       faceSearchEnabled:
           map['faceSearchEnabled'] ?? defaultValue.faceSearchEnabled,
-      passKeyEnabled: map['passKeyEnabled'] ?? defaultValue.passKeyEnabled,
       recoveryKeyVerified:
           map['recoveryKeyVerified'] ?? defaultValue.recoveryKeyVerified,
       internalUser: map['internalUser'] ?? defaultValue.internalUser,
       betaUser: map['betaUser'] ?? defaultValue.betaUser,
+      enableMobMultiPart:
+          map['enableMobMultiPart'] ?? defaultValue.enableMobMultiPart,
+      castUrl: map['castUrl'] ?? defaultValue.castUrl,
     );
   }
 }

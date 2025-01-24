@@ -122,6 +122,20 @@ func (h *CollectionHandler) Share(c *gin.Context) {
 	})
 }
 
+func (h *CollectionHandler) JoinLink(c *gin.Context) {
+	var request ente.JoinCollectionViaLinkRequest
+	if err := c.ShouldBindJSON(&request); err != nil {
+		handler.Error(c, stacktrace.Propagate(err, ""))
+		return
+	}
+	err := h.Controller.JoinViaLink(c, request)
+	if err != nil {
+		handler.Error(c, stacktrace.Propagate(err, ""))
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{})
+}
+
 // ShareURL generates a publicly sharable url
 func (h *CollectionHandler) ShareURL(c *gin.Context) {
 	var request ente.CreatePublicAccessTokenRequest
@@ -129,8 +143,6 @@ func (h *CollectionHandler) ShareURL(c *gin.Context) {
 		handler.Error(c, stacktrace.Propagate(err, ""))
 		return
 	}
-	// todo:[2/Sep/23] change device limit to 0 once both web and mobile clients are updated
-	request.DeviceLimit = controller.DeviceLimitThreshold
 	response, err := h.Controller.ShareURL(c, auth.GetUserID(c.Request.Header), request)
 	if err != nil {
 		handler.Error(c, stacktrace.Propagate(err, ""))

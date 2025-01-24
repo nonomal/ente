@@ -3,10 +3,19 @@
     "version": "0.0.0",
     "private": true,
     "dependencies": {
-        "@/next": "*",
+        "@/base": "*",
+        "@/gallery": "*",
         "@/utils": "*",
         "@ente/shared": "*",
-        "zod": "^3"
+        "@mui/material": "^6.3.1",
+        "@mui/system": "^6.3.1",
+        "@mui/x-date-pickers": "^7.23.6",
+        "dayjs": "^1.11.13",
+        "formik": "^2.4.6",
+        "react": "^19.0.0",
+        "react-dom": "^19.0.0"
     },
-    "devDependencies": {}
+    "devDependencies": {
+        "@/build-config": "*"
+    }
 }

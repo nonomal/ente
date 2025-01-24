@@ -16,11 +16,14 @@ import 'package:photos/core/event_bus.dart';
 import 'package:photos/core/network/network.dart';
 import 'package:photos/db/files_db.dart';
 import 'package:photos/db/upload_locks_db.dart';
+import "package:photos/events/backup_updated_event.dart";
 import "package:photos/events/file_uploaded_event.dart";
 import 'package:photos/events/files_updated_event.dart';
 import 'package:photos/events/local_photos_updated_event.dart';
 import 'package:photos/events/subscription_purchased_event.dart';
 import 'package:photos/main.dart';
+import "package:photos/models/backup/backup_item.dart";
+import "package:photos/models/backup/backup_item_status.dart";
 import 'package:photos/models/encryption_result.dart';
 import 'package:photos/models/file/file.dart';
 import 'package:photos/models/file/file_type.dart';
@@ -35,7 +38,7 @@ import 'package:photos/services/local_sync_service.dart';
 import 'package:photos/services/sync_service.dart';
 import "package:photos/services/user_service.dart";
 import 'package:photos/utils/crypto_util.dart';
-import 'package:photos/utils/file_download_util.dart';
+import "package:photos/utils/file_key.dart";
 import 'package:photos/utils/file_uploader_util.dart';
 import "package:photos/utils/file_util.dart";
 import "package:photos/utils/network_util.dart";
@@ -59,10 +62,14 @@ class FileUploader {
   final _enteDio = NetworkClient.instance.enteDio;
   final LinkedHashMap<String, FileUploadItem> _queue =
       LinkedHashMap<String, FileUploadItem>();
+  final LinkedHashMap<String, BackupItem> _allBackups =
+      LinkedHashMap<String, BackupItem>();
   final _uploadLocks = UploadLocksDB.instance;
-  final kSafeBufferForLockExpiry = const Duration(days: 1).inMicroseconds;
+  final kSafeBufferForLockExpiry = const Duration(hours: 4).inMicroseconds;
   final kBGTaskDeathTimeout = const Duration(seconds: 5).inMicroseconds;
   final _uploadURLs = Queue<UploadURL>();
+
+  LinkedHashMap<String, BackupItem> get allBackups => _allBackups;
 
   // Maintains the count of files in the current upload session.
   // Upload session is the period between the first entry into the _queue and last entry out of the _queue
@@ -104,14 +111,20 @@ class FileUploader {
         .releaseAllLocksAcquiredBefore(currentTime - kSafeBufferForLockExpiry);
     if (!isBackground) {
       await _prefs.reload();
-      final isBGTaskDead = (_prefs.getInt(kLastBGTaskHeartBeatTime) ?? 0) <
-          (currentTime - kBGTaskDeathTimeout);
+      final lastBGTaskHeartBeatTime =
+          _prefs.getInt(kLastBGTaskHeartBeatTime) ?? 0;
+      final isBGTaskDead =
+          lastBGTaskHeartBeatTime < (currentTime - kBGTaskDeathTimeout);
       if (isBGTaskDead) {
         await _uploadLocks.releaseLocksAcquiredByOwnerBefore(
           ProcessType.background.toString(),
           currentTime,
         );
         _logger.info("BG task was found dead, cleared all locks");
+      } else {
+        _logger.info(
+          "BG task is alive, not clearing locks ${DateTime.fromMicrosecondsSinceEpoch(lastBGTaskHeartBeatTime)}",
+        );
       }
       // ignore: unawaited_futures
       _pollBackgroundUploadStatus();
@@ -160,6 +173,13 @@ class FileUploader {
     if (!_queue.containsKey(localID)) {
       final completer = Completer<EnteFile>();
       _queue[localID] = FileUploadItem(file, collectionID, completer);
+      _allBackups[localID] = BackupItem(
+        status: BackupItemStatus.inQueue,
+        file: file,
+        collectionID: collectionID,
+        completer: completer,
+      );
+      Bus.instance.fire(BackupUpdatedEvent(_allBackups));
       _pollQueue();
       return completer.future;
     }
@@ -203,6 +223,11 @@ class FileUploader {
     });
     for (final id in uploadsToBeRemoved) {
       _queue.remove(id)?.completer.completeError(reason);
+      _allBackups[id] = _allBackups[id]!.copyWith(
+        status: BackupItemStatus.retry,
+        error: reason,
+      );
+      Bus.instance.fire(BackupUpdatedEvent(_allBackups));
     }
     _totalCountInUploadSession = 0;
   }
@@ -225,6 +250,9 @@ class FileUploader {
     });
     for (final id in uploadsToBeRemoved) {
       _queue.remove(id)?.completer.completeError(reason);
+      _allBackups[id] = _allBackups[id]!
+          .copyWith(status: BackupItemStatus.retry, error: reason);
+      Bus.instance.fire(BackupUpdatedEvent(_allBackups));
     }
     _logger.info(
       'number of enteries removed from queue ${uploadsToBeRemoved.length}',
@@ -262,6 +290,10 @@ class FileUploader {
       }
       if (pendingEntry != null) {
         pendingEntry.status = UploadStatus.inProgress;
+        _allBackups[pendingEntry.file.localID!] =
+            _allBackups[pendingEntry.file.localID]!
+                .copyWith(status: BackupItemStatus.uploading);
+        Bus.instance.fire(BackupUpdatedEvent(_allBackups));
         _encryptAndUploadFileToCollection(
           pendingEntry.file,
           pendingEntry.collectionID,
@@ -286,18 +318,27 @@ class FileUploader {
         kFileUploadTimeout,
         onTimeout: () {
           final message = "Upload timed out for file " + file.toString();
-          _logger.severe(message);
+          _logger.warning(message);
           throw TimeoutException(message);
         },
       );
       _queue.remove(localID)!.completer.complete(uploadedFile);
+      _allBackups[localID] =
+          _allBackups[localID]!.copyWith(status: BackupItemStatus.uploaded);
+      Bus.instance.fire(BackupUpdatedEvent(_allBackups));
       return uploadedFile;
     } catch (e) {
       if (e is LockAlreadyAcquiredError) {
         _queue[localID]!.status = UploadStatus.inBackground;
+        _allBackups[localID] = _allBackups[localID]!
+            .copyWith(status: BackupItemStatus.inBackground);
+        Bus.instance.fire(BackupUpdatedEvent(_allBackups));
         return _queue[localID]!.completer.future;
       } else {
         _queue.remove(localID)!.completer.completeError(e);
+        _allBackups[localID] = _allBackups[localID]!
+            .copyWith(status: BackupItemStatus.retry, error: e);
+        Bus.instance.fire(BackupUpdatedEvent(_allBackups));
         return null;
       }
     } finally {
@@ -406,7 +447,26 @@ class FileUploader {
 
   Future<EnteFile> forceUpload(EnteFile file, int collectionID) async {
     _hasInitiatedForceUpload = true;
-    return _tryToUpload(file, collectionID, true);
+    final isInQueue = _allBackups[file.localID!] != null;
+    try {
+      final result = await _tryToUpload(file, collectionID, true);
+      if (isInQueue) {
+        _allBackups[file.localID!] = _allBackups[file.localID]!.copyWith(
+          status: BackupItemStatus.uploaded,
+        );
+        Bus.instance.fire(BackupUpdatedEvent(_allBackups));
+      }
+      return result;
+    } catch (error) {
+      if (isInQueue) {
+        _allBackups[file.localID!] = _allBackups[file.localID]!.copyWith(
+          status: BackupItemStatus.retry,
+          error: error,
+        );
+        Bus.instance.fire(BackupUpdatedEvent(_allBackups));
+      }
+      rethrow;
+    }
   }
 
   Future<EnteFile> _tryToUpload(
@@ -426,6 +486,14 @@ class FileUploader {
         return fileOnDisk;
       }
     }
+
+    if (_allBackups[file.localID!] != null &&
+        _allBackups[file.localID]!.status != BackupItemStatus.uploading) {
+      _allBackups[file.localID!] = _allBackups[file.localID]!.copyWith(
+        status: BackupItemStatus.uploading,
+      );
+      Bus.instance.fire(BackupUpdatedEvent(_allBackups));
+    }
     if ((file.localID ?? '') == '') {
       _logger.severe('Trying to upload file with missing localID');
       return file;
@@ -442,7 +510,7 @@ class FileUploader {
     }
 
     final String lockKey = file.localID!;
-    bool _isMultipartUpload = false;
+    bool isMultipartUpload = false;
 
     try {
       await _uploadLocks.acquireLock(
@@ -455,9 +523,20 @@ class FileUploader {
       throw LockAlreadyAcquiredError();
     }
 
-    final tempDirectory = Configuration.instance.getTempDirectory();
     MediaUploadData? mediaUploadData;
-    mediaUploadData = await getUploadDataFromEnteFile(file);
+    try {
+      mediaUploadData = await getUploadDataFromEnteFile(file);
+    } catch (e) {
+      // This additional try catch block is added because for resumable upload,
+      // we need to compute the hash before the next step. Previously, this
+      // was done in during the upload itself.
+      if (e is InvalidFileError) {
+        _logger.severe("File upload ignored for " + file.toString(), e);
+        await _onInvalidFileError(file, e);
+      }
+      await _uploadLocks.releaseLock(lockKey, _processType.toString());
+      rethrow;
+    }
 
     final String? existingMultipartEncFileName =
         mediaUploadData.hashData?.fileHash != null
@@ -468,14 +547,17 @@ class FileUploader {
               )
             : null;
     bool multipartEntryExists = existingMultipartEncFileName != null;
-
-    final String uniqueID = const Uuid().v4().toString();
+    final tempDirectory = Configuration.instance.getTempDirectory();
+    final String uniqueID =
+        '${const Uuid().v4().toString()}_${file.generatedID}';
 
     final encryptedFilePath = multipartEntryExists
         ? '$tempDirectory$existingMultipartEncFileName'
         : '$tempDirectory$uploadTempFilePrefix${uniqueID}_file.encrypted';
     final encryptedThumbnailPath =
         '$tempDirectory$uploadTempFilePrefix${uniqueID}_thumb.encrypted';
+    late final int encFileSize;
+    late final int encThumbSize;
 
     var uploadCompleted = false;
     // This flag is used to decide whether to clear the iOS origin file cache
@@ -523,7 +605,7 @@ class FileUploader {
       final encryptedFileExists = File(encryptedFilePath).existsSync();
 
       // If the multipart entry exists but the encrypted file doesn't, it means
-      // that we'll have to reupload as the nonce is lost
+      // that we'll have to re-upload as the nonce is lost
       if (multipartEntryExists) {
         final bool updateWithDiffKey = isUpdatedFile &&
             multiPartFileEncResult != null &&
@@ -561,6 +643,7 @@ class FileUploader {
       } else {
         thumbnailData = mediaUploadData.thumbnail;
       }
+      encFileSize = await encryptedFile.length();
 
       final EncryptionResult encryptedThumbnailData =
           await CryptoUtil.encryptChaCha(
@@ -573,23 +656,26 @@ class FileUploader {
       final encryptedThumbnailFile = File(encryptedThumbnailPath);
       await encryptedThumbnailFile
           .writeAsBytes(encryptedThumbnailData.encryptedData!);
+      encThumbSize = await encryptedThumbnailFile.length();
 
       // Calculate the number of parts for the file.
-      final count = await _multiPartUploader.calculatePartCount(
-        await encryptedFile.length(),
-      );
+      final count = await _multiPartUploader.calculatePartCount(encFileSize);
 
       late String fileObjectKey;
       late String thumbnailObjectKey;
 
       if (count <= 1) {
         final thumbnailUploadURL = await _getUploadURL();
-        thumbnailObjectKey =
-            await _putFile(thumbnailUploadURL, encryptedThumbnailFile);
+        thumbnailObjectKey = await _putFile(
+          thumbnailUploadURL,
+          encryptedThumbnailFile,
+          encThumbSize,
+        );
         final fileUploadURL = await _getUploadURL();
-        fileObjectKey = await _putFile(fileUploadURL, encryptedFile);
+        fileObjectKey =
+            await _putFile(fileUploadURL, encryptedFile, encFileSize);
       } else {
-        _isMultipartUpload = true;
+        isMultipartUpload = true;
         _logger.finest(
           "Init multipartUpload $multipartEntryExists, isUpdate $isUpdatedFile",
         );
@@ -610,13 +696,14 @@ class FileUploader {
             collectionID,
             fileUploadURLs,
             encFileName,
-            await encryptedFile.length(),
+            encFileSize,
             fileAttributes.key!,
             fileAttributes.header!,
           );
           fileObjectKey = await _multiPartUploader.putMultipartFile(
             fileUploadURLs,
             encryptedFile,
+            encFileSize,
           );
         }
         // in case of multipart, upload the thumbnail towards the end to avoid
@@ -624,8 +711,11 @@ class FileUploader {
         // In regular upload, always upload the thumbnail first to keep existing behaviour
         //
         final thumbnailUploadURL = await _getUploadURL();
-        thumbnailObjectKey =
-            await _putFile(thumbnailUploadURL, encryptedThumbnailFile);
+        thumbnailObjectKey = await _putFile(
+          thumbnailUploadURL,
+          encryptedThumbnailFile,
+          encThumbSize,
+        );
       }
 
       final metadata = await file.getMetadataForUpload(mediaUploadData);
@@ -651,10 +741,10 @@ class FileUploader {
           file,
           fileObjectKey,
           fileDecryptionHeader,
-          await encryptedFile.length(),
+          encFileSize,
           thumbnailObjectKey,
           thumbnailDecryptionHeader,
-          await encryptedThumbnailFile.length(),
+          encThumbSize,
           encryptedMetadata,
           metadataDecryptionHeader,
         );
@@ -675,6 +765,8 @@ class FileUploader {
             (mediaUploadData.width ?? 0) != 0) {
           pubMetadata[heightKey] = mediaUploadData.height;
           pubMetadata[widthKey] = mediaUploadData.width;
+          pubMetadata[mediaTypeKey] =
+              mediaUploadData.isPanorama == true ? 1 : 0;
         }
         if (mediaUploadData.motionPhotoStartIndex != null) {
           pubMetadata[motionVideoIndexKey] =
@@ -698,10 +790,10 @@ class FileUploader {
           fileAttributes,
           fileObjectKey,
           fileDecryptionHeader,
-          await encryptedFile.length(),
+          encFileSize,
           thumbnailObjectKey,
           thumbnailDecryptionHeader,
-          await encryptedThumbnailFile.length(),
+          encThumbSize,
           encryptedMetadata,
           metadataDecryptionHeader,
           pubMetadata: pubMetadataRequest,
@@ -745,6 +837,9 @@ class FileUploader {
         // file upload can be be retried in such cases without user intervention
         uploadHardFailure = false;
       }
+      if (isMultipartUpload && isPutOrUpdateFileError(e)) {
+        await UploadLocksDB.instance.deleteMultipartTrack(lockKey);
+      }
       rethrow;
     } finally {
       await _onUploadDone(
@@ -755,9 +850,17 @@ class FileUploader {
         encryptedFilePath,
         encryptedThumbnailPath,
         lockKey: lockKey,
-        isMultiPartUpload: _isMultipartUpload,
+        isMultiPartUpload: isMultipartUpload,
       );
     }
+  }
+
+  bool isPutOrUpdateFileError(Object e) {
+    if (e is DioError) {
+      return e.requestOptions.path.contains("/files") ||
+          e.requestOptions.path.contains("/files/update");
+    }
+    return false;
   }
 
   /*
@@ -1184,7 +1287,7 @@ class FileUploader {
             clearQueue(error);
             throw error;
           } else {
-            _logger.severe("Could not fetch upload URLs", e, s);
+            _logger.warning("Could not fetch upload URLs", e, s);
           }
         }
         rethrow;
@@ -1202,11 +1305,10 @@ class FileUploader {
 
   Future<String> _putFile(
     UploadURL uploadURL,
-    File file, {
-    int? contentLength,
+    File file,
+    int fileSize, {
     int attempt = 1,
   }) async {
-    final fileSize = contentLength ?? await file.length();
     _logger.info(
       "Putting object for " +
           file.toString() +
@@ -1233,22 +1335,14 @@ class FileUploader {
 
       return uploadURL.objectKey;
     } on DioError catch (e) {
-      if (e.message.startsWith(
-            "HttpException: Content size exceeds specified contentLength.",
-          ) &&
-          attempt == 1) {
-        return _putFile(
-          uploadURL,
-          file,
-          contentLength: (await file.readAsBytes()).length,
-          attempt: 2,
-        );
+      if (e.message.startsWith("HttpException: Content size")) {
+        rethrow;
       } else if (attempt < kMaximumUploadAttempts) {
         final newUploadURL = await _getUploadURL();
         return _putFile(
           newUploadURL,
           file,
-          contentLength: (await file.readAsBytes()).length,
+          fileSize,
           attempt: attempt + 1,
         );
       } else {
@@ -1261,6 +1355,8 @@ class FileUploader {
     }
   }
 
+  // _pollBackgroundUploadStatus polls the background uploads to check if the
+  // upload is completed or failed.
   Future<void> _pollBackgroundUploadStatus() async {
     final blockedUploads = _queue.entries
         .where((e) => e.value.status == UploadStatus.inBackground)
@@ -1276,12 +1372,31 @@ class FileUploader {
         final dbFile =
             await FilesDB.instance.getFile(upload.value.file.generatedID!);
         if (dbFile?.uploadedFileID != null) {
-          _logger.info("Background upload success detected");
+          _logger.info(
+            "Background upload success detected ${upload.value.file.tag}",
+          );
           completer?.complete(dbFile);
+          _allBackups[upload.key] = _allBackups[upload.key]!
+              .copyWith(status: BackupItemStatus.uploaded);
         } else {
-          _logger.info("Background upload failure detected");
+          _logger.info(
+            "Background upload failure detected ${upload.value.file.tag}",
+          );
+          // The upload status is marked as in background, but the file is not locked
+          // by the background process. Release any lock taken by the foreground process
+          // and complete the completer with error.
+          await _uploadLocks.releaseLock(
+            file.localID!,
+            ProcessType.foreground.toString(),
+          );
           completer?.completeError(SilentlyCancelUploadsError());
+          _allBackups[upload.key] = _allBackups[upload.key]!.copyWith(
+            status: BackupItemStatus.retry,
+            error: SilentlyCancelUploadsError(),
+          );
         }
+
+        Bus.instance.fire(BackupUpdatedEvent(_allBackups));
       }
     }
     Future.delayed(kBlockedUploadsPollFrequency, () async {
@@ -1304,12 +1419,7 @@ class FileUploadItem {
   });
 }
 
-enum UploadStatus {
-  notStarted,
-  inProgress,
-  inBackground,
-  completed,
-}
+enum UploadStatus { notStarted, inProgress, inBackground, completed }
 
 enum ProcessType {
   background,

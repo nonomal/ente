@@ -1,10 +1,10 @@
 import 'package:ente_auth/l10n/l10n.dart';
 import 'package:ente_auth/theme/ente_theme.dart';
 import 'package:ente_auth/ui/settings/data/import_page.dart';
-import 'package:ente_auth/ui/settings/faq.dart';
 import 'package:ente_auth/utils/navigation_util.dart';
 import 'package:ente_auth/utils/platform_util.dart';
 import 'package:flutter/material.dart';
+import 'package:logging/logging.dart';
 
 class HomeEmptyStateWidget extends StatelessWidget {
   final VoidCallback? onScanTap;
@@ -22,7 +22,10 @@ class HomeEmptyStateWidget extends StatelessWidget {
     return SingleChildScrollView(
       child: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints.tightFor(height: 800, width: 450),
+          constraints: BoxConstraints(
+            minHeight: MediaQuery.of(context).size.height,
+            minWidth: 450,
+          ),
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 40.0, horizontal: 40),
             child: Column(
@@ -46,7 +49,13 @@ class HomeEmptyStateWidget extends StatelessWidget {
                         width: 400,
                         child: OutlinedButton(
                           onPressed: onScanTap,
-                          child: Text(l10n.importScanQrCode),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                          ),
+                          child: Text(
+                            l10n.importScanQrCode,
+                            textAlign: TextAlign.center,
+                          ),
                         ),
                       ),
                     const SizedBox(height: 18),
@@ -54,7 +63,13 @@ class HomeEmptyStateWidget extends StatelessWidget {
                       width: 400,
                       child: OutlinedButton(
                         onPressed: onManuallySetupTap,
-                        child: Text(l10n.importEnterSetupKey),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                        ),
+                        child: Text(
+                          l10n.importEnterSetupKey,
+                          textAlign: TextAlign.center,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 54),
@@ -73,15 +88,16 @@ class HomeEmptyStateWidget extends StatelessWidget {
                     const SizedBox(height: 18),
                     InkWell(
                       onTap: () {
-                        showModalBottomSheet<void>(
-                          backgroundColor:
-                              Theme.of(context).colorScheme.background,
-                          barrierColor: Colors.black87,
-                          context: context,
-                          builder: (context) {
-                            return const FAQQuestionsWidget();
-                          },
-                        );
+                        try {
+                          PlatformUtil.openWebView(
+                            context,
+                            context.l10n.faq,
+                            "https://help.ente.io/auth/faq",
+                          );
+                        } catch (e) {
+                          Logger("HomeEmptyStateWidget")
+                              .severe("Failed to open FAQ", e);
+                        }
                       },
                       child: Text(
                         l10n.faq,

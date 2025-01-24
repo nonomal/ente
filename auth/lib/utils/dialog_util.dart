@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:math';
 
 import 'package:confetti/confetti.dart';
@@ -13,6 +14,9 @@ import 'package:ente_auth/ui/components/components_constants.dart';
 import 'package:ente_auth/ui/components/dialog_widget.dart';
 import 'package:ente_auth/ui/components/models/button_result.dart';
 import 'package:ente_auth/ui/components/models/button_type.dart';
+import 'package:ente_auth/utils/email_util.dart';
+import 'package:ente_auth/utils/platform_util.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 typedef DialogBuilder = DialogWidget Function(BuildContext context);
@@ -29,12 +33,21 @@ Future<ButtonResult?> showErrorDialog(
     title: title,
     body: body,
     isDismissible: isDismissable,
-    buttons: const [
+    buttons: [
       ButtonWidget(
+        buttonType: ButtonType.primary,
+        labelText: context.l10n.contactSupport,
+        isInAlert: true,
+        buttonAction: ButtonAction.first,
+        onTap: () async {
+          await openSupportPage(body, null);
+        },
+      ),
+      const ButtonWidget(
         buttonType: ButtonType.secondary,
         labelText: "OK",
         isInAlert: true,
-        buttonAction: ButtonAction.first,
+        buttonAction: ButtonAction.second,
       ),
     ],
   );
@@ -69,22 +82,118 @@ Future<ButtonResult?> showErrorDialogForException({
   );
 }
 
+String parseErrorForUI(
+  BuildContext context,
+  String genericError, {
+  Object? error,
+  bool surfaceError = kDebugMode,
+}) {
+  try {
+    if (error == null) {
+      return genericError;
+    }
+    if (error is DioException) {
+      final DioException dioError = error;
+      if (dioError.type == DioExceptionType.unknown) {
+        if (dioError.error.toString().contains('Failed host lookup')) {
+          return context.l10n.networkHostLookUpErr;
+        } else if (dioError.error.toString().contains('SocketException')) {
+          return context.l10n.networkConnectionRefusedErr;
+        }
+      }
+    }
+    // return generic error if the user is not internal and the error is not in debug mode
+    if (!kDebugMode) {
+      return genericError;
+    }
+    String errorInfo = "";
+    if (error is DioException) {
+      final DioException dioError = error;
+      if (dioError.type == DioExceptionType.badResponse) {
+        if (dioError.response?.data["code"] != null) {
+          errorInfo = "Reason: ${dioError.response!.data["code"]}";
+        } else {
+          errorInfo = "Reason: ${dioError.response!.data}";
+        }
+      } else if (dioError.type == DioExceptionType.unknown) {
+        errorInfo = "Reason: $dioError.error";
+      } else {
+        errorInfo = "Reason: $dioError.type";
+      }
+    } else {
+      if (kDebugMode) {
+        errorInfo = error.toString();
+      } else {
+        errorInfo = error.toString().split('Source stack')[0];
+      }
+    }
+    if (errorInfo.isNotEmpty) {
+      return "$genericError\n\n$errorInfo";
+    }
+    return genericError;
+  } catch (e) {
+    return genericError;
+  }
+}
+
 ///Will return null if dismissed by tapping outside
 Future<ButtonResult?> showGenericErrorDialog({
   required BuildContext context,
   bool isDismissible = true,
+  required Object? error,
 }) async {
+  String errorBody = parseErrorForUI(
+    context,
+    context.l10n.itLooksLikeSomethingWentWrongPleaseRetryAfterSome,
+    error: error,
+  );
+  bool isWindowCertError = false;
+  if (Platform.isWindows &&
+      error != null &&
+      error.toString().contains("CERTIFICATE_VERIFY_FAILED")) {
+    isWindowCertError = true;
+    errorBody =
+        "Certificate verification failed. Please update your system certificates, & restart the app. If the issue persists, please contact support.";
+  }
+
   return showDialogWidget(
     context: context,
     title: context.l10n.error,
     icon: Icons.error_outline_outlined,
-    body: context.l10n.itLooksLikeSomethingWentWrongPleaseRetryAfterSome,
+    body: errorBody,
     isDismissible: isDismissible,
-    buttons: const [
+    buttons: [
+      ButtonWidget(
+        buttonType: ButtonType.primary,
+        labelText: context.l10n.ok,
+        buttonAction: ButtonAction.first,
+        isInAlert: true,
+      ),
+      if (isWindowCertError)
+        ButtonWidget(
+          buttonType: ButtonType.neutral,
+          labelText: 'Update Certificates',
+          buttonAction: ButtonAction.third,
+          isInAlert: true,
+          onTap: () async {
+            PlatformUtil.openWebView(
+              context,
+              context.l10n.faq,
+              "https://help.ente.io/auth/troubleshooting/windows-login",
+            );
+          },
+        ),
       ButtonWidget(
         buttonType: ButtonType.secondary,
-        labelText: "OK",
-        isInAlert: true,
+        labelText: context.l10n.contactSupport,
+        buttonAction: ButtonAction.second,
+        onTap: () async {
+          await sendLogs(
+            context,
+            context.l10n.contactSupport,
+            postShare: () {},
+          );
+        },
       ),
     ],
   );
@@ -130,7 +239,7 @@ Future<ButtonResult?> showChoiceDialog(
   required String title,
   String? body,
   required String firstButtonLabel,
-  String secondButtonLabel = "Cancel",
+  String? secondButtonLabel = "Cancel",
   ButtonType firstButtonType = ButtonType.neutral,
   ButtonType secondButtonType = ButtonType.secondary,
   ButtonAction firstButtonAction = ButtonAction.first,
@@ -149,13 +258,14 @@ Future<ButtonResult?> showChoiceDialog(
       onTap: firstButtonOnTap,
       buttonAction: firstButtonAction,
     ),
-    ButtonWidget(
-      buttonType: secondButtonType,
-      labelText: secondButtonLabel,
-      isInAlert: true,
-      onTap: secondButtonOnTap,
-      buttonAction: secondButtonAction,
-    ),
+    if (secondButtonLabel != null)
+      ButtonWidget(
+        buttonType: secondButtonType,
+        labelText: secondButtonLabel,
+        isInAlert: true,
+        onTap: secondButtonOnTap,
+        buttonAction: secondButtonAction,
+      ),
   ];
   return showDialogWidget(
     context: context,
@@ -303,9 +413,11 @@ Future<dynamic> showTextInputDialog(
   TextCapitalization textCapitalization = TextCapitalization.none,
   bool alwaysShowSuccessState = false,
   bool isPasswordInput = false,
+  bool useRootNavigator = false,
 }) {
   return showDialog(
     barrierColor: backdropFaintDark,
+    useRootNavigator: useRootNavigator,
     context: context,
     builder: (context) {
       final bottomInset = MediaQuery.of(context).viewInsets.bottom;
