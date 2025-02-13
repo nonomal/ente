@@ -1,200 +1,79 @@
-import { CustomHead } from "@/next/components/Head";
-import { setupI18n } from "@/next/i18n";
+import { accountLogout } from "@/accounts/services/logout";
+import { clientPackageName, staticAppTitle } from "@/base/app";
+import { CustomHead } from "@/base/components/Head";
 import {
-    logStartupBanner,
-    logUnhandledErrorsAndRejections,
-} from "@/next/log-web";
-import type { AppName, BaseAppContextT } from "@/next/types/app";
-import { ensure } from "@/utils/ensure";
-import { accountLogout } from "@ente/accounts/services/logout";
+    LoadingIndicator,
+    TranslucentLoadingOverlay,
+} from "@/base/components/loaders";
+import { AttributedMiniDialog } from "@/base/components/MiniDialog";
+import { useAttributedMiniDialog } from "@/base/components/utils/dialog";
 import {
-    APPS,
-    APP_TITLES,
-    CLIENT_PACKAGE_NAMES,
-} from "@ente/shared/apps/constants";
-import { Overlay } from "@ente/shared/components/Container";
-import DialogBoxV2 from "@ente/shared/components/DialogBoxV2";
-import type { DialogBoxAttributesV2 } from "@ente/shared/components/DialogBoxV2/types";
-import EnteSpinner from "@ente/shared/components/EnteSpinner";
-import { MessageContainer } from "@ente/shared/components/MessageContainer";
-import { AppNavbar } from "@ente/shared/components/Navbar/app";
-import { PHOTOS_PAGES as PAGES } from "@ente/shared/constants/pages";
-import { useLocalState } from "@ente/shared/hooks/useLocalState";
+    useIsRouteChangeInProgress,
+    useSetupI18n,
+    useSetupLogs,
+} from "@/base/components/utils/hooks-app";
+import { authTheme } from "@/base/components/utils/theme";
+import { logStartupBanner } from "@/base/log-web";
 import HTTPService from "@ente/shared/network/HTTPService";
 import { LS_KEYS, getData } from "@ente/shared/storage/localStorage";
-import { getTheme } from "@ente/shared/themes";
-import { THEME_COLOR } from "@ente/shared/themes/constants";
 import type { User } from "@ente/shared/user/types";
-import { CssBaseline, useMediaQuery } from "@mui/material";
+import "@fontsource-variable/inter";
+import { CssBaseline } from "@mui/material";
 import { ThemeProvider } from "@mui/material/styles";
 import { t } from "i18next";
 import type { AppProps } from "next/app";
-import { useRouter } from "next/router";
-import { createContext, useContext, useEffect, useRef, useState } from "react";
-import LoadingBar, { type LoadingBarRef } from "react-top-loading-bar";
-import "../../public/css/global.css";
+import React, { useCallback, useEffect, useMemo } from "react";
+import { AppContext } from "types/context";
 
-/**
- * Properties available via the {@link AppContext} to the Auth app's React tree.
- */
-type AppContextT = BaseAppContextT & {
-    startLoading: () => void;
-    finishLoading: () => void;
-    themeColor: THEME_COLOR;
-    setThemeColor: (themeColor: THEME_COLOR) => void;
-    somethingWentWrong: () => void;
-};
+const App: React.FC<AppProps> = ({ Component, pageProps }) => {
+    useSetupLogs();
 
-/** The React {@link Context} available to all pages. */
-export const AppContext = createContext<AppContextT | undefined>(undefined);
-
-/** Utility hook to reduce amount of boilerplate in account related pages. */
-export const useAppContext = () => ensure(useContext(AppContext));
-
-export default function App({ Component, pageProps }: AppProps) {
-    const appName: AppName = "auth";
-
-    const router = useRouter();
-    const [isI18nReady, setIsI18nReady] = useState<boolean>(false);
-    const [loading, setLoading] = useState(false);
-    const [offline, setOffline] = useState(
-        typeof window !== "undefined" && !window.navigator.onLine,
-    );
-    const [showNavbar, setShowNavBar] = useState(false);
-    const isLoadingBarRunning = useRef<boolean>(false);
-    const loadingBar = useRef<LoadingBarRef>(null);
-    const [dialogBoxAttributeV2, setDialogBoxAttributesV2] = useState<
-        DialogBoxAttributesV2 | undefined
-    >();
-    const [dialogBoxV2View, setDialogBoxV2View] = useState(false);
-    const isMobile = useMediaQuery("(max-width:428px)");
-    const [themeColor, setThemeColor] = useLocalState(
-        LS_KEYS.THEME,
-        THEME_COLOR.DARK,
-    );
+    const isI18nReady = useSetupI18n();
+    const isChangingRoute = useIsRouteChangeInProgress();
+    const { showMiniDialog, miniDialogProps } = useAttributedMiniDialog();
 
     useEffect(() => {
-        setupI18n().finally(() => setIsI18nReady(true));
-        const userId = (getData(LS_KEYS.USER) as User)?.id;
-        logStartupBanner(APPS.AUTH, userId);
-        logUnhandledErrorsAndRejections(true);
-        HTTPService.setHeaders({
-            "X-Client-Package": CLIENT_PACKAGE_NAMES.get(APPS.AUTH),
-        });
-        return () => logUnhandledErrorsAndRejections(false);
+        const user = getData(LS_KEYS.USER) as User | undefined | null;
+        logStartupBanner(user?.id);
+        HTTPService.setHeaders({ "X-Client-Package": clientPackageName });
     }, []);
 
-    const setUserOnline = () => setOffline(false);
-    const setUserOffline = () => setOffline(true);
-
-    useEffect(() => {
-        router.events.on("routeChangeStart", (url: string) => {
-            const newPathname = url.split("?")[0] as PAGES;
-            if (window.location.pathname !== newPathname) {
-                setLoading(true);
-            }
-        });
-
-        router.events.on("routeChangeComplete", () => {
-            setLoading(false);
-        });
-
-        window.addEventListener("online", setUserOnline);
-        window.addEventListener("offline", setUserOffline);
-
-        return () => {
-            window.removeEventListener("online", setUserOnline);
-            window.removeEventListener("offline", setUserOffline);
-        };
+    const logout = useCallback(() => {
+        void accountLogout().then(() => window.location.replace("/"));
     }, []);
 
-    useEffect(() => {
-        setDialogBoxV2View(true);
-    }, [dialogBoxAttributeV2]);
+    const appContext = useMemo(
+        () => ({
+            logout,
+            showMiniDialog,
+        }),
+        [logout, showMiniDialog],
+    );
 
-    const showNavBar = (show: boolean) => setShowNavBar(show);
-
-    const startLoading = () => {
-        !isLoadingBarRunning.current && loadingBar.current?.continuousStart();
-        isLoadingBarRunning.current = true;
-    };
-    const finishLoading = () => {
-        setTimeout(() => {
-            isLoadingBarRunning.current && loadingBar.current?.complete();
-            isLoadingBarRunning.current = false;
-        }, 100);
-    };
-
-    const closeDialogBoxV2 = () => setDialogBoxV2View(false);
-
-    const somethingWentWrong = () =>
-        setDialogBoxAttributesV2({
-            title: t("ERROR"),
-            close: { variant: "critical" },
-            content: t("UNKNOWN_ERROR"),
-        });
-
-    const logout = () => {
-        void accountLogout().then(() => router.push(PAGES.ROOT));
-    };
-
-    const appContext = {
-        appName,
-        logout,
-        showNavBar,
-        isMobile,
-        setDialogBoxAttributesV2,
-        startLoading,
-        finishLoading,
-        themeColor,
-        setThemeColor,
-        somethingWentWrong,
-    };
-
-    // TODO: Refactor this to have a fallback
-    const title = isI18nReady
-        ? t("title", { context: "auth" })
-        : APP_TITLES.get(APPS.AUTH) ?? "";
+    const title = isI18nReady ? t("title_auth") : staticAppTitle;
 
     return (
         <>
             <CustomHead {...{ title }} />
 
-            <ThemeProvider theme={getTheme(themeColor, APPS.AUTH)}>
+            <ThemeProvider theme={authTheme}>
                 <CssBaseline enableColorScheme />
-                {showNavbar && <AppNavbar isMobile={isMobile} />}
-                <MessageContainer>
-                    {isI18nReady && offline && t("OFFLINE_MSG")}
-                </MessageContainer>
 
-                <LoadingBar color="#51cd7c" ref={loadingBar} />
-
-                <DialogBoxV2
-                    sx={{ zIndex: 1600 }}
-                    open={dialogBoxV2View}
-                    onClose={closeDialogBoxV2}
-                    attributes={dialogBoxAttributeV2}
-                />
+                <AttributedMiniDialog {...miniDialogProps} />
 
                 <AppContext.Provider value={appContext}>
-                    {(loading || !isI18nReady) && (
-                        <Overlay
-                            sx={(theme) => ({
-                                display: "flex",
-                                justifyContent: "center",
-                                alignItems: "center",
-                                zIndex: 2000,
-                                backgroundColor: theme.colors.background.base,
-                            })}
-                        >
-                            <EnteSpinner />
-                        </Overlay>
-                    )}
-                    {isI18nReady && (
-                        <Component setLoading={setLoading} {...pageProps} />
+                    {!isI18nReady ? (
+                        <LoadingIndicator />
+                    ) : (
+                        <>
+                            {isChangingRoute && <TranslucentLoadingOverlay />}
+                            <Component {...pageProps} />
+                        </>
                     )}
                 </AppContext.Provider>
             </ThemeProvider>
         </>
     );
-}
+};
+
+export default App;

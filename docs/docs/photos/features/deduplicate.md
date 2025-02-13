@@ -21,16 +21,16 @@ the platform's nuances.
 
 #### Mobile
 
--   On iOS, a hash will be used to detect exact duplicates. If the duplicate is
-    being uploaded to an album where a photo with the same hash already exists,
-    then the duplicate will be skipped. If it is being uploaded to a different
-    album, then a symlink will be created (so no actual data will need to be
-    uploaded, just a symlink will be created to the existing file).
+- On iOS, a hash will be used to detect exact duplicates. If the duplicate is
+  being uploaded to an album where a photo with the same hash already exists,
+  then the duplicate will be skipped. If it is being uploaded to a different
+  album, then a symlink will be created (so no actual data will need to be
+  uploaded, just a symlink will be created to the existing file).
 
--   On Android also, a hash check is used. But unlike iOS, the native Android
-    filesystem behaviour is to keep physical copies if the same photo is in
-    different albums. So Ente does the same: duplicates to same album will be
-    skipped, duplicates when going to separate albums will create copies.
+- On Android also, a hash check is used. But unlike iOS, the native Android
+  filesystem behaviour is to keep physical copies if the same photo is in
+  different albums. So Ente does the same: duplicates to same album will be
+  skipped, duplicates when going to separate albums will create copies.
 
 #### Web and desktop
 
@@ -54,6 +54,6 @@ duplicates across different albums, but wish to keep only one copy.
 
 ## Adding to Ente album creates symlinks
 
-Note that once a file in is Ente, adding it to another Ente album will create a
+Note that once a file is in Ente, adding it to another Ente album will create a
 symlink, so that you can add it to as many albums as you wish but storage will
 only be counted once.

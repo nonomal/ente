@@ -7,20 +7,20 @@ import "package:logging/logging.dart";
 import "package:ml_linalg/linalg.dart";
 import "package:photos/core/event_bus.dart";
 import "package:photos/db/files_db.dart";
+import "package:photos/db/ml/db.dart";
 import "package:photos/events/people_changed_event.dart";
 import "package:photos/extensions/stop_watch.dart";
-import "package:photos/face/db.dart";
-import "package:photos/face/model/person.dart";
 import "package:photos/generated/protos/ente/common/vector.pb.dart";
 import "package:photos/models/file/file.dart";
+import "package:photos/models/ml/face/person.dart";
 import "package:photos/services/machine_learning/face_ml/face_clustering/face_clustering_service.dart";
 import "package:photos/services/machine_learning/face_ml/face_filtering/face_filtering_constants.dart";
-import "package:photos/services/machine_learning/face_ml/face_ml_result.dart";
 import "package:photos/services/machine_learning/face_ml/person/person_service.dart";
+import "package:photos/services/machine_learning/ml_result.dart";
 import "package:photos/services/search_service.dart";
 
 class ClusterSuggestion {
-  final int clusterIDToMerge;
+  final String clusterIDToMerge;
   final double distancePersonToCluster;
   final bool usedOnlyMeanForSuggestion;
   final List<EnteFile> filesInCluster;
@@ -35,21 +35,22 @@ class ClusterSuggestion {
   );
 }
 
-class ClusterFeedbackService {
+class ClusterFeedbackService<T> {
   final Logger _logger = Logger("ClusterFeedbackService");
   final _computer = Computer.shared();
   ClusterFeedbackService._privateConstructor();
+  late final mlDataDB = MLDataDB.instance;
 
   static final ClusterFeedbackService instance =
       ClusterFeedbackService._privateConstructor();
 
-  static int lastViewedClusterID = -1;
-  static setLastViewedClusterID(int clusterID) {
+  static String lastViewedClusterID = '';
+  static setLastViewedClusterID(String clusterID) {
     lastViewedClusterID = clusterID;
   }
 
   static resetLastViewedClusterID() {
-    lastViewedClusterID = -1;
+    lastViewedClusterID = '';
   }
 
   /// Returns a list of cluster suggestions for a person. Each suggestion is a tuple of the following elements:
@@ -68,7 +69,7 @@ class ClusterFeedbackService {
     try {
       // Get the suggestions for the person using centroids and median
       final startTime = DateTime.now();
-      final List<(int, double, bool)> foundSuggestions =
+      final List<(String, double, bool)> foundSuggestions =
           await _getSuggestions(person);
       final findSuggestionsTime = DateTime.now();
       _logger.info(
@@ -77,14 +78,14 @@ class ClusterFeedbackService {
 
       // Get the files for the suggestions
       final suggestionClusterIDs = foundSuggestions.map((e) => e.$1).toSet();
-      final Map<int, Set<int>> fileIdToClusterID =
-          await FaceMLDataDB.instance.getFileIdToClusterIDSetForCluster(
+      final Map<int, Set<String>> fileIdToClusterID =
+          await mlDataDB.getFileIdToClusterIDSetForCluster(
         suggestionClusterIDs,
       );
       final clusterIdToFaceIDs =
-          await FaceMLDataDB.instance.getClusterToFaceIDs(suggestionClusterIDs);
-      final Map<int, List<EnteFile>> clusterIDToFiles = {};
-      final allFiles = await SearchService.instance.getAllFiles();
+          await mlDataDB.getClusterToFaceIDs(suggestionClusterIDs);
+      final Map<String, List<EnteFile>> clusterIDToFiles = {};
+      final allFiles = await SearchService.instance.getAllFilesForSearch();
       for (final f in allFiles) {
         if (!fileIdToClusterID.containsKey(f.uploadedFileID ?? -1)) {
           continue;
@@ -139,16 +140,23 @@ class ClusterFeedbackService {
     PersonEntity p,
   ) async {
     try {
+      _logger.info('removeFilesFromPerson called');
       // Get the relevant faces to be removed
-      final faceIDs = await FaceMLDataDB.instance
+      final faceIDs = await mlDataDB
           .getFaceIDsForPerson(p.remoteID)
           .then((iterable) => iterable.toList());
       faceIDs.retainWhere((faceID) {
-        final fileID = getFileIdFromFaceId(faceID);
+        final fileID = getFileIdFromFaceId<int>(faceID);
         return files.any((file) => file.uploadedFileID == fileID);
       });
-      final embeddings =
-          await FaceMLDataDB.instance.getFaceEmbeddingMapForFaces(faceIDs);
+      final embeddings = await mlDataDB.getFaceEmbeddingMapForFaces(faceIDs);
+
+      if (faceIDs.isEmpty || embeddings.isEmpty) {
+        _logger.severe(
+          'No faces or embeddings found for person ${p.remoteID} that match the given files',
+        );
+        return;
+      }
 
       final fileIDToCreationTime =
           await FilesDB.instance.getFileIDToCreationTime();
@@ -161,25 +169,28 @@ class ClusterFeedbackService {
         distanceThreshold: 0.20,
       );
       if (clusterResult.isEmpty) {
-        _logger.warning('No clusters found or something went wrong');
+        _logger.severe('No clusters found or something went wrong');
         return;
       }
       final newFaceIdToClusterID = clusterResult.newFaceIdToCluster;
 
       // Update the deleted faces
-      await FaceMLDataDB.instance.forceUpdateClusterIds(newFaceIdToClusterID);
-      await FaceMLDataDB.instance
-          .clusterSummaryUpdate(clusterResult.newClusterSummaries);
+      await mlDataDB.forceUpdateClusterIds(newFaceIdToClusterID);
+      await mlDataDB.clusterSummaryUpdate(clusterResult.newClusterSummaries);
 
       // Make sure the deleted faces don't get suggested in the future
-      final notClusterIdToPersonId = <int, String>{};
+      final notClusterIdToPersonId = <String, String>{};
       for (final clusterId in newFaceIdToClusterID.values.toSet()) {
         notClusterIdToPersonId[clusterId] = p.remoteID;
       }
-      await FaceMLDataDB.instance
-          .bulkCaptureNotPersonFeedback(notClusterIdToPersonId);
+      await mlDataDB.bulkCaptureNotPersonFeedback(notClusterIdToPersonId);
+
+      // Update remote so new sync does not undo this change
+      await PersonService.instance
+          .removeFilesFromPerson(person: p, faceIDs: faceIDs.toSet());
 
       Bus.instance.fire(PeopleChangedEvent());
+      _logger.info('removeFilesFromPerson done');
       return;
     } catch (e, s) {
       _logger.severe("Error in removeFilesFromPerson", e, s);
@@ -189,19 +200,26 @@ class ClusterFeedbackService {
 
   Future<void> removeFilesFromCluster(
     List<EnteFile> files,
-    int clusterID,
+    String clusterID,
   ) async {
+    _logger.info('removeFilesFromCluster called');
     try {
       // Get the relevant faces to be removed
-      final faceIDs = await FaceMLDataDB.instance
+      final faceIDs = await mlDataDB
           .getFaceIDsForCluster(clusterID)
           .then((iterable) => iterable.toList());
       faceIDs.retainWhere((faceID) {
-        final fileID = getFileIdFromFaceId(faceID);
+        final fileID = getFileIdFromFaceId<int>(faceID);
         return files.any((file) => file.uploadedFileID == fileID);
       });
-      final embeddings =
-          await FaceMLDataDB.instance.getFaceEmbeddingMapForFaces(faceIDs);
+      final embeddings = await mlDataDB.getFaceEmbeddingMapForFaces(faceIDs);
+
+      if (faceIDs.isEmpty || embeddings.isEmpty) {
+        _logger.severe(
+          'No faces or embeddings found for cluster $clusterID that match the given files',
+        );
+        return;
+      }
 
       final fileIDToCreationTime =
           await FilesDB.instance.getFileIDToCreationTime();
@@ -214,29 +232,23 @@ class ClusterFeedbackService {
         distanceThreshold: 0.20,
       );
       if (clusterResult.isEmpty) {
+        _logger.severe('No clusters found or something went wrong');
         return;
       }
       final newFaceIdToClusterID = clusterResult.newFaceIdToCluster;
 
       // Update the deleted faces
-      await FaceMLDataDB.instance.forceUpdateClusterIds(newFaceIdToClusterID);
-      await FaceMLDataDB.instance
-          .clusterSummaryUpdate(clusterResult.newClusterSummaries);
+      await mlDataDB.forceUpdateClusterIds(newFaceIdToClusterID);
+      await mlDataDB.clusterSummaryUpdate(clusterResult.newClusterSummaries);
 
       Bus.instance.fire(
         PeopleChangedEvent(
           relevantFiles: files,
           type: PeopleEventType.removedFilesFromCluster,
-          source: "$clusterID",
+          source: clusterID,
         ),
       );
-      // Bus.instance.fire(
-      //   LocalPhotosUpdatedEvent(
-      //     files,
-      //     type: EventType.peopleClusterChanged,
-      //     source: "$clusterID",
-      //   ),
-      // );
+      _logger.info('removeFilesFromCluster done');
       return;
     } catch (e, s) {
       _logger.severe("Error in removeFilesFromCluster", e, s);
@@ -244,21 +256,24 @@ class ClusterFeedbackService {
     }
   }
 
-  Future<void> addFilesToCluster(List<String> faceIDs, int clusterID) async {
-    await FaceMLDataDB.instance.addFacesToCluster(faceIDs, clusterID);
+  Future<void> addFacesToCluster(List<String> faceIDs, String clusterID) async {
+    final faceIDToClusterID = <String, String>{};
+    for (final faceID in faceIDs) {
+      faceIDToClusterID[faceID] = clusterID;
+    }
+    await mlDataDB.forceUpdateClusterIds(faceIDToClusterID);
     Bus.instance.fire(PeopleChangedEvent());
     return;
   }
 
   Future<bool> checkAndDoAutomaticMerges(
     PersonEntity p, {
-    required int personClusterID,
+    required String personClusterID,
   }) async {
-    final faceMlDb = FaceMLDataDB.instance;
-    final faceIDs = await faceMlDb.getFaceIDsForCluster(personClusterID);
-    final ignoredClusters = await faceMlDb.getPersonIgnoredClusters(p.remoteID);
+    final faceIDs = await mlDataDB.getFaceIDsForCluster(personClusterID);
+    final ignoredClusters = await mlDataDB.getPersonIgnoredClusters(p.remoteID);
     if (faceIDs.length < 2 * kMinimumClusterSizeSearchResult) {
-      final fileIDs = faceIDs.map(getFileIdFromFaceId).toSet();
+      final fileIDs = faceIDs.map(getFileIdFromFaceId<int>).toSet();
       if (fileIDs.length < kMinimumClusterSizeSearchResult) {
         _logger.info(
           'Cluster $personClusterID has less than $kMinimumClusterSizeSearchResult faces, not doing automatic merges',
@@ -266,14 +281,14 @@ class ClusterFeedbackService {
         return false;
       }
     }
-    final allClusterIdsToCountMap = (await faceMlDb.clusterIdToFaceCount());
+    final allClusterIdsToCountMap = (await mlDataDB.clusterIdToFaceCount());
     _logger.info(
       '${kDebugMode ? p.data.name : "private"} has existing clusterID $personClusterID, checking if we can automatically merge more',
     );
 
     // Get and update the cluster summary to get the avg (centroid) and count
     final EnteWatch watch = EnteWatch("ClusterFeedbackService")..start();
-    final Map<int, Vector> clusterAvg = await _getUpdateClusterAvg(
+    final Map<String, Vector> clusterAvg = await _getUpdateClusterAvg(
       allClusterIdsToCountMap,
       ignoredClusters,
       minClusterSize: kMinimumClusterSizeSearchResult,
@@ -281,7 +296,8 @@ class ClusterFeedbackService {
     watch.log('computed avg for ${clusterAvg.length} clusters');
 
     // Find the actual closest clusters for the person
-    final List<(int, double)> suggestions = await calcSuggestionsMeanInComputer(
+    final List<(String, double)> suggestions =
+        await calcSuggestionsMeanInComputer(
       clusterAvg,
       {personClusterID},
       ignoredClusters,
@@ -302,7 +318,7 @@ class ClusterFeedbackService {
 
     for (final suggestion in suggestions) {
       final clusterID = suggestion.$1;
-      await FaceMLDataDB.instance.assignClusterToPerson(
+      await mlDataDB.assignClusterToPerson(
         personID: p.remoteID,
         clusterID: clusterID,
       );
@@ -313,16 +329,40 @@ class ClusterFeedbackService {
     return true;
   }
 
-  Future<void> ignoreCluster(int clusterID) async {
-    await PersonService.instance.addPerson('', clusterID);
+  Future<void> addClusterToExistingPerson({
+    required PersonEntity person,
+    required String clusterID,
+  }) async {
+    if (person.data.rejectedFaceIDs.isNotEmpty) {
+      final clusterFaceIDs = await mlDataDB.getFaceIDsForCluster(clusterID);
+      final rejectedLengthBefore = person.data.rejectedFaceIDs.length;
+      person.data.rejectedFaceIDs
+          .removeWhere((faceID) => clusterFaceIDs.contains(faceID));
+      final rejectedLengthAfter = person.data.rejectedFaceIDs.length;
+      if (rejectedLengthBefore != rejectedLengthAfter) {
+        _logger.info(
+          'Removed ${rejectedLengthBefore - rejectedLengthAfter} rejected faces from person ${person.data.name} due to adding cluster $clusterID',
+        );
+        await PersonService.instance.updatePerson(person);
+      }
+    }
+    await mlDataDB.assignClusterToPerson(
+      personID: person.remoteID,
+      clusterID: clusterID,
+    );
+    Bus.instance.fire(PeopleChangedEvent());
+  }
+
+  Future<void> ignoreCluster(String clusterID) async {
+    await PersonService.instance
+        .addPerson(name: '', clusterID: clusterID, isHidden: true);
     Bus.instance.fire(PeopleChangedEvent());
     return;
   }
 
-  Future<List<(int, int)>> checkForMixedClusters() async {
-    final faceMlDb = FaceMLDataDB.instance;
-    final allClusterToFaceCount = await faceMlDb.clusterIdToFaceCount();
-    final clustersToInspect = <int>[];
+  Future<List<(String, int)>> checkForMixedClusters() async {
+    final allClusterToFaceCount = await mlDataDB.clusterIdToFaceCount();
+    final clustersToInspect = <String>[];
     for (final clusterID in allClusterToFaceCount.keys) {
       if (allClusterToFaceCount[clusterID]! > 20 &&
           allClusterToFaceCount[clusterID]! < 500) {
@@ -333,14 +373,14 @@ class ClusterFeedbackService {
     final fileIDToCreationTime =
         await FilesDB.instance.getFileIDToCreationTime();
 
-    final susClusters = <(int, int)>[];
+    final susClusters = <(String, int)>[];
 
     final inspectionStart = DateTime.now();
     for (final clusterID in clustersToInspect) {
       final int originalClusterSize = allClusterToFaceCount[clusterID]!;
-      final faceIDs = await faceMlDb.getFaceIDsForCluster(clusterID);
+      final faceIDs = await mlDataDB.getFaceIDsForCluster(clusterID);
 
-      final embeddings = await faceMlDb.getFaceEmbeddingMapForFaces(faceIDs);
+      final embeddings = await mlDataDB.getFaceEmbeddingMapForFaces(faceIDs);
 
       final clusterResult =
           await FaceClusteringService.instance.predictWithinClusterComputer(
@@ -367,15 +407,15 @@ class ClusterFeedbackService {
       );
 
       // Now find the sizes of the biggest and second biggest cluster
-      final int biggestClusterID = newClusterIdToCount.keys.reduce((a, b) {
+      final String biggestClusterID = newClusterIdToCount.keys.reduce((a, b) {
         return newClusterIdToCount[a]! > newClusterIdToCount[b]! ? a : b;
       });
       final int biggestSize = newClusterIdToCount[biggestClusterID]!;
       final biggestRatio = biggestSize / originalClusterSize;
       if (newClusterIdToCount.length > 1) {
-        final List<int> clusterIDs = newClusterIdToCount.keys.toList();
+        final List<String> clusterIDs = newClusterIdToCount.keys.toList();
         clusterIDs.remove(biggestClusterID);
-        final int secondBiggestClusterID = clusterIDs.reduce((a, b) {
+        final String secondBiggestClusterID = clusterIDs.reduce((a, b) {
           return newClusterIdToCount[a]! > newClusterIdToCount[b]! ? a : b;
         });
         final int secondBiggestSize =
@@ -384,9 +424,9 @@ class ClusterFeedbackService {
 
         if (biggestRatio < 0.5 || secondBiggestRatio > 0.2) {
           final faceIdsOfCluster =
-              await faceMlDb.getFaceIDsForCluster(clusterID);
+              await mlDataDB.getFaceIDsForCluster(clusterID);
           final uniqueFileIDs =
-              faceIdsOfCluster.map(getFileIdFromFaceId).toSet();
+              faceIdsOfCluster.map(getFileIdFromFaceId<int>).toSet();
           susClusters.add((clusterID, uniqueFileIDs.length));
           _logger.info(
             '[CheckMixedClusters] Detected that cluster $clusterID with size ${uniqueFileIDs.length} might be mixed',
@@ -411,20 +451,17 @@ class ClusterFeedbackService {
     return susClusters;
   }
 
-  // TODO: iterate over this method to find sweet spot
   Future<ClusteringResult> breakUpCluster(
-    int clusterID, {
+    String clusterID, {
     bool useDbscan = false,
   }) async {
     _logger.info(
       'breakUpCluster called for cluster $clusterID with dbscan $useDbscan',
     );
-    final faceMlDb = FaceMLDataDB.instance;
-
-    final faceIDs = await faceMlDb.getFaceIDsForCluster(clusterID);
+    final faceIDs = await mlDataDB.getFaceIDsForCluster(clusterID);
     final originalFaceIDsSet = faceIDs.toSet();
 
-    final embeddings = await faceMlDb.getFaceEmbeddingMapForFaces(faceIDs);
+    final embeddings = await mlDataDB.getFaceEmbeddingMapForFaces(faceIDs);
 
     if (embeddings.isEmpty) {
       _logger.warning('No embeddings found for cluster $clusterID');
@@ -468,183 +505,11 @@ class ClusterFeedbackService {
     return clusterResult;
   }
 
-  /// WARNING: this method is purely for debugging purposes, never use in production
-  Future<void> createFakeClustersByBlurValue() async {
-    try {
-      // Delete old clusters
-      await FaceMLDataDB.instance.dropClustersAndPersonTable();
-      final List<PersonEntity> persons =
-          await PersonService.instance.getPersons();
-      for (final PersonEntity p in persons) {
-        await PersonService.instance.deletePerson(p.remoteID);
-      }
-
-      // Create new fake clusters based on blur value. One for values between 0 and 10, one for 10-20, etc till 200
-      final int startClusterID = DateTime.now().microsecondsSinceEpoch;
-      final faceIDsToBlurValues =
-          await FaceMLDataDB.instance.getFaceIDsToBlurValues(200);
-      final faceIdToCluster = <String, int>{};
-      for (final entry in faceIDsToBlurValues.entries) {
-        final faceID = entry.key;
-        final blurValue = entry.value;
-        final newClusterID = startClusterID + blurValue ~/ 10;
-        faceIdToCluster[faceID] = newClusterID;
-      }
-      await FaceMLDataDB.instance.updateFaceIdToClusterId(faceIdToCluster);
-
-      Bus.instance.fire(PeopleChangedEvent());
-    } catch (e, s) {
-      _logger.severe("Error in createFakeClustersByBlurValue", e, s);
-      rethrow;
-    }
-  }
-
-  Future<void> debugLogClusterBlurValues(
-    int clusterID, {
-    int? clusterSize,
-    bool logClusterSummary = false,
-    bool logBlurValues = false,
-  }) async {
-    if (!kDebugMode) return;
-
-    // Logging the clusterID
-    _logger.info(
-      "Debug logging for cluster $clusterID${clusterSize != null ? ' with $clusterSize photos' : ''}",
-    );
-    const int biggestClusterID = 1715061228725148;
-
-    // Logging the cluster summary for the cluster
-    if (logClusterSummary) {
-      final summaryMap = await FaceMLDataDB.instance.getClusterToClusterSummary(
-        [clusterID, biggestClusterID],
-      );
-      final summary = summaryMap[clusterID];
-      if (summary != null) {
-        _logger.info(
-          "Cluster summary for cluster $clusterID says the amount of faces is: ${summary.$2}",
-        );
-      }
-
-      final biggestClusterSummary = summaryMap[biggestClusterID];
-      final clusterSummary = summaryMap[clusterID];
-      if (biggestClusterSummary != null && clusterSummary != null) {
-        _logger.info(
-          "Cluster summary for biggest cluster $biggestClusterID says the size is: ${biggestClusterSummary.$2}",
-        );
-        _logger.info(
-          "Cluster summary for current cluster $clusterID says the size is: ${clusterSummary.$2}",
-        );
-
-        // Mean distance
-        final biggestMean = Vector.fromList(
-          EVector.fromBuffer(biggestClusterSummary.$1).values,
-          dtype: DType.float32,
-        );
-        final currentMean = Vector.fromList(
-          EVector.fromBuffer(clusterSummary.$1).values,
-          dtype: DType.float32,
-        );
-        final bigClustersMeanDistance = 1 - biggestMean.dot(currentMean);
-        _logger.info(
-          "Mean distance between biggest cluster and current cluster: $bigClustersMeanDistance",
-        );
-        _logger.info(
-          'Element differences between the two means are ${biggestMean - currentMean}',
-        );
-        final currentL2Norm = currentMean.norm();
-        _logger.info(
-          'L2 norm of current mean: $currentL2Norm',
-        );
-        final trueDistance =
-            biggestMean.distanceTo(currentMean, distance: Distance.cosine);
-        _logger.info('True distance between the two means: $trueDistance');
-
-        // Median distance
-        const sampleSize = 100;
-        final Iterable<Uint8List> biggestEmbeddings = await FaceMLDataDB
-            .instance
-            .getFaceEmbeddingsForCluster(biggestClusterID);
-        final List<Uint8List> biggestSampledEmbeddingsProto =
-            _randomSampleWithoutReplacement(
-          biggestEmbeddings,
-          sampleSize,
-        );
-        final List<Vector> biggestSampledEmbeddings =
-            biggestSampledEmbeddingsProto
-                .map(
-                  (embedding) => Vector.fromList(
-                    EVector.fromBuffer(embedding).values,
-                    dtype: DType.float32,
-                  ),
-                )
-                .toList(growable: false);
-
-        final Iterable<Uint8List> currentEmbeddings =
-            await FaceMLDataDB.instance.getFaceEmbeddingsForCluster(clusterID);
-        final List<Uint8List> currentSampledEmbeddingsProto =
-            _randomSampleWithoutReplacement(
-          currentEmbeddings,
-          sampleSize,
-        );
-        final List<Vector> currentSampledEmbeddings =
-            currentSampledEmbeddingsProto
-                .map(
-                  (embedding) => Vector.fromList(
-                    EVector.fromBuffer(embedding).values,
-                    dtype: DType.float32,
-                  ),
-                )
-                .toList(growable: false);
-
-        // Calculate distances and find the median
-        final List<double> distances = [];
-        final List<double> trueDistances = [];
-        for (final biggestEmbedding in biggestSampledEmbeddings) {
-          for (final currentEmbedding in currentSampledEmbeddings) {
-            distances.add(1 - biggestEmbedding.dot(currentEmbedding));
-            trueDistances.add(
-              biggestEmbedding.distanceTo(
-                currentEmbedding,
-                distance: Distance.cosine,
-              ),
-            );
-          }
-        }
-        distances.sort();
-        trueDistances.sort();
-        final double medianDistance = distances[distances.length ~/ 2];
-        final double trueMedianDistance =
-            trueDistances[trueDistances.length ~/ 2];
-        _logger.info(
-          "Median distance between biggest cluster and current cluster: $medianDistance (using sample of $sampleSize)",
-        );
-        _logger.info(
-          'True distance median between the two embeddings: $trueMedianDistance',
-        );
-      }
-    }
-
-    // Logging the blur values for the cluster
-    if (logBlurValues) {
-      final List<double> blurValues = await FaceMLDataDB.instance
-          .getBlurValuesForCluster(clusterID)
-          .then((value) => value.toList());
-      final blurValuesIntegers =
-          blurValues.map((value) => value.round()).toList();
-      blurValuesIntegers.sort();
-      _logger.info(
-        "Blur values for cluster $clusterID${clusterSize != null ? ' with $clusterSize photos' : ''}: $blurValuesIntegers",
-      );
-    }
-
-    return;
-  }
-
   /// Returns a list of suggestions. For each suggestion we return a record consisting of the following elements:
   /// 1. clusterID: the ID of the cluster
   /// 2. distance: the distance between the person's cluster and the suggestion
   /// 3. usedMean: whether the suggestion was found using the mean (true) or the median (false)
-  Future<List<(int, double, bool)>> _getSuggestions(
+  Future<List<(String, double, bool)>> _getSuggestions(
     PersonEntity p, {
     int sampleSize = 50,
     double maxMedianDistance = 0.62,
@@ -654,27 +519,24 @@ class ClusterFeedbackService {
   }) async {
     final w = (kDebugMode ? EnteWatch('getSuggestions') : null)?..start();
     // Get all the cluster data
-    final faceMlDb = FaceMLDataDB.instance;
-    final allClusterIdsToCountMap = await faceMlDb.clusterIdToFaceCount();
-    final ignoredClusters = await faceMlDb.getPersonIgnoredClusters(p.remoteID);
-    final personClusters = await faceMlDb.getPersonClusterIDs(p.remoteID);
-    final personFaceIDs =
-        await FaceMLDataDB.instance.getFaceIDsForPerson(p.remoteID);
-    final personFileIDs = personFaceIDs.map(getFileIdFromFaceId).toSet();
+    final allClusterIdsToCountMap = await mlDataDB.clusterIdToFaceCount();
+    final ignoredClusters = await mlDataDB.getPersonIgnoredClusters(p.remoteID);
+    final personClusters = await mlDataDB.getPersonClusterIDs(p.remoteID);
+    final personFaceIDs = await mlDataDB.getFaceIDsForPerson(p.remoteID);
+    final personFileIDs = personFaceIDs.map(getFileIdFromFaceId<int>).toSet();
     w?.log(
       '${p.data.name} has ${personClusters.length} existing clusters, getting all database data done',
     );
-    final allClusterIdToFaceIDs =
-        await FaceMLDataDB.instance.getAllClusterIdToFaceIDs();
+    final allClusterIdToFaceIDs = await mlDataDB.getAllClusterIdToFaceIDs();
     w?.log('getAllClusterIdToFaceIDs done');
 
     // First only do a simple check on the big clusters, if the person does not have small clusters yet
     final smallestPersonClusterSize = personClusters
         .map((clusterID) => allClusterIdsToCountMap[clusterID] ?? 0)
         .reduce((value, element) => min(value, element));
-    final checkSizes = [100, 20, kMinimumClusterSizeSearchResult, 10, 5, 1];
-    late Map<int, Vector> clusterAvgBigClusters;
-    final List<(int, double)> suggestionsMean = [];
+    final checkSizes = [20, kMinimumClusterSizeSearchResult, 10, 5, 1];
+    Map<String, Vector> clusterAvgBigClusters = <String, Vector>{};
+    final List<(String, double)> suggestionsMean = [];
     for (final minimumSize in checkSizes.toSet()) {
       if (smallestPersonClusterSize >=
           min(minimumSize, kMinimumClusterSizeSearchResult)) {
@@ -686,7 +548,7 @@ class ClusterFeedbackService {
         w?.log(
           'Calculate avg for ${clusterAvgBigClusters.length} clusters of min size $minimumSize',
         );
-        final List<(int, double)> suggestionsMeanBigClusters =
+        final List<(String, double)> suggestionsMeanBigClusters =
             await calcSuggestionsMeanInComputer(
           clusterAvgBigClusters,
           personClusters,
@@ -699,12 +561,12 @@ class ClusterFeedbackService {
         for (final suggestion in suggestionsMeanBigClusters) {
           // Skip suggestions that have a high overlap with the person's files
           final suggestionSet = allClusterIdToFaceIDs[suggestion.$1]!
-              .map((faceID) => getFileIdFromFaceId(faceID))
+              .map((faceID) => getFileIdFromFaceId<int>(faceID))
               .toSet();
           final overlap = personFileIDs.intersection(suggestionSet);
           if (overlap.isNotEmpty &&
               ((overlap.length / suggestionSet.length) > 0.5)) {
-            await FaceMLDataDB.instance.captureNotPersonFeedback(
+            await mlDataDB.captureNotPersonFeedback(
               personID: p.remoteID,
               clusterID: suggestion.$1,
             );
@@ -723,7 +585,7 @@ class ClusterFeedbackService {
 
     // Find the other cluster candidates based on the median
     final clusterAvg = clusterAvgBigClusters;
-    final List<(int, double)> moreSuggestionsMean =
+    final List<(String, double)> moreSuggestionsMean =
         await calcSuggestionsMeanInComputer(
       clusterAvg,
       personClusters,
@@ -751,7 +613,7 @@ class ClusterFeedbackService {
     final List<Uint8List> personEmbeddingsProto = [];
     for (final clusterID in personClusters) {
       final Iterable<Uint8List> embeddings =
-          await FaceMLDataDB.instance.getFaceEmbeddingsForCluster(clusterID);
+          await mlDataDB.getFaceEmbeddingsForCluster(clusterID);
       personEmbeddingsProto.addAll(embeddings);
     }
     final List<Uint8List> sampledEmbeddingsProto =
@@ -769,12 +631,12 @@ class ClusterFeedbackService {
         .toList(growable: false);
 
     // Find the actual closest clusters for the person using median
-    final List<(int, double)> suggestionsMedian = [];
-    final List<(int, double)> greatSuggestionsMedian = [];
+    final List<(String, double)> suggestionsMedian = [];
+    final List<(String, double)> greatSuggestionsMedian = [];
     double minMedianDistance = maxMedianDistance;
     for (final otherClusterId in otherClusterIdsCandidates) {
       final Iterable<Uint8List> otherEmbeddingsProto =
-          await FaceMLDataDB.instance.getFaceEmbeddingsForCluster(
+          await mlDataDB.getFaceEmbeddingsForCluster(
         otherClusterId,
       );
       final sampledOtherEmbeddingsProto = _randomSampleWithoutReplacement(
@@ -816,11 +678,12 @@ class ClusterFeedbackService {
       _logger.info("Found suggestions using median: $suggestionsMedian");
     }
 
-    final List<(int, double, bool)> finalSuggestionsMedian = suggestionsMedian
-        .map(((e) => (e.$1, e.$2, false)))
-        .toList(growable: false)
-        .reversed
-        .toList(growable: false);
+    final List<(String, double, bool)> finalSuggestionsMedian =
+        suggestionsMedian
+            .map(((e) => (e.$1, e.$2, false)))
+            .toList(growable: false)
+            .reversed
+            .toList(growable: false);
 
     if (greatSuggestionsMedian.isNotEmpty) {
       _logger.info(
@@ -840,23 +703,22 @@ class ClusterFeedbackService {
     return finalSuggestionsMedian;
   }
 
-  Future<Map<int, Vector>> _getUpdateClusterAvg(
-    Map<int, int> allClusterIdsToCountMap,
-    Set<int> ignoredClusters, {
+  Future<Map<String, Vector>> _getUpdateClusterAvg(
+    Map<String, int> allClusterIdsToCountMap,
+    Set<String> ignoredClusters, {
     int minClusterSize = 1,
     int maxClusterInCurrentRun = 500,
     int maxEmbeddingToRead = 10000,
   }) async {
     final w = (kDebugMode ? EnteWatch('_getUpdateClusterAvg') : null)?..start();
     final startTime = DateTime.now();
-    final faceMlDb = FaceMLDataDB.instance;
     _logger.info(
       'start getUpdateClusterAvg for ${allClusterIdsToCountMap.length} clusters, minClusterSize $minClusterSize, maxClusterInCurrentRun $maxClusterInCurrentRun',
     );
 
-    final Map<int, (Uint8List, int)> clusterToSummary =
-        await faceMlDb.getAllClusterSummary(minClusterSize);
-    final Map<int, (Uint8List, int)> updatesForClusterSummary = {};
+    final Map<String, (Uint8List, int)> clusterToSummary =
+        await mlDataDB.getAllClusterSummary(minClusterSize);
+    final Map<String, (Uint8List, int)> updatesForClusterSummary = {};
 
     w?.log(
       'getUpdateClusterAvg database call for getAllClusterSummary',
@@ -870,7 +732,7 @@ class ClusterFeedbackService {
         'ignoredClusters': ignoredClusters,
         'clusterToSummary': clusterToSummary,
       },
-    ) as (Map<int, Vector>, Set<int>, int, int, int);
+    ) as (Map<String, Vector>, Set<String>, int, int, int);
     final clusterAvg = serializationEmbeddings.$1;
     final allClusterIds = serializationEmbeddings.$2;
     final ignoredClustersCnt = serializationEmbeddings.$3;
@@ -906,7 +768,7 @@ class ClusterFeedbackService {
     w?.reset();
 
     int currentPendingRead = 0;
-    final List<int> clusterIdsToRead = [];
+    final List<String> clusterIdsToRead = [];
     for (final clusterID in sortedClusterIDs) {
       if (maxClusterInCurrentRun-- <= 0) {
         break;
@@ -925,9 +787,8 @@ class ClusterFeedbackService {
       }
     }
 
-    final Map<int, Iterable<Uint8List>> clusterEmbeddings = await FaceMLDataDB
-        .instance
-        .getFaceEmbeddingsForClusters(clusterIdsToRead);
+    final Map<String, Iterable<Uint8List>> clusterEmbeddings =
+        await mlDataDB.getFaceEmbeddingsForClusters(clusterIdsToRead);
 
     w?.logAndReset(
       'read  $currentPendingRead embeddings for ${clusterEmbeddings.length} clusters',
@@ -949,7 +810,7 @@ class ClusterFeedbackService {
       // store the intermediate updates
       indexedInCurrentRun++;
       if (updatesForClusterSummary.length > 100) {
-        await faceMlDb.clusterSummaryUpdate(updatesForClusterSummary);
+        await mlDataDB.clusterSummaryUpdate(updatesForClusterSummary);
         updatesForClusterSummary.clear();
         if (kDebugMode) {
           _logger.info(
@@ -960,7 +821,7 @@ class ClusterFeedbackService {
       clusterAvg[clusterID] = avgNormalized;
     }
     if (updatesForClusterSummary.isNotEmpty) {
-      await faceMlDb.clusterSummaryUpdate(updatesForClusterSummary);
+      await mlDataDB.clusterSummaryUpdate(updatesForClusterSummary);
     }
     w?.logAndReset('done computing avg ');
     _logger.info(
@@ -970,10 +831,10 @@ class ClusterFeedbackService {
     return clusterAvg;
   }
 
-  Future<List<(int, double)>> calcSuggestionsMeanInComputer(
-    Map<int, Vector> clusterAvg,
-    Set<int> personClusters,
-    Set<int> ignoredClusters,
+  Future<List<(String, double)>> calcSuggestionsMeanInComputer(
+    Map<String, Vector> clusterAvg,
+    Set<String> personClusters,
+    Set<String> ignoredClusters,
     double maxClusterDistance,
   ) async {
     return await _computer.compute(
@@ -1038,12 +899,11 @@ class ClusterFeedbackService {
       }
     }
     final startTime = DateTime.now();
-    final faceMlDb = FaceMLDataDB.instance;
 
     // Get the cluster averages for the person's clusters and the suggestions' clusters
-    final personClusters = await faceMlDb.getPersonClusterIDs(person.remoteID);
-    final Map<int, (Uint8List, int)> personClusterToSummary =
-        await faceMlDb.getClusterToClusterSummary(personClusters);
+    final personClusters = await mlDataDB.getPersonClusterIDs(person.remoteID);
+    final Map<String, (Uint8List, int)> personClusterToSummary =
+        await mlDataDB.getClusterToClusterSummary(personClusters);
     final clusterSummaryCallTime = DateTime.now();
 
     // remove personClusters that don't have any summary
@@ -1087,7 +947,7 @@ class ClusterFeedbackService {
       }
       final clusterID = suggestion.clusterIDToMerge;
       final faceIDs = suggestion.faceIDsInCluster;
-      final faceIdToEmbeddingMap = await faceMlDb.getFaceEmbeddingMapForFaces(
+      final faceIdToEmbeddingMap = await mlDataDB.getFaceEmbeddingMapForFaces(
         faceIDs,
       );
       final faceIdToVectorMap = faceIdToEmbeddingMap.map(
@@ -1104,7 +964,7 @@ class ClusterFeedbackService {
       );
       final fileIdToDistanceMap = {};
       for (final entry in faceIdToVectorMap.entries) {
-        fileIdToDistanceMap[getFileIdFromFaceId(entry.key)] =
+        fileIdToDistanceMap[getFileIdFromFaceId<int>(entry.key)] =
             1 - personAvg.dot(entry.value);
       }
       w?.log('calculated distances for cluster $clusterID');
@@ -1126,24 +986,166 @@ class ClusterFeedbackService {
       "Sorting suggestions based on distance to person took ${endTime.difference(startTime).inMilliseconds} ms for ${suggestions.length} suggestions, of which ${clusterSummaryCallTime.difference(startTime).inMilliseconds} ms was spent on the cluster summary call",
     );
   }
+
+  Future<void> debugLogClusterBlurValues(
+    String clusterID, {
+    int? clusterSize,
+    bool logClusterSummary = false,
+    bool logBlurValues = false,
+  }) async {
+    if (!kDebugMode) return;
+
+    // Logging the clusterID
+    _logger.info(
+      "Debug logging for cluster $clusterID${clusterSize != null ? ' with $clusterSize photos' : ''}",
+    );
+    // todo:(laurens) remove to review
+    const String biggestClusterID = 'some random id';
+
+    // Logging the cluster summary for the cluster
+    if (logClusterSummary) {
+      final summaryMap = await mlDataDB.getClusterToClusterSummary(
+        [clusterID, biggestClusterID],
+      );
+      final summary = summaryMap[clusterID];
+      if (summary != null) {
+        _logger.info(
+          "Cluster summary for cluster $clusterID says the amount of faces is: ${summary.$2}",
+        );
+      }
+
+      final biggestClusterSummary = summaryMap[biggestClusterID];
+      final clusterSummary = summaryMap[clusterID];
+      if (biggestClusterSummary != null && clusterSummary != null) {
+        _logger.info(
+          "Cluster summary for biggest cluster $biggestClusterID says the size is: ${biggestClusterSummary.$2}",
+        );
+        _logger.info(
+          "Cluster summary for current cluster $clusterID says the size is: ${clusterSummary.$2}",
+        );
+
+        // Mean distance
+        final biggestMean = Vector.fromList(
+          EVector.fromBuffer(biggestClusterSummary.$1).values,
+          dtype: DType.float32,
+        );
+        final currentMean = Vector.fromList(
+          EVector.fromBuffer(clusterSummary.$1).values,
+          dtype: DType.float32,
+        );
+        final bigClustersMeanDistance = 1 - biggestMean.dot(currentMean);
+        _logger.info(
+          "Mean distance between biggest cluster and current cluster: $bigClustersMeanDistance",
+        );
+        _logger.info(
+          'Element differences between the two means are ${biggestMean - currentMean}',
+        );
+        final currentL2Norm = currentMean.norm();
+        _logger.info(
+          'L2 norm of current mean: $currentL2Norm',
+        );
+        final trueDistance =
+            biggestMean.distanceTo(currentMean, distance: Distance.cosine);
+        _logger.info('True distance between the two means: $trueDistance');
+
+        // Median distance
+        const sampleSize = 100;
+        final Iterable<Uint8List> biggestEmbeddings =
+            await mlDataDB.getFaceEmbeddingsForCluster(biggestClusterID);
+        final List<Uint8List> biggestSampledEmbeddingsProto =
+            _randomSampleWithoutReplacement(
+          biggestEmbeddings,
+          sampleSize,
+        );
+        final List<Vector> biggestSampledEmbeddings =
+            biggestSampledEmbeddingsProto
+                .map(
+                  (embedding) => Vector.fromList(
+                    EVector.fromBuffer(embedding).values,
+                    dtype: DType.float32,
+                  ),
+                )
+                .toList(growable: false);
+
+        final Iterable<Uint8List> currentEmbeddings =
+            await mlDataDB.getFaceEmbeddingsForCluster(clusterID);
+        final List<Uint8List> currentSampledEmbeddingsProto =
+            _randomSampleWithoutReplacement(
+          currentEmbeddings,
+          sampleSize,
+        );
+        final List<Vector> currentSampledEmbeddings =
+            currentSampledEmbeddingsProto
+                .map(
+                  (embedding) => Vector.fromList(
+                    EVector.fromBuffer(embedding).values,
+                    dtype: DType.float32,
+                  ),
+                )
+                .toList(growable: false);
+
+        // Calculate distances and find the median
+        final List<double> distances = [];
+        final List<double> trueDistances = [];
+        for (final biggestEmbedding in biggestSampledEmbeddings) {
+          for (final currentEmbedding in currentSampledEmbeddings) {
+            distances.add(1 - biggestEmbedding.dot(currentEmbedding));
+            trueDistances.add(
+              biggestEmbedding.distanceTo(
+                currentEmbedding,
+                distance: Distance.cosine,
+              ),
+            );
+          }
+        }
+        distances.sort();
+        trueDistances.sort();
+        final double medianDistance = distances[distances.length ~/ 2];
+        final double trueMedianDistance =
+            trueDistances[trueDistances.length ~/ 2];
+        _logger.info(
+          "Median distance between biggest cluster and current cluster: $medianDistance (using sample of $sampleSize)",
+        );
+        _logger.info(
+          'True distance median between the two embeddings: $trueMedianDistance',
+        );
+      }
+    }
+
+    // Logging the blur values for the cluster
+    if (logBlurValues) {
+      final List<double> blurValues = await mlDataDB
+          .getBlurValuesForCluster(clusterID)
+          .then((value) => value.toList());
+      final blurValuesIntegers =
+          blurValues.map((value) => value.round()).toList();
+      blurValuesIntegers.sort();
+      _logger.info(
+        "Blur values for cluster $clusterID${clusterSize != null ? ' with $clusterSize photos' : ''}: $blurValuesIntegers",
+      );
+    }
+
+    return;
+  }
 }
 
 /// Returns a map of person's clusterID to map of closest clusterID to with disstance
-List<(int, double)> _calcSuggestionsMean(Map<String, dynamic> args) {
+List<(String, double)> _calcSuggestionsMean(Map<String, dynamic> args) {
   // Fill in args
-  final Map<int, Vector> clusterAvg = args['clusterAvg'];
-  final Set<int> personClusters = args['personClusters'];
-  final Set<int> ignoredClusters = args['ignoredClusters'];
+  final Map<String, Vector> clusterAvg = args['clusterAvg'];
+  final Set<String> personClusters = args['personClusters'];
+  final Set<String> ignoredClusters = args['ignoredClusters'];
   final double maxClusterDistance = args['maxClusterDistance'];
 
-  final Map<int, List<(int, double)>> suggestions = {};
+  final Map<String, List<(String, double)>> suggestions = {};
   const suggestionMax = 2000;
   int suggestionCount = 0;
   int comparisons = 0;
   final w = (kDebugMode ? EnteWatch('getSuggestions') : null)?..start();
 
   // ignore the clusters that belong to the person or is ignored
-  Set<int> otherClusters = clusterAvg.keys.toSet().difference(personClusters);
+  Set<String> otherClusters =
+      clusterAvg.keys.toSet().difference(personClusters);
   otherClusters = otherClusters.difference(ignoredClusters);
 
   for (final otherClusterID in otherClusters) {
@@ -1152,7 +1154,7 @@ List<(int, double)> _calcSuggestionsMean(Map<String, dynamic> args) {
       dev.log('[WARNING] no avg for othercluster $otherClusterID');
       continue;
     }
-    int? nearestPersonCluster;
+    String? nearestPersonCluster;
     double? minDistance;
     for (final personCluster in personClusters) {
       if (clusterAvg[personCluster] == null) {
@@ -1184,8 +1186,8 @@ List<(int, double)> _calcSuggestionsMean(Map<String, dynamic> args) {
   );
 
   if (suggestions.isNotEmpty) {
-    final List<(int, double)> suggestClusterIds = [];
-    for (final List<(int, double)> suggestion in suggestions.values) {
+    final List<(String, double)> suggestClusterIds = [];
+    for (final List<(String, double)> suggestion in suggestions.values) {
       suggestClusterIds.addAll(suggestion);
     }
     suggestClusterIds.sort(
@@ -1198,20 +1200,22 @@ List<(int, double)> _calcSuggestionsMean(Map<String, dynamic> args) {
     return suggestClusterIds.sublist(0, min(suggestClusterIds.length, 20));
   } else {
     dev.log("No suggestions found using mean");
-    return <(int, double)>[];
+    return <(String, double)>[];
   }
 }
 
-Future<(Map<int, Vector>, Set<int>, int, int, int)>
+Future<(Map<String, Vector>, Set<String>, int, int, int)>
     checkAndSerializeCurrentClusterMeans(
   Map args,
 ) async {
-  final Map<int, int> allClusterIdsToCountMap = args['allClusterIdsToCountMap'];
+  final Map<String, int> allClusterIdsToCountMap =
+      args['allClusterIdsToCountMap'];
   final int minClusterSize = args['minClusterSize'] ?? 1;
-  final Set<int> ignoredClusters = args['ignoredClusters'] ?? {};
-  final Map<int, (Uint8List, int)> clusterToSummary = args['clusterToSummary'];
+  final Set<String> ignoredClusters = args['ignoredClusters'] ?? {};
+  final Map<String, (Uint8List, int)> clusterToSummary =
+      args['clusterToSummary'];
 
-  final Map<int, Vector> clusterAvg = {};
+  final Map<String, Vector> clusterAvg = {};
 
   final allClusterIds = allClusterIdsToCountMap.keys.toSet();
   int ignoredClustersCnt = 0, alreadyUpdatedClustersCnt = 0;

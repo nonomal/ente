@@ -10,8 +10,16 @@
  */
 
 import { nativeImage, shell } from "electron/common";
-import type { WebContents } from "electron/main";
-import { BrowserWindow, Menu, Tray, app, protocol } from "electron/main";
+import {
+    BrowserWindow,
+    Menu,
+    Tray,
+    app,
+    dialog,
+    nativeTheme,
+    protocol,
+    type WebContents,
+} from "electron/main";
 import serveNextAt from "next-electron-server";
 import { existsSync } from "node:fs";
 import fs from "node:fs/promises";
@@ -21,6 +29,7 @@ import {
     attachFSWatchIPCHandlers,
     attachIPCHandlers,
     attachLogoutIPCHandler,
+    attachMainWindowIPCHandlers,
 } from "./main/ipc";
 import log, { initLogging } from "./main/log";
 import { createApplicationMenu, createTrayContextMenu } from "./main/menu";
@@ -30,6 +39,7 @@ import { createWatcher } from "./main/services/watch";
 import { userPreferences } from "./main/stores/user-preferences";
 import { migrateLegacyWatchStoreIfNeeded } from "./main/stores/watch";
 import { registerStreamProtocol } from "./main/stream";
+import { wait } from "./main/utils/common";
 import { isDev } from "./main/utils/electron";
 
 /**
@@ -62,6 +72,115 @@ export const allowWindowClose = (): void => {
 };
 
 /**
+ * The app's entry point.
+ *
+ * We call this at the end of this file.
+ */
+const main = () => {
+    const gotTheLock = app.requestSingleInstanceLock();
+    if (!gotTheLock) {
+        app.quit();
+        return;
+    }
+
+    let mainWindow: BrowserWindow | undefined;
+
+    initLogging();
+    logStartupBanner();
+    registerForEnteLinks();
+    // The order of the next two calls is important
+    setupRendererServer();
+    registerPrivilegedSchemes();
+    migrateLegacyWatchStoreIfNeeded();
+
+    /**
+     * Handle an open URL request, but ensuring that we have a mainWindow.
+     */
+    const handleOpenEnteURLEnsuringWindow = (url: string) => {
+        log.info(`Attempting to handle request to open URL: ${url}`);
+        if (mainWindow) handleEnteLinks(mainWindow, url);
+        else setTimeout(() => handleOpenEnteURLEnsuringWindow(url), 1000);
+    };
+
+    app.on("second-instance", (_, argv: string[]) => {
+        // Someone tried to run a second instance, we should focus our window.
+        if (mainWindow) {
+            mainWindow.show();
+            if (mainWindow.isMinimized()) mainWindow.restore();
+            mainWindow.focus();
+        }
+        // On Windows and Linux, this is how we get deeplinks.
+        //
+        // See: registerForEnteLinks
+        //
+        // Note that Chromium reserves the right to fudge with the order of the
+        // command line arguments, including inserting things in arbitrary
+        // places, so we need to go through the args to find the one that is
+        // pertinent to us (if any) instead of looking at a fixed position.
+        const url = argv.find((arg) => arg.startsWith("ente://app"));
+        if (url) handleOpenEnteURLEnsuringWindow(url);
+    });
+
+    // Emitted once, when Electron has finished initializing.
+    //
+    // Note that some Electron APIs can only be used after this event occurs.
+    void app.whenReady().then(() => {
+        attachProcessHandlers();
+
+        void (async () => {
+            if (isDev) await waitForRendererDevServer();
+
+            // Create window and prepare for the renderer.
+            mainWindow = createMainWindow();
+
+            // Setup IPC and streams.
+            const watcher = createWatcher(mainWindow);
+            attachIPCHandlers();
+            attachMainWindowIPCHandlers(mainWindow);
+            attachFSWatchIPCHandlers(watcher);
+            attachLogoutIPCHandler(watcher);
+            registerStreamProtocol();
+
+            // Configure the renderer's environment.
+            const webContents = mainWindow.webContents;
+            setDownloadPath(webContents);
+            allowExternalLinks(webContents);
+            handleBackOnStripeCheckout(mainWindow);
+            allowAllCORSOrigins(webContents);
+
+            // Start loading the renderer.
+            void mainWindow.loadURL(rendererURL);
+
+            // Continue on with the rest of the startup sequence.
+            Menu.setApplicationMenu(createApplicationMenu(mainWindow));
+            setupTrayItem(mainWindow);
+            setupAutoUpdater(mainWindow);
+
+            try {
+                await deleteLegacyDiskCacheDirIfExists();
+                await deleteLegacyKeysStoreIfExists();
+            } catch (e) {
+                // Log but otherwise ignore errors during non-critical startup
+                // actions.
+                log.error("Ignoring startup error", e);
+            }
+        })();
+    });
+
+    // This is a macOS only event. Show our window when the user activates the
+    // app, e.g. by clicking on its dock icon.
+    app.on("activate", () => mainWindow?.show());
+
+    app.on("before-quit", () => {
+        if (mainWindow) saveWindowBounds(mainWindow);
+        allowWindowClose();
+    });
+
+    // On macOS, this is how we get deeplinks. See: registerForEnteLinks
+    app.on("open-url", (_, url) => handleOpenEnteURLEnsuringWindow(url));
+};
+
+/**
  * Log a standard startup banner.
  *
  * This helps us identify app starts and other environment details in the logs.
@@ -83,13 +202,13 @@ const logStartupBanner = () => {
  *
  * It uses protocol handlers to serve files from the "ente://" protocol.
  *
- * - In development this is proxied to http://localhost:3000
+ * - In development this is proxied to http://localhost:3008
  * - In production it serves files from the `/out` directory
  *
  * For more details, see this comparison:
  * https://github.com/HaNdTriX/next-electron-server/issues/5
  */
-const setupRendererServer = () => serveNextAt(rendererURL);
+const setupRendererServer = () => serveNextAt(rendererURL, { port: 3008 });
 
 /**
  * Register privileged schemes.
@@ -138,24 +257,134 @@ const registerPrivilegedSchemes = () => {
 };
 
 /**
+ * Register a handler for deeplinks, for the "ente://" protocol.
+ *
+ * See: [Note: Passkey verification in the desktop app].
+ *
+ * Implementation notes:
+ * - https://www.electronjs.org/docs/latest/tutorial/launch-app-from-url-in-another-app
+ * - This works only when the app is packaged.
+ * - On Windows and Linux, we get the deeplink in the "second-instance" event.
+ * - On macOS, we get the deeplink in the "open-url" event.
+ */
+const registerForEnteLinks = () => app.setAsDefaultProtocolClient("ente");
+
+/** Sibling of {@link registerForEnteLinks}. */
+const handleEnteLinks = (mainWindow: BrowserWindow, url: string) => {
+    // [Note: Using deeplinks to navigate in desktop app]
+    //
+    // Both
+    //
+    // - our deeplink protocol, and
+    // - the protocol we're using to serve/ our bundled web app
+    //
+    // use the same scheme ("ente://"), so the URL can directly be forwarded.
+    mainWindow.webContents.send("openEnteURL", url);
+};
+
+/** Attach handlers to the (node) process. */
+const attachProcessHandlers = () => {
+    // Gracefully quit the app if we get a SIGINT.
+    //
+    // This is meant to allow graceful shutdowns during development, when the
+    // app is launched using `yarn dev`. In such cases, pressing CTRL-C sends a
+    // SIGINT to the process. The default handling of SIGINT is not graceful
+    // enough (apparently), since I can observe that sometimes recent writes to
+    // local storage are lost. This has also been reported by other people:
+    // https://github.com/electron/electron/issues/22048
+    //
+    // Hopefully handling SIGINT prevents that issue. But beyond that, it allows
+    // us to also write out `userPreferences.json` (as would happen during a
+    // normal quit sequence), so this is an improvement either ways.
+    process.on("SIGINT", () => app.quit());
+};
+
+/**
+ * Wait for the renderer process' dev server to be ready.
+ *
+ * After creating the main window, we load the web app into it using `loadURL`.
+ * In production, these are served directly from the SSR-ed static files bundled
+ * with the app, and so can be served instantly. However, during development, we
+ * start a dev server for serving the HMR-ed files.
+ *
+ * This Next.js HMR server takes time to startup and is sometimes not ready to
+ * handle incoming requests when the main window tries to load it. In such
+ * cases, Electron just hangs with this:
+ *
+ *     [main] Error: net::ERR_CONNECTION_REFUSED
+ *      [main]     at SimpleURLLoaderWrapper.<anonymous> (node:electron/js2c/browser_init:2:114482)
+ *      [main]     at SimpleURLLoaderWrapper.emit (node:events:519:28)
+ *
+ * As a workaround, we wait for 1 second.
+ *
+ * I'd also tried fancier workaround - polling the URL - but waits until the dev
+ * server has the response ready, delaying everything many seconds (we just want
+ * to see if the dev server can accept connections). The 1 second delay seems to
+ * get the job done for now.
+ *
+ * This workaround can likely be removed when we migrate to Vite.
+ */
+const waitForRendererDevServer = () => wait(1000);
+
+/**
  * Create an return the {@link BrowserWindow} that will form our app's UI.
  *
  * This window will show the HTML served from {@link rendererURL}.
  */
 const createMainWindow = () => {
+    const icon = nativeImage.createFromPath(
+        path.join(isDev ? "build" : process.resourcesPath, "window-icon.png"),
+    );
+    const bounds = windowBounds();
+
     // Create the main window. This'll show our web content.
     const window = new BrowserWindow({
         webPreferences: {
             preload: path.join(__dirname, "preload.js"),
             sandbox: true,
         },
+        icon,
+        // Set the window's position and size (if we have one saved).
+        ...(bounds ?? {}),
+        // Enforce a minimum size
+        ...minimumWindowSize(),
+        // [Note: Customize the desktop title bar]
+        //
+        // 1. Remove the default title bar.
+        // 2. Reintroduce the title bar controls.
+        // 3. Show a custom title bar in the renderer.
+        //
+        // For step 3, we use `app-region: drag` to allow dragging the window by
+        // the title bar, and use the Window Controls Overlay CSS environment
+        // variables to determine its dimensions. Note that these overlay CSS
+        // environment vars are only available when titleBarOverlay is true, so
+        // unlike the tutorial which enables it only for Windows and Linux, we
+        // do it (Step 2) unconditionally (i.e., on macOS too).
+        //
+        // https://www.electronjs.org/docs/latest/tutorial/custom-title-bar#create-a-custom-title-bar
+        //
+        // Note that by default on Windows, the color of the WCO title bar
+        // overlay (three buttons - minimize, maximize, close - on the top
+        // right) is static, and unlike Linux, doesn't adapt to the theme /
+        // content. Explicitly choosing a dark background, while it won't work
+        // always (if the user's theme is light), is better than picking a light
+        // background since the main image viewer is always dark.
+        titleBarStyle: "hidden",
+        titleBarOverlay:
+            process.platform == "win32"
+                ? { color: "black", symbolColor: "#cdcdcd" }
+                : true,
         // The color to show in the window until the web content gets loaded.
-        // See: https://www.electronjs.org/docs/latest/api/browser-window#setting-the-backgroundcolor-property
-        backgroundColor: "black",
+        // https://www.electronjs.org/docs/latest/api/browser-window#setting-the-backgroundcolor-property
+        //
+        // To avoid a flash, we want to use the same background color as the
+        // theme of their choice. Unless the user has modified their preference
+        // to not follow the system, we can deduce it from the current OS theme.
+        //
+        // See: https://www.electronjs.org/docs/latest/tutorial/dark-mode
+        backgroundColor: nativeTheme.shouldUseDarkColors ? "black" : "white",
         // We'll show it conditionally depending on `wasAutoLaunched` later.
         show: false,
-        // (Maybe) fix the dock icon on Linux.
-        ...windowIconOptions(),
     });
 
     const wasAutoLaunched = autoLauncher.wasAutoLaunched();
@@ -164,8 +393,9 @@ const createMainWindow = () => {
         // On macOS, also hide the dock icon on macOS.
         if (process.platform == "darwin") app.dock.hide();
     } else {
-        // Show our window (maximizing it) otherwise.
-        window.maximize();
+        // Show our window otherwise, maximizing it if we're not asked to set it
+        // to a specific size.
+        bounds ? window.show() : window.maximize();
     }
 
     // Open the DevTools automatically when running in dev mode
@@ -212,10 +442,63 @@ const createMainWindow = () => {
 };
 
 /**
+ * The position and size to use when showing the main window.
+ *
+ * The return value is `undefined` if the app's window was maximized the last
+ * time around, and so if we should restore it to the maximized state.
+ *
+ * Otherwise it returns the position and size of the window the last time the
+ * app quit.
+ *
+ * If there is no such saved value (or if it is the first time the user is
+ * running the app), return a default size.
+ */
+const windowBounds = () => {
+    if (userPreferences.get("isWindowMaximized")) return undefined;
+
+    const bounds = userPreferences.get("windowBounds");
+    if (bounds) return bounds;
+
+    // Default size. Picked arbitrarily as something that should look good on
+    // first launch. We don't provide a position to let Electron center the app.
+    return { width: 1170, height: 710 };
+};
+
+/**
+ * If for some reason {@link windowBounds} is outside the screen's bounds (e.g.
+ * if the user's screen resolution has changed), then the previously saved
+ * bounds might not be appropriate.
+ *
+ * Luckily, if we try to set an x/y position that is outside the screen's
+ * bounds, then Electron automatically clamps x + width and y + height to lie
+ * within the screen's available space, and we do not need to tackle such out of
+ * bounds cases specifically.
+ *
+ * However there is no minimum window size the Electron enforces by default. As
+ * a safety valve, provide an (arbitrary) minimum size so that the user can
+ * resize it back to sanity if something I cannot currently anticipate happens.
+ */
+const minimumWindowSize = () => ({ minWidth: 200, minHeight: 200 });
+
+/**
+ * Sibling of {@link windowBounds}, see that function's documentation for more
+ * details.
+ */
+const saveWindowBounds = (window: BrowserWindow) => {
+    if (window.isMaximized()) {
+        userPreferences.set("isWindowMaximized", true);
+        userPreferences.delete("windowBounds");
+    } else {
+        userPreferences.delete("isWindowMaximized");
+        userPreferences.set("windowBounds", window.getBounds());
+    }
+};
+
+/**
  * Automatically set the save path for user initiated downloads to the system's
  * "downloads" directory instead of asking the user to select a save location.
  */
-export const setDownloadPath = (webContents: WebContents) => {
+const setDownloadPath = (webContents: WebContents) => {
     webContents.session.on("will-download", (_, item) => {
         item.setSavePath(
             uniqueSavePath(app.getPath("downloads"), item.getFilename()),
@@ -243,7 +526,7 @@ const uniqueSavePath = (dirPath: string, fileName: string) => {
  *
  * @param webContents The renderer to configure.
  */
-export const allowExternalLinks = (webContents: WebContents) =>
+const allowExternalLinks = (webContents: WebContents) =>
     // By default, if the user were open a link, say
     // https://github.com/ente-io/ente/discussions, then it would open a _new_
     // BrowserWindow within our app.
@@ -267,22 +550,105 @@ export const allowExternalLinks = (webContents: WebContents) =>
     });
 
 /**
- * Allow uploading to arbitrary S3 buckets.
+ * Handle back button presses on the Stripe checkout page.
  *
- * The files in the desktop app are served over the ente:// protocol. During
- * testing or self-hosting, we might be using a S3 bucket that does not allow
- * whitelisting a custom URI scheme. To avoid requiring the bucket to set an
- * "Access-Control-Allow-Origin: *" or do a echo-back of `Origin`, we add a
- * workaround here instead, intercepting the ACAO header and allowing `*`.
+ * For payments, we show the Stripe checkout page to the user in the app's
+ * window. On this page there is a back button that allows the user to get back
+ * to the app's contents. Since we're not showing the browser controls, this is
+ * the only way to get back to the app.
+ *
+ * If the user enters something in the text fields on this page (e.g. if they
+ * start entering their credit card number), and then press back, then the
+ * browser shows the user a dialog asking them to confirm if they want to
+ * discard their unsaved changes. However, when running in the context of an
+ * Electron app, this dialog is not shown, and instead the app just gets stuck
+ * (the back button stops working, and quitting the app also doesn't work since
+ * there is an invisible modal dialog).
+ *
+ * So we instead intercept these back button presses, and show the same dialog
+ * that the browser would've shown.
  */
-export const allowAllCORSOrigins = (webContents: WebContents) =>
+const handleBackOnStripeCheckout = (window: BrowserWindow) =>
+    window.webContents.on("will-prevent-unload", (event) => {
+        const url = new URL(window.webContents.getURL());
+        // Only intercept on Stripe checkout pages.
+        if (url.host != "checkout.stripe.com") return;
+
+        // The dialog copy is similar to what Chrome would've shown.
+        // https://www.electronjs.org/docs/latest/api/web-contents#event-will-prevent-unload
+        const choice = dialog.showMessageBoxSync(window, {
+            type: "question",
+            buttons: ["Leave", "Stay"],
+            title: "Leave site?",
+            message: "Changes that you made may not be saved.",
+            defaultId: 0,
+            cancelId: 1,
+        });
+        const leave = choice === 0;
+        if (leave) event.preventDefault();
+    });
+
+/**
+ * Allow uploads to arbitrary S3 buckets.
+ *
+ * The embedded web app within in the desktop app is served over the ente://
+ * protocol. When pages in that web app make requests, their originate from this
+ * "ente://app" origin, which thus serves as the value for the
+ * "Access-Control-Allow-Origin" header in the CORS preflight requests.
+ *
+ * Some S3 providers (B2 is the motivating example for this workaround) do not
+ * allow whitelisting custom URI schemes. That is, even if we set
+ * "`allowedOrigin: ["*"]` in our B2 bucket CORS configuration, when the web
+ * code makes a CORS request with ACAO "ente://app", it gets back
+ * "Access-Control-Allow-Origin" set to `null` in the response, and thus the
+ * request fails (since it does not match the origin we sent).
+ *
+ * This is not an issue for production apps since they fetches or uploads via a
+ * worker instead of directly touching an S3 provider.
+ *
+ * This is not also an issue for fetches in the self hosted apps since those
+ * involve a redirection, and during a redirection Chromium sets the ACAO in the
+ * request to `null` (this is the correct behaviour as per the spec, for more
+ * details See: [Note: Passing credentials for self-hosted file fetches]).
+ *
+ * But this is an issue for uploads in the self hosted apps (or when we
+ * ourselves are trying to test things by with an arbitrary S3 bucket without
+ * going via a worker). During upload, theer is no redirection, so the request
+ * ACAO is "ente://app" but the response ACAO is `null` which don't match,
+ * causing the request to fail.
+ *
+ * As a workaround, we intercept the ACAO header and set it to `*`.
+ *
+ * However, an unconditional interception causes problems with requests that use
+ * credentials, since "*" is not a valid value in such cases. One such example
+ * is the HCaptcha requests made by Stripe when we initiate a payment within the
+ * desktop app:
+ *
+ * > Access to XMLHttpRequest at 'https://api2.hcaptcha.com/getcaptcha/xxx' from
+ * > origin 'https://newassets.hcaptcha.com' has been blocked by CORS policy:
+ * > The value of the 'Access-Control-Allow-Origin' header in the response must
+ * > not be the wildcard '*' when the request's credentials mode is 'include'.
+ * > The credentials mode of requests initiated by the XMLHttpRequest is
+ * > controlled by the withCredentials attribute.
+ *
+ * So we only do this workaround if there was either no ACAO specified in the
+ * response, or if the ACAO in the response was "null" (the string serialization
+ * of `null`).
+ */
+const allowAllCORSOrigins = (webContents: WebContents) =>
     webContents.session.webRequest.onHeadersReceived(
         ({ responseHeaders }, callback) => {
             const headers: NonNullable<typeof responseHeaders> = {};
-            for (const [key, value] of Object.entries(responseHeaders ?? {}))
-                if (key.toLowerCase() != "access-control-allow-origin")
-                    headers[key] = value;
+
             headers["Access-Control-Allow-Origin"] = ["*"];
+            for (const [key, value] of Object.entries(responseHeaders ?? {}))
+                if (key.toLowerCase() == "access-control-allow-origin") {
+                    headers["Access-Control-Allow-Origin"] =
+                        value[0] == "null" ? ["*"] : value;
+                } else {
+                    headers[key] = value;
+                }
+
             callback({ responseHeaders: headers });
         },
     );
@@ -316,59 +682,12 @@ const setupTrayItem = (mainWindow: BrowserWindow) => {
 };
 
 /**
- * On Linux the app does not show a dock icon by default, attempt to fix this by
- * returning the path to an icon as the "icon" property that can be passed to
- * the BrowserWindow during creation.
- */
-const windowIconOptions = () => {
-    if (process.platform != "linux") return {};
-
-    // There are two, possibly three, different issues with icons on Linux.
-    //
-    // Firstly, the AppImage itself doesn't show an icon. There does not seem to
-    // be a reasonable workaround either currently. See:
-    // https://github.com/AppImage/AppImageKit/issues/346
-    //
-    // Secondly, and this is the problem we're trying to fix here, when the app
-    // is started it does not show a dock icon (Ubuntu 22) or shows the generic
-    // gear icon (Ubuntu 24). The issue possibly exists on other distributions
-    // too.
-    //
-    // Electron provides a `BrowserWindow.setIcon` function which should solve
-    // our issue, we could call it selectively on Linux. There is also an
-    // apparently undocumented "icon" option that can be passed when creating a
-    // new BrowserWindow, and that is what most of the other code I saw on
-    // GitHub seems to be doing.
-    //
-    // However, try what I may, I can't get either of these to work. Which leads
-    // me to believe there is a third issue: I can't get it to work because I'm
-    // testing on an Ubuntu 24 VM, where this might just not be working:
-    // https://askubuntu.com/questions/1511534/ubuntu-24-04-skype-logo-on-the-dock-not-showing-skype-logo
-    //
-    // 24 isn't likely the year of the Linux desktop either.
-    //
-    // For now, I'm adding a very specific incantation taken from
-    // https://github.com/arduino/arduino-ide/blob/main/arduino-ide-extension/src/electron-main/fix-app-image-icon.ts
-    //
-    // Possibly all this specific naming of the file etc is superstition, and
-    // just any name would do as long as the path is correct, but let me try it
-    // this way and see if this gets the icon to appear on Ubuntu 22 etc.
-
-    const icon = path.join(
-        isDev ? "build" : process.resourcesPath,
-        "icons/512x512.png",
-    );
-
-    return { icon };
-};
-
-/**
  * Older versions of our app used to maintain a cache dir using the main
  * process. This has been removed in favor of cache on the web layer. Delete the
  * old cache dir if it exists.
  *
  * Added May 2024, v1.7.0. This migration code can be removed after some time
- * once most people have upgraded to newer versions.
+ * once most people have upgraded to newer versions (tag: Migration).
  */
 const deleteLegacyDiskCacheDirIfExists = async () => {
     const removeIfExists = async (dirPath: string) => {
@@ -424,76 +743,5 @@ const deleteLegacyKeysStoreIfExists = async () => {
     }
 };
 
-const main = () => {
-    const gotTheLock = app.requestSingleInstanceLock();
-    if (!gotTheLock) {
-        app.quit();
-        return;
-    }
-
-    let mainWindow: BrowserWindow | undefined;
-
-    initLogging();
-    logStartupBanner();
-    // The order of the next two calls is important
-    setupRendererServer();
-    registerPrivilegedSchemes();
-    migrateLegacyWatchStoreIfNeeded();
-
-    app.on("second-instance", () => {
-        // Someone tried to run a second instance, we should focus our window.
-        if (mainWindow) {
-            mainWindow.show();
-            if (mainWindow.isMinimized()) mainWindow.restore();
-            mainWindow.focus();
-        }
-    });
-
-    // Emitted once, when Electron has finished initializing.
-    //
-    // Note that some Electron APIs can only be used after this event occurs.
-    void app.whenReady().then(() => {
-        void (async () => {
-            // Create window and prepare for the renderer.
-            mainWindow = createMainWindow();
-
-            // Setup IPC and streams.
-            const watcher = createWatcher(mainWindow);
-            attachIPCHandlers();
-            attachFSWatchIPCHandlers(watcher);
-            attachLogoutIPCHandler(watcher);
-            registerStreamProtocol();
-
-            // Configure the renderer's environment.
-            const webContents = mainWindow.webContents;
-            setDownloadPath(webContents);
-            allowExternalLinks(webContents);
-            allowAllCORSOrigins(webContents);
-
-            // Start loading the renderer.
-            void mainWindow.loadURL(rendererURL);
-
-            // Continue on with the rest of the startup sequence.
-            Menu.setApplicationMenu(await createApplicationMenu(mainWindow));
-            setupTrayItem(mainWindow);
-            setupAutoUpdater(mainWindow);
-
-            try {
-                await deleteLegacyDiskCacheDirIfExists();
-                await deleteLegacyKeysStoreIfExists();
-            } catch (e) {
-                // Log but otherwise ignore errors during non-critical startup
-                // actions.
-                log.error("Ignoring startup error", e);
-            }
-        })();
-    });
-
-    // This is a macOS only event. Show our window when the user activates the
-    // app, e.g. by clicking on its dock icon.
-    app.on("activate", () => mainWindow?.show());
-
-    app.on("before-quit", allowWindowClose);
-};
-
+// Go for it.
 main();

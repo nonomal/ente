@@ -9,7 +9,11 @@ class CodeDisplay {
   final bool trashed;
   final int lastUsedAt;
   final int tapCount;
+  String note;
   final List<String> tags;
+  int position;
+  String iconSrc;
+  String iconID;
 
   CodeDisplay({
     this.pinned = false,
@@ -17,7 +21,13 @@ class CodeDisplay {
     this.lastUsedAt = 0,
     this.tapCount = 0,
     this.tags = const [],
+    this.note = '',
+    this.position = 0,
+    this.iconSrc = '',
+    this.iconID = '',
   });
+
+  bool get isCustomIcon => (iconSrc != '' && iconID != '');
 
   // copyWith
   CodeDisplay copyWith({
@@ -26,12 +36,20 @@ class CodeDisplay {
     int? lastUsedAt,
     int? tapCount,
     List<String>? tags,
+    String? note,
+    int? position,
+    String? iconSrc,
+    String? iconID,
   }) {
     final bool updatedPinned = pinned ?? this.pinned;
     final bool updatedTrashed = trashed ?? this.trashed;
     final int updatedLastUsedAt = lastUsedAt ?? this.lastUsedAt;
     final int updatedTapCount = tapCount ?? this.tapCount;
     final List<String> updatedTags = tags ?? this.tags;
+    final String updatedNote = note ?? this.note;
+    final int updatedPosition = position ?? this.position;
+    final String updatedIconSrc = iconSrc ?? this.iconSrc;
+    final String updatedIconID = iconID ?? this.iconID;
 
     return CodeDisplay(
       pinned: updatedPinned,
@@ -39,6 +57,10 @@ class CodeDisplay {
       lastUsedAt: updatedLastUsedAt,
       tapCount: updatedTapCount,
       tags: updatedTags,
+      note: updatedNote,
+      position: updatedPosition,
+      iconSrc: updatedIconSrc,
+      iconID: updatedIconID,
     );
   }
 
@@ -52,6 +74,10 @@ class CodeDisplay {
       lastUsedAt: json['lastUsedAt'] ?? 0,
       tapCount: json['tapCount'] ?? 0,
       tags: List<String>.from(json['tags'] ?? []),
+      note: json['note'] ?? '',
+      position: json['position'] ?? 0,
+      iconSrc: json['iconSrc'] ?? 'ente',
+      iconID: json['iconID'] ?? '',
     );
   }
 
@@ -92,6 +118,10 @@ class CodeDisplay {
       'lastUsedAt': lastUsedAt,
       'tapCount': tapCount,
       'tags': tags,
+      'note': note,
+      'position': position,
+      'iconSrc': iconSrc,
+      'iconID': iconID,
     };
   }
 
@@ -104,6 +134,7 @@ class CodeDisplay {
         other.trashed == trashed &&
         other.lastUsedAt == lastUsedAt &&
         other.tapCount == tapCount &&
+        other.note == note &&
         listEquals(other.tags, tags);
   }
 
@@ -113,6 +144,7 @@ class CodeDisplay {
         trashed.hashCode ^
         lastUsedAt.hashCode ^
         tapCount.hashCode ^
+        note.hashCode ^
         tags.hashCode;
   }
 }

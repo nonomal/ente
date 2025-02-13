@@ -4,7 +4,7 @@ import 'package:otp/otp.dart' as otp;
 import 'package:steam_totp/steam_totp.dart';
 
 String getOTP(Code code) {
-  if (code.type == Type.steam) {
+  if (code.type == Type.steam || code.issuer.toLowerCase() == 'steam') {
     return _getSteamCode(code);
   }
   if (code.type == Type.hotp) {
@@ -39,7 +39,7 @@ String _getSteamCode(Code code, [bool isNext = false]) {
 }
 
 String getNextTotp(Code code) {
-  if (code.type == Type.steam) {
+  if (code.type == Type.steam || code.issuer.toLowerCase() == 'steam') {
     return _getSteamCode(code, true);
   }
   return otp.OTP.generateTOTPCodeString(
@@ -50,6 +50,38 @@ String getNextTotp(Code code) {
     algorithm: _getAlgorithm(code),
     isGoogle: true,
   );
+}
+
+// generateFutureTotpCodes generates future TOTP codes based on the current time.
+// It returns the start time and a list of future codes.
+(int, List<String>) generateFutureTotpCodes(Code code, int count) {
+  final int startTime =
+      ((DateTime.now().millisecondsSinceEpoch ~/ 1000) ~/ code.period) *
+          code.period *
+          1000;
+  final String secret = getSanitizedSecret(code.secret);
+  final List<String> codes = [];
+  if (code.type == Type.steam || code.issuer.toLowerCase() == 'steam') {
+    final SteamTOTP steamTotp = SteamTOTP(secret: code.secret);
+    for (int i = 0; i < count; i++) {
+      int generatedTime = startTime + code.period * 1000 * i;
+      codes.add(steamTotp.generate(generatedTime ~/ 1000));
+    }
+  } else {
+    for (int i = 0; i < count; i++) {
+      int generatedTime = startTime + code.period * 1000 * i;
+      final genCode = otp.OTP.generateTOTPCodeString(
+        secret,
+        generatedTime,
+        length: code.digits,
+        interval: code.period,
+        algorithm: _getAlgorithm(code),
+        isGoogle: true,
+      );
+      codes.add(genCode);
+    }
+  }
+  return (startTime, codes);
 }
 
 otp.Algorithm _getAlgorithm(Code code) {

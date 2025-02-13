@@ -9,6 +9,10 @@ import (
 	"runtime/debug"
 	"strconv"
 	"strings"
+	"sync"
+
+	"github.com/ente-io/museum/pkg/controller/discord"
+	"github.com/ente-io/museum/pkg/utils/network"
 
 	"github.com/ente-io/museum/pkg/controller/email"
 	"github.com/ente-io/museum/pkg/controller/lock"
@@ -43,6 +47,7 @@ type FileController struct {
 	ObjectCleanupCtrl     *ObjectCleanupController
 	LockController        *lock.LockController
 	EmailNotificationCtrl *email.EmailNotificationController
+	DiscordController     *discord.DiscordController
 	HostName              string
 	cleanupCronRunning    bool
 }
@@ -63,6 +68,9 @@ func (c *FileController) validateFileCreateOrUpdateReq(userID int64, file ente.F
 	objectPathPrefix := strconv.FormatInt(userID, 10) + "/"
 	if !strings.HasPrefix(file.File.ObjectKey, objectPathPrefix) || !strings.HasPrefix(file.Thumbnail.ObjectKey, objectPathPrefix) {
 		return stacktrace.Propagate(ente.ErrBadRequest, "Incorrect object key reported")
+	}
+	if file.File.ObjectKey == file.Thumbnail.ObjectKey {
+		return stacktrace.Propagate(ente.ErrBadRequest, "file and thumbnail object keys are same")
 	}
 	isCreateFileReq := file.ID == 0
 	// Check for attributes for fileCreation. We don't send key details on update
@@ -99,7 +107,7 @@ func (c *FileController) validateFileCreateOrUpdateReq(userID int64, file ente.F
 }
 
 // Create adds an entry for a file in the respective tables
-func (c *FileController) Create(ctx context.Context, userID int64, file ente.File, userAgent string, app ente.App) (ente.File, error) {
+func (c *FileController) Create(ctx *gin.Context, userID int64, file ente.File, userAgent string, app ente.App) (ente.File, error) {
 	err := c.validateFileCreateOrUpdateReq(userID, file)
 	if err != nil {
 		return file, stacktrace.Propagate(err, "")
@@ -153,7 +161,7 @@ func (c *FileController) Create(ctx context.Context, userID int64, file ente.Fil
 			if err != nil {
 				return file, stacktrace.Propagate(err, "")
 			}
-			file, err = c.onDuplicateObjectDetected(file, existing, hotDC)
+			file, err = c.onDuplicateObjectDetected(ctx, file, existing, hotDC)
 			if err != nil {
 				return file, stacktrace.Propagate(err, "")
 			}
@@ -285,12 +293,12 @@ func (c *FileController) GetUploadURLs(ctx context.Context, userID int64, count 
 }
 
 // GetFileURL verifies permissions and returns a presigned url to the requested file
-func (c *FileController) GetFileURL(userID int64, fileID int64) (string, error) {
+func (c *FileController) GetFileURL(ctx *gin.Context, userID int64, fileID int64) (string, error) {
 	err := c.verifyFileAccess(userID, fileID)
 	if err != nil {
 		return "", stacktrace.Propagate(err, "")
 	}
-	url, err := c.getSignedURLForType(fileID, ente.FILE)
+	url, err := c.getSignedURLForType(ctx, fileID, ente.FILE)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			go c.CleanUpStaleCollectionFiles(userID, fileID)
@@ -301,12 +309,12 @@ func (c *FileController) GetFileURL(userID int64, fileID int64) (string, error) 
 }
 
 // GetThumbnailURL verifies permissions and returns a presigned url to the requested thumbnail
-func (c *FileController) GetThumbnailURL(userID int64, fileID int64) (string, error) {
+func (c *FileController) GetThumbnailURL(ctx *gin.Context, userID int64, fileID int64) (string, error) {
 	err := c.verifyFileAccess(userID, fileID)
 	if err != nil {
 		return "", stacktrace.Propagate(err, "")
 	}
-	url, err := c.getSignedURLForType(fileID, ente.THUMBNAIL)
+	url, err := c.getSignedURLForType(ctx, fileID, ente.THUMBNAIL)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			go c.CleanUpStaleCollectionFiles(userID, fileID)
@@ -341,7 +349,6 @@ func (c *FileController) CleanUpStaleCollectionFiles(userID int64, fileID int64)
 	err = c.TrashRepository.CleanUpDeletedFilesFromCollection(context.Background(), fileIDs, userID)
 	if err != nil {
 		logger.WithError(err).Error("Failed to clean up stale files from collection")
-
 	}
 
 }
@@ -356,7 +363,7 @@ func (c *FileController) GetPublicFileURL(ctx *gin.Context, fileID int64, objTyp
 	if !accessible {
 		return "", stacktrace.Propagate(ente.ErrPermissionDenied, "")
 	}
-	return c.getSignedURLForType(fileID, objType)
+	return c.getSignedURLForType(ctx, fileID, objType)
 }
 
 // GetCastFileUrl verifies permissions and returns a presigned url to the requested file
@@ -369,15 +376,47 @@ func (c *FileController) GetCastFileUrl(ctx *gin.Context, fileID int64, objType 
 	if !accessible {
 		return "", stacktrace.Propagate(ente.ErrPermissionDenied, "")
 	}
-	return c.getSignedURLForType(fileID, objType)
+	return c.getSignedURLForType(ctx, fileID, objType)
 }
 
-func (c *FileController) getSignedURLForType(fileID int64, objType ente.ObjectType) (string, error) {
+func (c *FileController) getSignedURLForType(ctx *gin.Context, fileID int64, objType ente.ObjectType) (string, error) {
+	if isCliRequest(ctx) {
+		return c.getWasabiSignedUrlIfAvailable(fileID, objType)
+	}
 	s3Object, err := c.ObjectRepo.GetObject(fileID, objType)
 	if err != nil {
 		return "", stacktrace.Propagate(err, "")
 	}
-	return c.getPreSignedURL(s3Object.ObjectKey)
+	return c.getHotDcSignedUrl(s3Object.ObjectKey)
+}
+
+// ignore lint unused inspection
+func isCliRequest(ctx *gin.Context) bool {
+	// todo: (neeraj) remove this short-circuit after wasabi migration
+	return false
+	// check if user-agent contains go-resty
+	//userAgent := ctx.Request.Header.Get("User-Agent")
+	//return strings.Contains(userAgent, "go-resty")
+
+}
+
+// getWasabiSignedUrlIfAvailable returns a signed URL for the given fileID and objectType. It prefers wasabi over b2
+// if the file is not found in wasabi, it will return signed url from B2
+func (c *FileController) getWasabiSignedUrlIfAvailable(fileID int64, objType ente.ObjectType) (string, error) {
+	s3Object, dcs, err := c.ObjectRepo.GetObjectWithDCs(fileID, objType)
+	if err != nil {
+		return "", stacktrace.Propagate(err, "")
+	}
+	for _, dc := range dcs {
+		if dc == c.S3Config.GetHotWasabiDC() {
+			return c.getPreSignedURLForDC(s3Object.ObjectKey, dc)
+		}
+	}
+	// todo: (neeraj) remove this log after some time
+	log.WithFields(log.Fields{
+		"fileID": fileID}).Info("File not found in wasabi, returning signed url from B2")
+	// return signed url from default hot bucket
+	return c.getHotDcSignedUrl(s3Object.ObjectKey)
 }
 
 // Trash deletes file and move them to trash
@@ -468,10 +507,22 @@ func (c *FileController) GetFileInfo(ctx *gin.Context, userID int64, fileIDs []i
 	// prepare a list of FileInfoResponse
 	fileInfoList := make([]*ente.FileInfoResponse, 0)
 	for _, fileID := range fileIDs {
-		fileInfoList = append(fileInfoList, &ente.FileInfoResponse{
-			ID:       fileID,
-			FileInfo: *fileInfoResponse[fileID],
-		})
+		id := fileID
+		fileInfo := fileInfoResponse[id]
+		if fileInfo == nil {
+			// This should be happening only for older users who may have a stale
+			// collection_file entry for a file that user has deleted
+			log.WithField("fileID", id).Error("fileInfo not found")
+			fileInfoList = append(fileInfoList, &ente.FileInfoResponse{
+				ID:       id,
+				FileInfo: ente.FileInfo{FileSize: -1, ThumbnailSize: -1},
+			})
+		} else {
+			fileInfoList = append(fileInfoList, &ente.FileInfoResponse{
+				ID:       id,
+				FileInfo: *fileInfo,
+			})
+		}
 	}
 	return &ente.FilesInfoResponse{
 		FilesInfo: fileInfoList,
@@ -602,7 +653,14 @@ func (c *FileController) validateUpdateMetadataRequest(ctx *gin.Context, req ent
 			}).Error("can't update magic metadata for file which isn't owned by use")
 			return stacktrace.Propagate(ente.ErrPermissionDenied, "")
 		}
-		if existingMetadata != nil && (existingMetadata.Version != updateMMdRequest.MagicMetadata.Version || existingMetadata.Count > updateMMdRequest.MagicMetadata.Count) {
+		oldToNewCountDiff := 0
+		if existingMetadata != nil {
+			oldToNewCountDiff = existingMetadata.Count - updateMMdRequest.MagicMetadata.Count
+		}
+		// Return an error if there is a version mismatch with the previous metadata
+		// or if the new metadata contains an unexpectedly lower number of keys
+		// (oldToNewCountDiff difference is > 2), which may indicate potential data loss due to potentially buggy client.
+		if existingMetadata != nil && (existingMetadata.Version != updateMMdRequest.MagicMetadata.Version || oldToNewCountDiff > 2) {
 			log.WithFields(log.Fields{
 				"existing_count":   existingMetadata.Count,
 				"existing_version": existingMetadata.Version,
@@ -639,14 +697,38 @@ func (c *FileController) CleanupDeletedFiles() {
 	defer func() {
 		c.LockController.ReleaseLock(DeletedObjectQueueLock)
 	}()
-	items, err := c.QueueRepo.GetItemsReadyForDeletion(repo.DeleteObjectQueue, 2000)
+	items, err := c.QueueRepo.GetItemsReadyForDeletion(repo.DeleteObjectQueue, 5000)
 	if err != nil {
 		log.WithError(err).Error("Failed to fetch items from queue")
 		return
 	}
-	for _, i := range items {
-		c.cleanupDeletedFile(i)
+	var wg sync.WaitGroup
+	itemChan := make(chan repo.QueueItem, len(items))
+
+	// Start worker goroutines
+	for w := 0; w < 4; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for item := range itemChan {
+				func(item repo.QueueItem) {
+					defer func() {
+						if r := recover(); r != nil {
+							log.WithField("item", item.Item).Errorf("Recovered from panic: %v", r)
+						}
+					}()
+					c.cleanupDeletedFile(item)
+				}(item)
+			}
+		}()
 	}
+	// Send items to the channel
+	for _, item := range items {
+		itemChan <- item
+	}
+	close(itemChan)
+	// Wait for all workers to finish
+	wg.Wait()
 }
 
 func (c *FileController) GetTotalFileCount() (int64, error) {
@@ -704,10 +786,19 @@ func (c *FileController) cleanupDeletedFile(qItem repo.QueueItem) {
 	ctxLogger.Info("Successfully deleted item")
 }
 
-func (c *FileController) getPreSignedURL(objectKey string) (string, error) {
+func (c *FileController) getHotDcSignedUrl(objectKey string) (string, error) {
 	s3Client := c.S3Config.GetHotS3Client()
 	r, _ := s3Client.GetObjectRequest(&s3.GetObjectInput{
 		Bucket: c.S3Config.GetHotBucket(),
+		Key:    &objectKey,
+	})
+	return r.Presign(PreSignedRequestValidityDuration)
+}
+
+func (c *FileController) getPreSignedURLForDC(objectKey string, dc string) (string, error) {
+	s3Client := c.S3Config.GetS3Client(dc)
+	r, _ := s3Client.GetObjectRequest(&s3.GetObjectInput{
+		Bucket: c.S3Config.GetBucket(dc),
 		Key:    &objectKey,
 	})
 	return r.Presign(PreSignedRequestValidityDuration)
@@ -725,7 +816,7 @@ func (c *FileController) sizeOf(objectKey string) (int64, error) {
 	return *head.ContentLength, nil
 }
 
-func (c *FileController) onDuplicateObjectDetected(file ente.File, existing ente.File, hotDC string) (ente.File, error) {
+func (c *FileController) onDuplicateObjectDetected(ctx *gin.Context, file ente.File, existing ente.File, hotDC string) (ente.File, error) {
 	newJSON, _ := json.Marshal(file)
 	existingJSON, _ := json.Marshal(existing)
 	log.Info("Comparing " + string(newJSON) + " against " + string(existingJSON))
@@ -743,27 +834,60 @@ func (c *FileController) onDuplicateObjectDetected(file ente.File, existing ente
 		return file, nil
 	} else {
 		// Overwrote an existing file or thumbnail
-		go c.onExistingObjectsReplaced(file, hotDC)
+		go c.onExistingObjectsReplaced(ctx, file, hotDC)
 		return ente.File{}, ente.ErrBadRequest
 	}
 }
 
-func (c *FileController) onExistingObjectsReplaced(file ente.File, hotDC string) {
+func (c *FileController) safeAlert(msg string) {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Errorf("Panic caught: %s, stack: %s", r, string(debug.Stack()))
 		}
 	}()
+	c.DiscordController.Notify(msg)
+}
+
+func (c *FileController) onExistingObjectsReplaced(ctx *gin.Context, file ente.File, hotDC string) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Errorf("Panic caught: %s, stack: %s", r, string(debug.Stack()))
+		}
+	}()
+	client := network.GetClientInfo(ctx)
+	reqId := requestid.Get(ctx)
+	revertErr := false
+	go c.safeAlert(fmt.Sprintf(`Client %s replaced an existing object req_id %s for (file: %s, thum %s)`, client, reqId, file.File.ObjectKey, file.Thumbnail.ObjectKey))
 	log.Error("Replaced existing object, reverting", file)
+	logger := log.WithFields(log.Fields{
+		"req_id":    reqId,
+		"owner_id":  file.OwnerID,
+		"file_obj":  file.File.ObjectKey,
+		"fileSize":  file.File.Size,
+		"thumb_obj": file.Thumbnail.ObjectKey,
+		"thumbSize": file.Thumbnail.Size,
+	})
+
 	err := c.rollbackObject(file.File.ObjectKey)
 	if err != nil {
-		log.Error("Error rolling back latest file from hot storage", err)
+		logger.Error("Error rolling back latest file from hot storage", err)
+		revertErr = true
 	}
 	err = c.rollbackObject(file.Thumbnail.ObjectKey)
 	if err != nil {
 		log.Error("Error rolling back latest thumbnail from hot storage", err)
+		revertErr = true
 	}
-	c.FileRepo.ResetNeedsReplication(file, hotDC)
+	resetErr := c.FileRepo.ResetNeedsReplication(file, hotDC)
+	if resetErr != nil {
+		log.Error("Error resetting needs replication", resetErr)
+		revertErr = true
+	}
+	if revertErr {
+		go c.safeAlert(fmt.Sprintf(`☠️ Client %s replaced an existing object req_id %s for user %d, failed to revert`, client, reqId, file.OwnerID))
+	} else {
+		go c.safeAlert(fmt.Sprintf(`🔄 Client %s replaced an existing object req_id %s for user %d, reverted`, client, reqId, file.OwnerID))
+	}
 }
 
 func (c *FileController) rollbackObject(objectKey string) error {

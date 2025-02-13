@@ -38,6 +38,17 @@ func GetUserInput(label string) (string, error) {
 	return input, nil
 }
 
+func WaitForEnter(prompt string) error {
+	fmt.Println(prompt)
+	// Create a new reader from standard input.
+	reader := bufio.NewReader(os.Stdin)
+	_, err := reader.ReadString('\n')
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func GetAppType() api.App {
 	for {
 		app, err := GetUserInput("Enter app type (default: photos)")
@@ -203,10 +214,11 @@ func ValidateDirForWrite(dir string) (bool, error) {
 		return false, fmt.Errorf("write permission denied: %v", err)
 	}
 
-	// Delete temp file
-	defer os.Remove(tempFile.Name())
-	if err != nil {
-		return false, err
+	if tempErr := tempFile.Close(); tempErr != nil {
+		return false, fmt.Errorf("failed to close temp file: %v", tempErr)
+	}
+	if tempErr := os.Remove(tempFile.Name()); tempErr != nil {
+		return false, fmt.Errorf("failed to remove temp file: %v", tempErr)
 	}
 
 	return true, nil

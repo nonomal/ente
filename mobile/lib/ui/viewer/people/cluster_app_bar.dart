@@ -6,16 +6,17 @@ import 'package:logging/logging.dart';
 import 'package:photos/core/configuration.dart';
 import 'package:photos/core/event_bus.dart';
 import "package:photos/db/files_db.dart";
+import 'package:photos/db/ml/base.dart';
+import "package:photos/db/ml/db.dart";
 import "package:photos/events/people_changed_event.dart";
 import 'package:photos/events/subscription_purchased_event.dart';
-import "package:photos/face/db.dart";
-import "package:photos/face/model/person.dart";
 import "package:photos/models/file/file.dart";
 import 'package:photos/models/gallery_type.dart';
+import "package:photos/models/ml/face/person.dart";
 import 'package:photos/models/selected_files.dart';
 import 'package:photos/services/collections_service.dart';
-import "package:photos/services/machine_learning/face_ml/face_ml_result.dart";
 import "package:photos/services/machine_learning/face_ml/feedback/cluster_feedback.dart";
+import "package:photos/services/machine_learning/ml_result.dart";
 import 'package:photos/ui/actions/collection/collection_sharing_actions.dart';
 import "package:photos/ui/common/popup_item.dart";
 import "package:photos/ui/viewer/people/cluster_breakup_page.dart";
@@ -26,7 +27,7 @@ class ClusterAppBar extends StatefulWidget {
   final GalleryType type;
   final String? title;
   final SelectedFiles selectedFiles;
-  final int clusterID;
+  final String clusterID;
   final PersonEntity? person;
 
   const ClusterAppBar(
@@ -35,8 +36,8 @@ class ClusterAppBar extends StatefulWidget {
     this.selectedFiles,
     this.clusterID, {
     this.person,
-    Key? key,
-  }) : super(key: key);
+    super.key,
+  });
 
   @override
   State<ClusterAppBar> createState() => _AppBarWidgetState();
@@ -58,6 +59,7 @@ class _AppBarWidgetState extends State<ClusterAppBar> {
   final GlobalKey shareButtonKey = GlobalKey();
   bool isQuickLink = false;
   late GalleryType galleryType;
+  late final IMLDataDB mlDataDB = MLDataDB.instance;
 
   @override
   void initState() {
@@ -95,6 +97,9 @@ class _AppBarWidgetState extends State<ClusterAppBar> {
         overflow: TextOverflow.ellipsis,
       ),
       actions: _getDefaultActions(context),
+      scrolledUnderElevation: 4,
+      shadowColor: Colors.black.withOpacity(0.15),
+      surfaceTintColor: Colors.transparent,
     );
   }
 
@@ -179,7 +184,7 @@ class _AppBarWidgetState extends State<ClusterAppBar> {
   Future<void> _breakUpCluster(BuildContext context) async {
     bool userConfirmed = false;
     List<EnteFile> biggestClusterFiles = [];
-    int biggestClusterID = -1;
+    String biggestClusterID = '';
     await showChoiceDialog(
       context,
       title: "Does this grouping contain multiple people?",
@@ -190,22 +195,21 @@ class _AppBarWidgetState extends State<ClusterAppBar> {
         try {
           final breakupResult = await ClusterFeedbackService.instance
               .breakUpCluster(widget.clusterID);
-          final Map<int, List<String>> newClusterIDToFaceIDs =
+          final Map<String, List<String>> newClusterIDToFaceIDs =
               breakupResult.newClusterIdToFaceIds;
-          final Map<String, int> newFaceIdToClusterID =
+          final Map<String, String> newFaceIdToClusterID =
               breakupResult.newFaceIdToCluster;
 
           // Update to delete the old clusters and save the new clusters
-          await FaceMLDataDB.instance.deleteClusterSummary(widget.clusterID);
-          await FaceMLDataDB.instance
+          await mlDataDB.deleteClusterSummary(widget.clusterID);
+          await MLDataDB.instance
               .clusterSummaryUpdate(breakupResult.newClusterSummaries);
-          await FaceMLDataDB.instance
-              .updateFaceIdToClusterId(newFaceIdToClusterID);
+          await mlDataDB.updateFaceIdToClusterId(newFaceIdToClusterID);
 
           // Find the biggest cluster
-          biggestClusterID = -1;
+          biggestClusterID = '';
           int biggestClusterSize = 0;
-          for (final MapEntry<int, List<String>> clusterToFaces
+          for (final MapEntry<String, List<String>> clusterToFaces
               in newClusterIDToFaceIDs.entries) {
             if (clusterToFaces.value.length > biggestClusterSize) {
               biggestClusterSize = clusterToFaces.value.length;
@@ -214,10 +218,10 @@ class _AppBarWidgetState extends State<ClusterAppBar> {
           }
           // Get the files for the biggest new cluster
           final biggestClusterFileIDs = newClusterIDToFaceIDs[biggestClusterID]!
-              .map((e) => getFileIdFromFaceId(e))
+              .map((e) => getFileIdFromFaceId<int>(e))
               .toList();
           biggestClusterFiles = await FilesDB.instance
-              .getFilesFromIDs(
+              .getFileIDToFileFromIDs(
                 biggestClusterFileIDs,
               )
               .then((mapping) => mapping.values.toList());
@@ -253,15 +257,15 @@ class _AppBarWidgetState extends State<ClusterAppBar> {
     final breakupResult =
         await ClusterFeedbackService.instance.breakUpCluster(widget.clusterID);
 
-    final Map<int, List<String>> newClusterIDToFaceIDs =
+    final Map<String, List<String>> newClusterIDToFaceIDs =
         breakupResult.newClusterIdToFaceIds;
 
     final allFileIDs = newClusterIDToFaceIDs.values
         .expand((e) => e)
-        .map((e) => getFileIdFromFaceId(e))
+        .map((e) => getFileIdFromFaceId<int>(e))
         .toList();
 
-    final fileIDtoFile = await FilesDB.instance.getFilesFromIDs(
+    final fileIDtoFile = await FilesDB.instance.getFileIDToFileFromIDs(
       allFileIDs,
     );
 
@@ -269,7 +273,7 @@ class _AppBarWidgetState extends State<ClusterAppBar> {
       (key, value) => MapEntry(
         key,
         value
-            .map((faceId) => fileIDtoFile[getFileIdFromFaceId(faceId)]!)
+            .map((faceId) => fileIDtoFile[getFileIdFromFaceId<int>(faceId)]!)
             .toList(),
       ),
     );

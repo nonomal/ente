@@ -29,7 +29,7 @@ func Nanoseconds() int64 {
 }
 
 // MicrosecondsAfterHours returns the time in micro seconds after noOfHours
-func MicrosecondsAfterHours(noOfHours int8) int64 {
+func MicrosecondsAfterHours(noOfHours int32) int64 {
 	return Microseconds() + int64(noOfHours)*MicroSecondsInOneHour
 }
 
@@ -46,6 +46,15 @@ func MicrosecondBeforeDays(noOfDays int) int64 {
 // NDaysFromNow returns the time n days from now in micro seconds
 func NDaysFromNow(n int) int64 {
 	return time.Now().AddDate(0, 0, n).UnixNano() / 1000
+}
+
+func NYearsFromNow(n int) int64 {
+	return time.Now().AddDate(n, 0, 0).UnixNano() / 1000
+}
+
+// NMinFromNow returns the time n min from now in micro seconds
+func NMinFromNow(n int64) int64 {
+	return time.Now().Add(time.Minute*time.Duration(n)).UnixNano() / 1000
 }
 
 // MicrosecondsBeforeMinutes returns the unix time n minutes before now in micro seconds

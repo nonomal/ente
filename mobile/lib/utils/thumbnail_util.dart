@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:collection';
 import 'dart:io';
-import 'dart:typed_data';
+import "dart:typed_data";
 
 import 'package:dio/dio.dart';
 import 'package:logging/logging.dart';
@@ -12,8 +12,9 @@ import 'package:photos/core/constants.dart';
 import 'package:photos/core/errors.dart';
 import 'package:photos/core/network/network.dart';
 import 'package:photos/models/file/file.dart';
+import "package:photos/services/collections_service.dart";
 import 'package:photos/utils/crypto_util.dart';
-import 'package:photos/utils/file_download_util.dart';
+import "package:photos/utils/file_key.dart";
 import 'package:photos/utils/file_uploader_util.dart';
 import 'package:photos/utils/file_util.dart';
 
@@ -47,6 +48,7 @@ Future<Uint8List?> getThumbnail(EnteFile file) async {
 Future<File?> getThumbnailForUploadedFile(EnteFile file) async {
   final cachedThumbnail = cachedThumbnailPath(file);
   if (await cachedThumbnail.exists()) {
+    _logger.info("Thumbnail already exists for ${file.uploadedFileID}");
     return cachedThumbnail;
   }
   final thumbnail = await getThumbnail(file);
@@ -55,8 +57,10 @@ Future<File?> getThumbnailForUploadedFile(EnteFile file) async {
     if (!await cachedThumbnail.exists()) {
       await cachedThumbnail.writeAsBytes(thumbnail, flush: true);
     }
+    _logger.info("Thumbnail obtained for ${file.uploadedFileID}");
     return cachedThumbnail;
   }
+  _logger.severe("Failed to get thumbnail for ${file.uploadedFileID}");
   return null;
 }
 
@@ -157,17 +161,38 @@ Future<void> _downloadAndDecryptThumbnail(FileDownloadItem item) async {
   final file = item.file;
   Uint8List encryptedThumbnail;
   try {
-    encryptedThumbnail = (await NetworkClient.instance.getDio().get(
-              file.thumbnailUrl,
-              options: Options(
-                headers: {"X-Auth-Token": Configuration.instance.getToken()},
-                responseType: ResponseType.bytes,
-              ),
-              cancelToken: item.cancelToken,
-            ))
-        .data;
+    if (CollectionsService.instance.isSharedPublicLink(file.collectionID!)) {
+      final authToken = await CollectionsService.instance
+          .getSharedPublicAlbumToken(file.collectionID!);
+      final authJWTToken = await CollectionsService.instance
+          .getSharedPublicAlbumTokenJWT(file.collectionID!);
+
+      final headers = {
+        "X-Auth-Access-Token": authToken,
+        if (authJWTToken != null) "X-Auth-Access-Token-JWT": authJWTToken,
+      };
+
+      encryptedThumbnail = (await NetworkClient.instance.getDio().get(
+                file.pubPreviewUrl,
+                options: Options(
+                  headers: headers,
+                  responseType: ResponseType.bytes,
+                ),
+              ))
+          .data;
+    } else {
+      encryptedThumbnail = (await NetworkClient.instance.getDio().get(
+                file.thumbnailUrl,
+                options: Options(
+                  headers: {"X-Auth-Token": Configuration.instance.getToken()},
+                  responseType: ResponseType.bytes,
+                ),
+                cancelToken: item.cancelToken,
+              ))
+          .data;
+    }
   } catch (e) {
-    if (e is DioError && CancelToken.isCancel(e)) {
+    if (e is DioException && CancelToken.isCancel(e)) {
       return;
     }
     rethrow;

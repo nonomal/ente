@@ -28,14 +28,15 @@ class ViewQrPage extends StatelessWidget {
             child: Column(
               children: [
                 QrImageView(
-                  data: code!.rawData,
+                  data: code!.rawData
+                      .replaceAll('algorithm=Algorithm.', 'algorithm='),
                   eyeStyle: QrEyeStyle(
                     eyeShape: QrEyeShape.square,
-                    color: Theme.of(context).colorScheme.onBackground,
+                    color: Theme.of(context).colorScheme.onSurface,
                   ),
                   dataModuleStyle: QrDataModuleStyle(
                     dataModuleShape: QrDataModuleShape.square,
-                    color: Theme.of(context).colorScheme.onBackground,
+                    color: Theme.of(context).colorScheme.onSurface,
                   ),
                   version: QrVersions.auto,
                   size: qrSize,

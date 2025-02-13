@@ -1,6 +1,3 @@
-import Page_ from "@ente/accounts/pages/change-email";
-import { useAppContext } from "./_app";
-
-const Page = () => <Page_ appContext={useAppContext()} />;
+import Page from "@/accounts/pages/change-email";
 
 export default Page;

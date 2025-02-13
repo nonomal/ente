@@ -12,11 +12,15 @@ import 'package:photos/models/file/file.dart';
 import 'package:photos/models/file_load_result.dart';
 import 'package:photos/models/selected_files.dart';
 import 'package:photos/ui/common/loading_widget.dart';
+import "package:photos/ui/viewer/gallery/component/group/type.dart";
 import "package:photos/ui/viewer/gallery/component/multiple_groups_gallery_view.dart";
 import 'package:photos/ui/viewer/gallery/empty_state.dart';
 import "package:photos/ui/viewer/gallery/state/gallery_context_state.dart";
-import 'package:photos/utils/date_time_util.dart';
+import "package:photos/ui/viewer/gallery/state/gallery_files_inherited_widget.dart";
+import "package:photos/ui/viewer/gallery/state/inherited_search_filter_data.dart";
+import "package:photos/utils/date_time_util.dart";
 import "package:photos/utils/debouncer.dart";
+import "package:photos/utils/hierarchical_search_util.dart";
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
 typedef GalleryLoader = Future<FileLoadResult> Function(
@@ -52,13 +56,16 @@ class Gallery extends StatefulWidget {
   final bool limitSelectionToOne;
 
   /// When true, the gallery will be in selection mode. Tapping on any item
-  /// will select even when no other item is selected.
+  /// will select it even when no other item is selected. This is only used to
+  /// make selection possible without long pressing. If a gallery has selected
+  /// files, it's not necessary that this will be true.
   final bool inSelectionMode;
   final bool showSelectAllByDefault;
   final bool isScrollablePositionedList;
 
   // add a Function variable to get sort value in bool
   final SortAscFn? sortAsyncFn;
+  final GroupType groupType;
 
   const Gallery({
     required this.asyncLoader,
@@ -73,6 +80,7 @@ class Gallery extends StatefulWidget {
     this.emptyState = const EmptyState(),
     this.scrollBottomSafeArea = 120.0,
     this.albumName = '',
+    this.groupType = GroupType.day,
     this.enableFileGrouping = true,
     this.loadingWidget = const EnteLoadingWidget(),
     this.disableScroll = false,
@@ -83,8 +91,8 @@ class Gallery extends StatefulWidget {
     this.isScrollablePositionedList = true,
     this.reloadDebounceTime = const Duration(milliseconds: 500),
     this.reloadDebounceExecutionInterval = const Duration(seconds: 2),
-    Key? key,
-  }) : super(key: key);
+    super.key,
+  });
 
   @override
   State<Gallery> createState() {
@@ -105,35 +113,76 @@ class GalleryState extends State<Gallery> {
   final _forceReloadEventSubscriptions = <StreamSubscription<Event>>[];
   late String _logTag;
   bool _sortOrderAsc = false;
+  List<EnteFile> _allGalleryFiles = [];
 
   @override
   void initState() {
     super.initState();
+    // end the tag with x to avoid `.` in the end if logger name
     _logTag =
-        "Gallery_${widget.tagPrefix}${kDebugMode ? "_" + widget.albumName! : ""}";
+        "Gallery_${widget.tagPrefix}${kDebugMode ? "_" + widget.albumName! : ""}_x";
     _logger = Logger(_logTag);
     _logger.finest("init Gallery");
     _debouncer = Debouncer(
       widget.reloadDebounceTime,
       executionInterval: widget.reloadDebounceExecutionInterval,
+      leading: true,
     );
     _sortOrderAsc = widget.sortAsyncFn != null ? widget.sortAsyncFn!() : false;
     _itemScroller = ItemScrollController();
     if (widget.reloadEvent != null) {
       _reloadEventSubscription = widget.reloadEvent!.listen((event) async {
+        bool shouldReloadFromDB = true;
+        if (event.source == 'uploadCompleted') {
+          final Map<int, EnteFile> genIDToUploadedFiles = {};
+          for (int i = 0; i < event.updatedFiles.length; i++) {
+            if (event.updatedFiles[i].generatedID == null) {
+              shouldReloadFromDB = true;
+              break;
+            }
+            genIDToUploadedFiles[event.updatedFiles[i].generatedID!] =
+                event.updatedFiles[i];
+          }
+          for (int i = 0; i < _allGalleryFiles.length; i++) {
+            final file = _allGalleryFiles[i];
+            if (file.generatedID == null) {
+              continue;
+            }
+            final updateFile = genIDToUploadedFiles[file.generatedID!];
+            if (updateFile != null &&
+                updateFile.localID == file.localID &&
+                areFromSameDay(
+                  updateFile.creationTime ?? 0,
+                  file.creationTime ?? 0,
+                )) {
+              _allGalleryFiles[i] = updateFile;
+              genIDToUploadedFiles.remove(file.generatedID!);
+            }
+          }
+          shouldReloadFromDB = genIDToUploadedFiles.isNotEmpty;
+        }
+        if (!shouldReloadFromDB) {
+          final bool hasCalledSetState = _onFilesLoaded(_allGalleryFiles);
+          _logger.info(
+            'Skip softRefresh from DB, processed updated in memory with setStateReload $hasCalledSetState',
+          );
+          return;
+        }
+
         _debouncer.run(() async {
           // In soft refresh, setState is called for entire gallery only when
           // number of child change
           _logger.finest("Soft refresh all files on ${event.reason} ");
           final result = await _loadFiles();
-          final bool hasReloaded = _onFilesLoaded(result.files);
-          if (hasReloaded && kDebugMode) {
+          final bool hasTriggeredSetState = _onFilesLoaded(result.files);
+          if (hasTriggeredSetState && kDebugMode) {
             _logger.finest(
               "Reloaded gallery on soft refresh all files on ${event.reason}",
             );
           }
-
-          setState(() {});
+          if (!hasTriggeredSetState && mounted) {
+            setState(() {});
+          }
         });
       });
     }
@@ -182,6 +231,31 @@ class GalleryState extends State<Gallery> {
     }
   }
 
+  // group files into multiple groups and returns `true` if it resulted in a
+  // gallery reload
+  bool _onFilesLoaded(List<EnteFile> files) {
+    _allGalleryFiles = files;
+
+    final updatedGroupedFiles =
+        widget.enableFileGrouping && widget.groupType.timeGrouping()
+            ? _groupBasedOnTime(files)
+            : _genericGroupForPerf(files);
+    if (currentGroupedFiles.length != updatedGroupedFiles.length ||
+        currentGroupedFiles.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _hasLoadedFiles = true;
+          currentGroupedFiles = updatedGroupedFiles;
+        });
+        return true;
+      }
+      return false;
+    } else {
+      currentGroupedFiles = updatedGroupedFiles;
+      return false;
+    }
+  }
+
   Future<FileLoadResult> _loadFiles({int? limit}) async {
     _logger.info("Loading ${limit ?? "all"} files");
     try {
@@ -201,30 +275,24 @@ class GalleryState extends State<Gallery> {
             duration.inMilliseconds.toString() +
             "ms",
       );
+
+      /// To curate filters when a gallery is first opened.
+      if (!result.hasMore) {
+        final searchFilterDataProvider =
+            InheritedSearchFilterData.maybeOf(context)
+                ?.searchFilterDataProvider;
+        if (searchFilterDataProvider != null &&
+            !searchFilterDataProvider.isSearchingNotifier.value) {
+          unawaited(
+            curateFilters(searchFilterDataProvider, result.files, context),
+          );
+        }
+      }
+
       return result;
     } catch (e, s) {
       _logger.severe("failed to load files", e, s);
       rethrow;
-    }
-  }
-
-  // group files into multiple groups and returns `true` if it resulted in a
-  // gallery reload
-  bool _onFilesLoaded(List<EnteFile> files) {
-    final updatedGroupedFiles =
-        widget.enableFileGrouping ? _groupFiles(files) : [files];
-    if (currentGroupedFiles.length != updatedGroupedFiles.length ||
-        currentGroupedFiles.isEmpty) {
-      if (mounted) {
-        setState(() {
-          _hasLoadedFiles = true;
-          currentGroupedFiles = updatedGroupedFiles;
-        });
-      }
-      return true;
-    } else {
-      currentGroupedFiles = updatedGroupedFiles;
-      return false;
     }
   }
 
@@ -235,19 +303,21 @@ class GalleryState extends State<Gallery> {
     for (final subscription in _forceReloadEventSubscriptions) {
       subscription.cancel();
     }
-    _debouncer.cancelDebounce();
+    _debouncer.cancelDebounceTimer();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     _logger.finest("Building Gallery  ${widget.tagPrefix}");
+    GalleryFilesState.of(context).setGalleryFiles = _allGalleryFiles;
     if (!_hasLoadedFiles) {
       return widget.loadingWidget;
     }
     return GalleryContextState(
       sortOrderAsc: _sortOrderAsc,
       inSelectionMode: widget.inSelectionMode,
+      type: widget.groupType,
       child: MultipleGroupsGalleryView(
         itemScroller: _itemScroller,
         groupedFiles: currentGroupedFiles,
@@ -258,28 +328,64 @@ class GalleryState extends State<Gallery> {
         tagPrefix: widget.tagPrefix,
         scrollBottomSafeArea: widget.scrollBottomSafeArea,
         limitSelectionToOne: widget.limitSelectionToOne,
-        enableFileGrouping: widget.enableFileGrouping,
+        enableFileGrouping:
+            widget.enableFileGrouping && widget.groupType.showGroupHeader(),
         logTag: _logTag,
         logger: _logger,
         reloadEvent: widget.reloadEvent,
         header: widget.header,
         footer: widget.footer,
         selectedFiles: widget.selectedFiles,
-        showSelectAllByDefault: widget.showSelectAllByDefault,
+        showSelectAllByDefault:
+            widget.showSelectAllByDefault && widget.groupType.showGroupHeader(),
         isScrollablePositionedList: widget.isScrollablePositionedList,
       ),
     );
   }
 
-  List<List<EnteFile>> _groupFiles(List<EnteFile> files) {
+  // create groups of 200 files for performance
+  List<List<EnteFile>> _genericGroupForPerf(List<EnteFile> files) {
+    if (widget.groupType == GroupType.size) {
+      // sort files by fileSize on the bases of _sortOrderAsc
+      files.sort((a, b) {
+        if (_sortOrderAsc) {
+          return a.fileSize!.compareTo(b.fileSize!);
+        } else {
+          return b.fileSize!.compareTo(a.fileSize!);
+        }
+      });
+    }
+    // todo:(neeraj) Stick to default group behaviour for magicSearch and editLocationGallery
+    // In case of Magic search, we need to hide the scrollbar title (can be done
+    // by specifying none as groupType)
+    if (widget.groupType != GroupType.size) {
+      return [files];
+    }
+
+    final List<List<EnteFile>> resultGroupedFiles = [];
+    List<EnteFile> singleGroupFile = [];
+    const int groupSize = 40;
+    for (int i = 0; i < files.length; i += 1) {
+      singleGroupFile.add(files[i]);
+      if (singleGroupFile.length == groupSize) {
+        resultGroupedFiles.add(singleGroupFile);
+        singleGroupFile = [];
+      }
+    }
+    if (singleGroupFile.isNotEmpty) {
+      resultGroupedFiles.add(singleGroupFile);
+    }
+    _logger.info('Grouped files into ${resultGroupedFiles.length} groups');
+    return resultGroupedFiles;
+  }
+
+  List<List<EnteFile>> _groupBasedOnTime(List<EnteFile> files) {
     List<EnteFile> dailyFiles = [];
+
     final List<List<EnteFile>> resultGroupedFiles = [];
     for (int index = 0; index < files.length; index++) {
       if (index > 0 &&
-          !areFromSameDay(
-            files[index - 1].creationTime!,
-            files[index].creationTime!,
-          )) {
+          !widget.groupType.areFromSameGroup(files[index - 1], files[index])) {
         resultGroupedFiles.add(dailyFiles);
         dailyFiles = [];
       }

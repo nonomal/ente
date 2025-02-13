@@ -1,5 +1,13 @@
-import { FluidContainer } from "@ente/shared/components/Container";
-import { SelectionBar } from "@ente/shared/components/Navbar/SelectionBar";
+import { SpacedRow } from "@/base/components/containers";
+import type { Collection } from "@/media/collection";
+import type { CollectionSelectorAttributes } from "@/new/photos/components/CollectionSelector";
+import type { GalleryBarMode } from "@/new/photos/components/gallery/reducer";
+import {
+    ALL_SECTION,
+    ARCHIVE_SECTION,
+    TRASH_SECTION,
+} from "@/new/photos/services/collection";
+import { useAppContext } from "@/new/photos/types/context";
 import ClockIcon from "@mui/icons-material/AccessTime";
 import AddIcon from "@mui/icons-material/Add";
 import ArchiveIcon from "@mui/icons-material/ArchiveOutlined";
@@ -7,29 +15,16 @@ import MoveIcon from "@mui/icons-material/ArrowForward";
 import CloseIcon from "@mui/icons-material/Close";
 import DeleteIcon from "@mui/icons-material/Delete";
 import DownloadIcon from "@mui/icons-material/Download";
+import FavoriteBorderIcon from "@mui/icons-material/FavoriteBorderRounded";
 import RemoveIcon from "@mui/icons-material/RemoveCircleOutline";
 import RestoreIcon from "@mui/icons-material/Restore";
 import UnArchiveIcon from "@mui/icons-material/Unarchive";
-import VisibilityOffOutlined from "@mui/icons-material/VisibilityOffOutlined";
-import VisibilityOutlined from "@mui/icons-material/VisibilityOutlined";
-import { Box, IconButton, Stack, Tooltip } from "@mui/material";
-import {
-    ALL_SECTION,
-    ARCHIVE_SECTION,
-    TRASH_SECTION,
-} from "constants/collection";
+import VisibilityOffOutlinedIcon from "@mui/icons-material/VisibilityOffOutlined";
+import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
+import { IconButton, Tooltip, Typography } from "@mui/material";
 import { t } from "i18next";
-import { AppContext } from "pages/_app";
-import { useContext } from "react";
-import { Collection } from "types/collection";
-import {
-    CollectionSelectorIntent,
-    SetCollectionSelectorAttributes,
-} from "types/gallery";
 import { COLLECTION_OPS_TYPE } from "utils/collection";
 import { FILE_OPS_TYPE } from "utils/file";
-import { formatNumber } from "utils/number/format";
-import { getTrashFilesMessage } from "utils/ui";
 
 interface Props {
     handleCollectionOps: (
@@ -37,10 +32,19 @@ interface Props {
     ) => (...args: any[]) => void;
     handleFileOps: (opsType: FILE_OPS_TYPE) => (...args: any[]) => void;
     showCreateCollectionModal: (opsType: COLLECTION_OPS_TYPE) => () => void;
-    setCollectionSelectorAttributes: SetCollectionSelectorAttributes;
+    /**
+     * Callback to open a dialog where the user can choose a collection.
+     *
+     * The reason for opening the dialog and other properties are passed as the
+     * {@link attributes} argument.
+     */
+    onOpenCollectionSelector: (
+        attributes: CollectionSelectorAttributes,
+    ) => void;
     count: number;
     ownCount: number;
     clearSelection: () => void;
+    barMode?: GalleryBarMode;
     activeCollectionID: number;
     isFavoriteCollection: boolean;
     isUncategorizedCollection: boolean;
@@ -52,13 +56,14 @@ interface Props {
 
 const SelectedFileOptions = ({
     showCreateCollectionModal,
-    setCollectionSelectorAttributes,
+    onOpenCollectionSelector,
     handleCollectionOps,
     handleFileOps,
     selectedCollection,
     count,
     ownCount,
     clearSelection,
+    barMode,
     activeCollectionID,
     isFavoriteCollection,
     isUncategorizedCollection,
@@ -66,290 +71,335 @@ const SelectedFileOptions = ({
     isInSearchMode,
     isInHiddenSection,
 }: Props) => {
-    const { setDialogMessage, isMobile } = useContext(AppContext);
+    const { showMiniDialog } = useAppContext();
+
+    const peopleMode = barMode == "people";
+
     const addToCollection = () =>
-        setCollectionSelectorAttributes({
-            callback: handleCollectionOps(COLLECTION_OPS_TYPE.ADD),
-            showNextModal: showCreateCollectionModal(COLLECTION_OPS_TYPE.ADD),
-            intent: CollectionSelectorIntent.add,
-            fromCollection: !isInSearchMode ? activeCollectionID : undefined,
+        onOpenCollectionSelector({
+            action: "add",
+            onSelectCollection: handleCollectionOps(COLLECTION_OPS_TYPE.ADD),
+            onCreateCollection: showCreateCollectionModal(
+                COLLECTION_OPS_TYPE.ADD,
+            ),
+            relatedCollectionID:
+                isInSearchMode || peopleMode ? undefined : activeCollectionID,
         });
 
     const trashHandler = () =>
-        setDialogMessage(
-            getTrashFilesMessage(handleFileOps(FILE_OPS_TYPE.TRASH)),
-        );
+        showMiniDialog({
+            title: t("trash_files_title"),
+            message: t("trash_files_message"),
+            continue: {
+                text: t("move_to_trash"),
+                color: "critical",
+                action: handleFileOps(FILE_OPS_TYPE.TRASH),
+            },
+        });
 
     const permanentlyDeleteHandler = () =>
-        setDialogMessage({
-            title: t("DELETE_FILES_TITLE"),
-            content: t("DELETE_FILES_MESSAGE"),
-            proceed: {
+        showMiniDialog({
+            title: t("delete_files_title"),
+            message: t("delete_files_message"),
+            continue: {
+                text: t("delete"),
+                color: "critical",
                 action: handleFileOps(FILE_OPS_TYPE.DELETE_PERMANENTLY),
-                text: t("DELETE"),
-                variant: "critical",
             },
-            close: { text: t("CANCEL") },
         });
 
     const restoreHandler = () =>
-        setCollectionSelectorAttributes({
-            callback: handleCollectionOps(COLLECTION_OPS_TYPE.RESTORE),
-            showNextModal: showCreateCollectionModal(
+        onOpenCollectionSelector({
+            action: "restore",
+            onSelectCollection: handleCollectionOps(
                 COLLECTION_OPS_TYPE.RESTORE,
             ),
-            intent: CollectionSelectorIntent.restore,
+            onCreateCollection: showCreateCollectionModal(
+                COLLECTION_OPS_TYPE.RESTORE,
+            ),
         });
 
     const removeFromCollectionHandler = () => {
         if (ownCount === count) {
-            setDialogMessage({
-                title: t("REMOVE_FROM_COLLECTION"),
-                content: t("CONFIRM_SELF_REMOVE_MESSAGE"),
+            showMiniDialog({
+                title: t("remove_from_album"),
+                message: t("confirm_remove_message"),
+                continue: {
+                    text: t("yes_remove"),
+                    color: "primary",
 
-                proceed: {
                     action: () =>
                         handleCollectionOps(COLLECTION_OPS_TYPE.REMOVE)(
                             selectedCollection,
                         ),
-                    text: t("YES_REMOVE"),
-                    variant: "primary",
                 },
-                close: { text: t("CANCEL") },
             });
         } else {
-            setDialogMessage({
-                title: t("REMOVE_FROM_COLLECTION"),
-                content: t("CONFIRM_SELF_AND_OTHER_REMOVE_MESSAGE"),
-
-                proceed: {
+            showMiniDialog({
+                title: t("remove_from_album"),
+                message: t("confirm_remove_incl_others_message"),
+                continue: {
+                    text: t("yes_remove"),
+                    color: "critical",
                     action: () =>
                         handleCollectionOps(COLLECTION_OPS_TYPE.REMOVE)(
                             selectedCollection,
                         ),
-                    text: t("YES_REMOVE"),
-                    variant: "critical",
                 },
-                close: { text: t("CANCEL") },
             });
         }
     };
 
     const moveToCollection = () => {
-        setCollectionSelectorAttributes({
-            callback: handleCollectionOps(COLLECTION_OPS_TYPE.MOVE),
-            showNextModal: showCreateCollectionModal(COLLECTION_OPS_TYPE.MOVE),
-            intent: CollectionSelectorIntent.move,
-            fromCollection: !isInSearchMode ? activeCollectionID : undefined,
+        onOpenCollectionSelector({
+            action: "move",
+            onSelectCollection: handleCollectionOps(COLLECTION_OPS_TYPE.MOVE),
+            onCreateCollection: showCreateCollectionModal(
+                COLLECTION_OPS_TYPE.MOVE,
+            ),
+            relatedCollectionID:
+                isInSearchMode || peopleMode ? undefined : activeCollectionID,
         });
     };
 
     const unhideToCollection = () => {
-        setCollectionSelectorAttributes({
-            callback: handleCollectionOps(COLLECTION_OPS_TYPE.UNHIDE),
-            showNextModal: showCreateCollectionModal(
+        onOpenCollectionSelector({
+            action: "unhide",
+            onSelectCollection: handleCollectionOps(COLLECTION_OPS_TYPE.UNHIDE),
+            onCreateCollection: showCreateCollectionModal(
                 COLLECTION_OPS_TYPE.UNHIDE,
             ),
-            intent: CollectionSelectorIntent.unhide,
         });
     };
 
     return (
-        <SelectionBar isMobile={isMobile}>
-            <FluidContainer>
-                <IconButton onClick={clearSelection}>
-                    <CloseIcon />
-                </IconButton>
-                <Box ml={1.5}>
-                    {formatNumber(count)} {t("SELECTED")}{" "}
-                    {ownCount !== count &&
-                        `(${formatNumber(ownCount)} ${t("YOURS")})`}
-                </Box>
-            </FluidContainer>
-            <Stack spacing={2} direction="row" mr={2}>
-                {isInSearchMode ? (
-                    <>
-                        <Tooltip title={t("FIX_CREATION_TIME")}>
-                            <IconButton
-                                onClick={handleFileOps(FILE_OPS_TYPE.FIX_TIME)}
-                            >
-                                <ClockIcon />
-                            </IconButton>
-                        </Tooltip>
-                        <Tooltip title={t("DOWNLOAD")}>
-                            <IconButton
-                                onClick={handleFileOps(FILE_OPS_TYPE.DOWNLOAD)}
-                            >
-                                <DownloadIcon />
-                            </IconButton>
-                        </Tooltip>
-                        <Tooltip title={t("ADD")}>
-                            <IconButton onClick={addToCollection}>
-                                <AddIcon />
-                            </IconButton>
-                        </Tooltip>
-                        <Tooltip title={t("ARCHIVE")}>
-                            <IconButton
-                                onClick={handleFileOps(FILE_OPS_TYPE.ARCHIVE)}
-                            >
-                                <ArchiveIcon />
-                            </IconButton>
-                        </Tooltip>
-                        <Tooltip title={t("HIDE")}>
-                            <IconButton
-                                onClick={handleFileOps(FILE_OPS_TYPE.HIDE)}
-                            >
-                                <VisibilityOffOutlined />
-                            </IconButton>
-                        </Tooltip>
-                        <Tooltip title={t("DELETE")}>
-                            <IconButton onClick={trashHandler}>
-                                <DeleteIcon />
-                            </IconButton>
-                        </Tooltip>
-                    </>
-                ) : activeCollectionID === TRASH_SECTION ? (
-                    <>
-                        <Tooltip title={t("RESTORE")}>
-                            <IconButton onClick={restoreHandler}>
-                                <RestoreIcon />
-                            </IconButton>
-                        </Tooltip>
-                        <Tooltip title={t("DELETE_PERMANENTLY")}>
-                            <IconButton onClick={permanentlyDeleteHandler}>
-                                <DeleteIcon />
-                            </IconButton>
-                        </Tooltip>
-                    </>
-                ) : isUncategorizedCollection ? (
-                    <>
-                        <Tooltip title={t("DOWNLOAD")}>
-                            <IconButton
-                                onClick={handleFileOps(FILE_OPS_TYPE.DOWNLOAD)}
-                            >
-                                <DownloadIcon />
-                            </IconButton>
-                        </Tooltip>
-                        <Tooltip title={t("MOVE")}>
-                            <IconButton onClick={moveToCollection}>
-                                <MoveIcon />
-                            </IconButton>
-                        </Tooltip>
-                        <Tooltip title={t("DELETE")}>
-                            <IconButton onClick={trashHandler}>
-                                <DeleteIcon />
-                            </IconButton>
-                        </Tooltip>
-                    </>
-                ) : isIncomingSharedCollection ? (
-                    <Tooltip title={t("DOWNLOAD")}>
+        <SpacedRow sx={{ flex: 1, gap: 1, flexWrap: "wrap" }}>
+            <IconButton onClick={clearSelection}>
+                <CloseIcon />
+            </IconButton>
+            <Typography sx={{ mr: "auto" }}>
+                {ownCount === count
+                    ? t("selected_count", { selected: count })
+                    : t("selected_and_yours_count", {
+                          selected: count,
+                          yours: ownCount,
+                      })}
+            </Typography>
+
+            {isInSearchMode ? (
+                <>
+                    <Tooltip title={t("fix_creation_time")}>
+                        <IconButton
+                            onClick={handleFileOps(FILE_OPS_TYPE.FIX_TIME)}
+                        >
+                            <ClockIcon />
+                        </IconButton>
+                    </Tooltip>
+                    <Tooltip title={t("download")}>
                         <IconButton
                             onClick={handleFileOps(FILE_OPS_TYPE.DOWNLOAD)}
                         >
                             <DownloadIcon />
                         </IconButton>
                     </Tooltip>
-                ) : isInHiddenSection ? (
-                    <>
-                        <Tooltip title={t("UNHIDE")}>
-                            <IconButton onClick={unhideToCollection}>
-                                <VisibilityOutlined />
-                            </IconButton>
-                        </Tooltip>
-                        <Tooltip title={t("DOWNLOAD")}>
-                            <IconButton
-                                onClick={handleFileOps(FILE_OPS_TYPE.DOWNLOAD)}
-                            >
-                                <DownloadIcon />
-                            </IconButton>
-                        </Tooltip>
+                    <Tooltip title={t("add")}>
+                        <IconButton onClick={addToCollection}>
+                            <AddIcon />
+                        </IconButton>
+                    </Tooltip>
+                    <Tooltip title={t("archive")}>
+                        <IconButton
+                            onClick={handleFileOps(FILE_OPS_TYPE.ARCHIVE)}
+                        >
+                            <ArchiveIcon />
+                        </IconButton>
+                    </Tooltip>
+                    <Tooltip title={t("hide")}>
+                        <IconButton onClick={handleFileOps(FILE_OPS_TYPE.HIDE)}>
+                            <VisibilityOffOutlinedIcon />
+                        </IconButton>
+                    </Tooltip>
+                    <Tooltip title={t("delete")}>
+                        <IconButton onClick={trashHandler}>
+                            <DeleteIcon />
+                        </IconButton>
+                    </Tooltip>
+                </>
+            ) : peopleMode ? (
+                <>
+                    <Tooltip title={t("download")}>
+                        <IconButton
+                            onClick={handleFileOps(FILE_OPS_TYPE.DOWNLOAD)}
+                        >
+                            <DownloadIcon />
+                        </IconButton>
+                    </Tooltip>
+                    <Tooltip title={t("add")}>
+                        <IconButton onClick={addToCollection}>
+                            <AddIcon />
+                        </IconButton>
+                    </Tooltip>
+                    <Tooltip title={t("archive")}>
+                        <IconButton
+                            onClick={handleFileOps(FILE_OPS_TYPE.ARCHIVE)}
+                        >
+                            <ArchiveIcon />
+                        </IconButton>
+                    </Tooltip>
+                    <Tooltip title={t("hide")}>
+                        <IconButton onClick={handleFileOps(FILE_OPS_TYPE.HIDE)}>
+                            <VisibilityOffOutlinedIcon />
+                        </IconButton>
+                    </Tooltip>
+                    <Tooltip title={t("delete")}>
+                        <IconButton onClick={trashHandler}>
+                            <DeleteIcon />
+                        </IconButton>
+                    </Tooltip>
+                </>
+            ) : activeCollectionID === TRASH_SECTION ? (
+                <>
+                    <Tooltip title={t("restore")}>
+                        <IconButton onClick={restoreHandler}>
+                            <RestoreIcon />
+                        </IconButton>
+                    </Tooltip>
+                    <Tooltip title={t("delete_permanently")}>
+                        <IconButton onClick={permanentlyDeleteHandler}>
+                            <DeleteIcon />
+                        </IconButton>
+                    </Tooltip>
+                </>
+            ) : isUncategorizedCollection ? (
+                <>
+                    <Tooltip title={t("download")}>
+                        <IconButton
+                            onClick={handleFileOps(FILE_OPS_TYPE.DOWNLOAD)}
+                        >
+                            <DownloadIcon />
+                        </IconButton>
+                    </Tooltip>
+                    <Tooltip title={t("move")}>
+                        <IconButton onClick={moveToCollection}>
+                            <MoveIcon />
+                        </IconButton>
+                    </Tooltip>
+                    <Tooltip title={t("delete")}>
+                        <IconButton onClick={trashHandler}>
+                            <DeleteIcon />
+                        </IconButton>
+                    </Tooltip>
+                </>
+            ) : isIncomingSharedCollection ? (
+                <Tooltip title={t("download")}>
+                    <IconButton onClick={handleFileOps(FILE_OPS_TYPE.DOWNLOAD)}>
+                        <DownloadIcon />
+                    </IconButton>
+                </Tooltip>
+            ) : isInHiddenSection ? (
+                <>
+                    <Tooltip title={t("unhide")}>
+                        <IconButton onClick={unhideToCollection}>
+                            <VisibilityOutlinedIcon />
+                        </IconButton>
+                    </Tooltip>
+                    <Tooltip title={t("download")}>
+                        <IconButton
+                            onClick={handleFileOps(FILE_OPS_TYPE.DOWNLOAD)}
+                        >
+                            <DownloadIcon />
+                        </IconButton>
+                    </Tooltip>
 
-                        <Tooltip title={t("DELETE")}>
-                            <IconButton onClick={trashHandler}>
-                                <DeleteIcon />
-                            </IconButton>
-                        </Tooltip>
-                    </>
-                ) : (
-                    <>
-                        <Tooltip title={t("FIX_CREATION_TIME")}>
-                            <IconButton
-                                onClick={handleFileOps(FILE_OPS_TYPE.FIX_TIME)}
-                            >
-                                <ClockIcon />
-                            </IconButton>
-                        </Tooltip>
-                        <Tooltip title={t("DOWNLOAD")}>
-                            <IconButton
-                                onClick={handleFileOps(FILE_OPS_TYPE.DOWNLOAD)}
-                            >
-                                <DownloadIcon />
-                            </IconButton>
-                        </Tooltip>
-                        <Tooltip title={t("ADD")}>
-                            <IconButton onClick={addToCollection}>
-                                <AddIcon />
-                            </IconButton>
-                        </Tooltip>
-                        {activeCollectionID === ARCHIVE_SECTION && (
-                            <Tooltip title={t("UNARCHIVE")}>
+                    <Tooltip title={t("delete")}>
+                        <IconButton onClick={trashHandler}>
+                            <DeleteIcon />
+                        </IconButton>
+                    </Tooltip>
+                </>
+            ) : (
+                <>
+                    <Tooltip title={t("fix_creation_time")}>
+                        <IconButton
+                            onClick={handleFileOps(FILE_OPS_TYPE.FIX_TIME)}
+                        >
+                            <ClockIcon />
+                        </IconButton>
+                    </Tooltip>
+                    {!isFavoriteCollection &&
+                        activeCollectionID != ARCHIVE_SECTION && (
+                            <Tooltip title={t("favorite")}>
                                 <IconButton
                                     onClick={handleFileOps(
-                                        FILE_OPS_TYPE.UNARCHIVE,
+                                        FILE_OPS_TYPE.SET_FAVORITE,
                                     )}
                                 >
-                                    <UnArchiveIcon />
+                                    <FavoriteBorderIcon />
                                 </IconButton>
                             </Tooltip>
                         )}
-                        {activeCollectionID === ALL_SECTION && (
-                            <Tooltip title={t("ARCHIVE")}>
-                                <IconButton
-                                    onClick={handleFileOps(
-                                        FILE_OPS_TYPE.ARCHIVE,
-                                    )}
-                                >
-                                    <ArchiveIcon />
-                                </IconButton>
-                            </Tooltip>
-                        )}
-                        {activeCollectionID !== ALL_SECTION &&
-                            activeCollectionID !== ARCHIVE_SECTION &&
-                            !isFavoriteCollection && (
-                                <>
-                                    <Tooltip title={t("MOVE")}>
-                                        <IconButton onClick={moveToCollection}>
-                                            <MoveIcon />
-                                        </IconButton>
-                                    </Tooltip>
-
-                                    <Tooltip title={t("REMOVE")}>
-                                        <IconButton
-                                            onClick={
-                                                removeFromCollectionHandler
-                                            }
-                                        >
-                                            <RemoveIcon />
-                                        </IconButton>
-                                    </Tooltip>
-                                </>
-                            )}
-                        <Tooltip title={t("HIDE")}>
+                    <Tooltip title={t("download")}>
+                        <IconButton
+                            onClick={handleFileOps(FILE_OPS_TYPE.DOWNLOAD)}
+                        >
+                            <DownloadIcon />
+                        </IconButton>
+                    </Tooltip>
+                    <Tooltip title={t("add")}>
+                        <IconButton onClick={addToCollection}>
+                            <AddIcon />
+                        </IconButton>
+                    </Tooltip>
+                    {activeCollectionID === ARCHIVE_SECTION && (
+                        <Tooltip title={t("unarchive")}>
                             <IconButton
-                                onClick={handleFileOps(FILE_OPS_TYPE.HIDE)}
+                                onClick={handleFileOps(FILE_OPS_TYPE.UNARCHIVE)}
                             >
-                                <VisibilityOffOutlined />
+                                <UnArchiveIcon />
                             </IconButton>
                         </Tooltip>
-                        <Tooltip title={t("DELETE")}>
-                            <IconButton onClick={trashHandler}>
-                                <DeleteIcon />
+                    )}
+                    {activeCollectionID === ALL_SECTION && (
+                        <Tooltip title={t("archive")}>
+                            <IconButton
+                                onClick={handleFileOps(FILE_OPS_TYPE.ARCHIVE)}
+                            >
+                                <ArchiveIcon />
                             </IconButton>
                         </Tooltip>
-                    </>
-                )}
-            </Stack>
-        </SelectionBar>
+                    )}
+                    {activeCollectionID !== ALL_SECTION &&
+                        activeCollectionID !== ARCHIVE_SECTION &&
+                        !isFavoriteCollection && (
+                            <>
+                                <Tooltip title={t("move")}>
+                                    <IconButton onClick={moveToCollection}>
+                                        <MoveIcon />
+                                    </IconButton>
+                                </Tooltip>
+
+                                <Tooltip title={t("remove")}>
+                                    <IconButton
+                                        onClick={removeFromCollectionHandler}
+                                    >
+                                        <RemoveIcon />
+                                    </IconButton>
+                                </Tooltip>
+                            </>
+                        )}
+                    <Tooltip title={t("hide")}>
+                        <IconButton onClick={handleFileOps(FILE_OPS_TYPE.HIDE)}>
+                            <VisibilityOffOutlinedIcon />
+                        </IconButton>
+                    </Tooltip>
+                    <Tooltip title={t("delete")}>
+                        <IconButton onClick={trashHandler}>
+                            <DeleteIcon />
+                        </IconButton>
+                    </Tooltip>
+                </>
+            )}
+        </SpacedRow>
     );
 };
 

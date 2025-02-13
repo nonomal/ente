@@ -1,180 +1,162 @@
-import { ensure } from "@/utils/ensure";
+import { sessionExpiredDialogAttributes } from "@/accounts/components/utils/dialog";
+import { stashRedirect } from "@/accounts/services/redirect";
+import { EnteLogo } from "@/base/components/EnteLogo";
+import { LoadingIndicator } from "@/base/components/loaders";
+import { FocusVisibleButton } from "@/base/components/mui/FocusVisibleButton";
+import { NavbarBase } from "@/base/components/Navbar";
 import {
-    HorizontalFlex,
-    VerticallyCentered,
-} from "@ente/shared/components/Container";
-import type { DialogBoxAttributesV2 } from "@ente/shared/components/DialogBoxV2/types";
-import { EnteLogo } from "@ente/shared/components/EnteLogo";
-import EnteSpinner from "@ente/shared/components/EnteSpinner";
-import NavbarBase from "@ente/shared/components/Navbar/base";
-import OverflowMenu from "@ente/shared/components/OverflowMenu/menu";
-import { OverflowMenuOption } from "@ente/shared/components/OverflowMenu/option";
+    OverflowMenu,
+    OverflowMenuOption,
+} from "@/base/components/OverflowMenu";
+import { isHTTP401Error } from "@/base/http";
+import log from "@/base/log";
+import { masterKeyFromSessionIfLoggedIn } from "@/base/session-store";
 import { AUTH_PAGES as PAGES } from "@ente/shared/constants/pages";
-import { ApiError, CustomError } from "@ente/shared/error";
-import InMemoryStore, { MS_KEYS } from "@ente/shared/storage/InMemoryStore";
-import LogoutOutlined from "@mui/icons-material/LogoutOutlined";
-import MoreHoriz from "@mui/icons-material/MoreHoriz";
-import { Button, ButtonBase, Snackbar, TextField, styled } from "@mui/material";
+import LogoutOutlinedIcon from "@mui/icons-material/LogoutOutlined";
+import {
+    Box,
+    Button,
+    ButtonBase,
+    Snackbar,
+    Stack,
+    TextField,
+    Typography,
+    useTheme,
+} from "@mui/material";
 import { t } from "i18next";
 import { useRouter } from "next/router";
-import { AppContext } from "pages/_app";
-import React, { useContext, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { generateOTPs, type Code } from "services/code";
 import { getAuthCodes } from "services/remote";
+import { useAppContext } from "types/context";
 
 const Page: React.FC = () => {
-    const { logout, showNavBar, setDialogBoxAttributesV2 } = ensure(
-        useContext(AppContext),
-    );
+    const { logout, showMiniDialog } = useAppContext();
+
     const router = useRouter();
     const [codes, setCodes] = useState<Code[]>([]);
     const [hasFetched, setHasFetched] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
 
-    const showSessionExpiredDialog = () =>
-        setDialogBoxAttributesV2(sessionExpiredDialogAttributes(logout));
-
     useEffect(() => {
         const fetchCodes = async () => {
+            const masterKey = await masterKeyFromSessionIfLoggedIn();
+            if (!masterKey) {
+                stashRedirect(PAGES.AUTH);
+                void router.push("/");
+                return;
+            }
+
             try {
-                setCodes(await getAuthCodes());
+                setCodes(await getAuthCodes(masterKey));
             } catch (e) {
-                if (
-                    e instanceof Error &&
-                    e.message == CustomError.KEY_MISSING
-                ) {
-                    InMemoryStore.set(MS_KEYS.REDIRECT_URL, PAGES.AUTH);
-                    router.push(PAGES.ROOT);
-                } else if (e instanceof ApiError && e.httpStatusCode == 401) {
-                    // We get back a 401 Unauthorized if the token is not valid.
-                    showSessionExpiredDialog();
-                } else {
-                    // do not log errors
-                }
+                log.error("Failed to fetch codes", e);
+                if (isHTTP401Error(e))
+                    showMiniDialog(sessionExpiredDialogAttributes(logout));
             }
             setHasFetched(true);
         };
         void fetchCodes();
-        showNavBar(false);
-    }, []);
+    }, [router, showMiniDialog, logout]);
 
     const lcSearch = searchTerm.toLowerCase();
     const filteredCodes = codes.filter(
         (code) =>
-            code.issuer?.toLowerCase().includes(lcSearch) ||
+            code.issuer.toLowerCase().includes(lcSearch) ||
             code.account?.toLowerCase().includes(lcSearch),
     );
 
     if (!hasFetched) {
-        return (
-            <VerticallyCentered>
-                <EnteSpinner />
-            </VerticallyCentered>
-        );
+        return <LoadingIndicator />;
     }
 
     return (
-        <>
+        <Stack>
             <AuthNavbar />
-            <div
-                style={{
+            <Stack
+                sx={{
                     maxWidth: "800px",
-                    display: "flex",
-                    flexDirection: "column",
                     alignItems: "center",
                     justifyContent: "center",
                     margin: "0 auto",
+                    mt: 1,
                 }}
             >
-                <div style={{ marginBottom: "1rem" }} />
                 {filteredCodes.length == 0 && searchTerm.length == 0 ? (
                     <></>
                 ) : (
                     <TextField
                         id="search"
                         name="search"
-                        label={t("SEARCH")}
+                        label={t("search")}
                         onChange={(e) => setSearchTerm(e.target.value)}
                         variant="filled"
-                        style={{ width: "350px" }}
+                        sx={{ minWidth: "min(340px, 80svw)" }}
                         value={searchTerm}
                         autoFocus
                     />
                 )}
 
-                <div style={{ marginBottom: "1rem" }} />
-                <div
-                    style={{
+                <Box
+                    sx={{
                         display: "flex",
                         flexDirection: "row",
                         flexWrap: "wrap",
                         justifyContent: "center",
+                        mt: 3,
                     }}
                 >
                     {filteredCodes.length == 0 ? (
-                        <div
-                            style={{
-                                alignItems: "center",
-                                display: "flex",
-                                textAlign: "center",
-                                marginTop: "32px",
-                            }}
-                        >
+                        <Box sx={{ textAlign: "center", mt: 4 }}>
                             {searchTerm.length > 0 ? (
-                                <p>{t("NO_RESULTS")}</p>
+                                <Typography>{t("no_results")}</Typography>
                             ) : (
-                                <></>
+                                <Typography sx={{ color: "text.muted" }}>
+                                    {t("no_codes_added_yet")}
+                                </Typography>
                             )}
-                        </div>
+                        </Box>
                     ) : (
                         filteredCodes.map((code) => (
                             <CodeDisplay key={code.id} code={code} />
                         ))
                     )}
-                </div>
+                </Box>
                 <Footer />
-            </div>
-        </>
+            </Stack>
+        </Stack>
     );
 };
 
 export default Page;
 
-const sessionExpiredDialogAttributes = (
-    action: () => void,
-): DialogBoxAttributesV2 => ({
-    title: t("SESSION_EXPIRED"),
-    content: t("SESSION_EXPIRED_MESSAGE"),
-    nonClosable: true,
-    proceed: {
-        text: t("LOGIN"),
-        action,
-        variant: "accent",
-    },
-});
-
 const AuthNavbar: React.FC = () => {
-    const { isMobile, logout } = ensure(useContext(AppContext));
+    const { logout } = useAppContext();
 
     return (
-        <NavbarBase isMobile={isMobile}>
-            <HorizontalFlex flex={1} justifyContent={"center"}>
-                <EnteLogo />
-            </HorizontalFlex>
-            <HorizontalFlex position={"absolute"} right="24px">
-                <OverflowMenu
-                    ariaControls={"auth-options"}
-                    triggerButtonIcon={<MoreHoriz />}
-                >
+        <NavbarBase
+            sx={{
+                position: "sticky",
+                top: 0,
+                left: 0,
+                mb: 2,
+                zIndex: 1,
+                backgroundColor: "backdrop.muted",
+                backdropFilter: "blur(7px)",
+            }}
+        >
+            <EnteLogo />
+            <Box sx={{ position: "absolute", right: "24px" }}>
+                <OverflowMenu ariaID="auth-options">
                     <OverflowMenuOption
                         color="critical"
-                        startIcon={<LogoutOutlined />}
+                        startIcon={<LogoutOutlinedIcon />}
                         onClick={logout}
                     >
-                        {t("LOGOUT")}
+                        {t("logout")}
                     </OverflowMenuOption>
                 </OverflowMenu>
-            </HorizontalFlex>
+            </Box>
         </NavbarBase>
     );
 };
@@ -187,9 +169,9 @@ const CodeDisplay: React.FC<CodeDisplayProps> = ({ code }) => {
     const [otp, setOTP] = useState("");
     const [nextOTP, setNextOTP] = useState("");
     const [errorMessage, setErrorMessage] = useState("");
-    const [hasCopied, setHasCopied] = useState(false);
+    const [openCopied, setOpenCopied] = useState(false);
 
-    const regen = () => {
+    const regen = useCallback(() => {
         try {
             const [m, n] = generateOTPs(code);
             setOTP(m);
@@ -197,13 +179,13 @@ const CodeDisplay: React.FC<CodeDisplayProps> = ({ code }) => {
         } catch (e) {
             setErrorMessage(e instanceof Error ? e.message : String(e));
         }
-    };
+    }, [code]);
 
-    const copyCode = () => {
-        navigator.clipboard.writeText(otp);
-        setHasCopied(true);
-        setTimeout(() => setHasCopied(false), 2000);
-    };
+    const copyCode = () =>
+        void navigator.clipboard.writeText(otp).then(() => {
+            setOpenCopied(true);
+            setTimeout(() => setOpenCopied(false), 2000);
+        });
 
     useEffect(() => {
         // Generate to set the initial otp and nextOTP on component mount.
@@ -223,19 +205,29 @@ const CodeDisplay: React.FC<CodeDisplayProps> = ({ code }) => {
         }, timeToNextCode);
 
         return () => interval && clearInterval(interval);
-    }, [code]);
+    }, [code, regen]);
 
     return (
-        <div style={{ padding: "8px" }}>
+        <Box sx={{ p: 1 }}>
             {errorMessage ? (
                 <UnparseableCode {...{ code, errorMessage }} />
             ) : (
                 <ButtonBase component="div" onClick={copyCode}>
                     <OTPDisplay {...{ code, otp, nextOTP }} />
-                    <Snackbar open={hasCopied} message={t("COPIED")} />
+                    <Snackbar
+                        open={openCopied}
+                        message={t("copied")}
+                        ContentProps={{
+                            sx: (theme) => ({
+                                backgroundColor: theme.vars.palette.fill.faint,
+                                color: theme.vars.palette.primary.main,
+                                backdropFilter: "blur(10px)",
+                            }),
+                        }}
+                    />
                 </ButtonBase>
             )}
-        </div>
+        </Box>
     );
 };
 
@@ -247,106 +239,56 @@ interface OTPDisplayProps {
 
 const OTPDisplay: React.FC<OTPDisplayProps> = ({ code, otp, nextOTP }) => {
     return (
-        <div
-            style={{
-                backgroundColor: "rgba(40, 40, 40, 0.6)",
+        <Box
+            sx={(theme) => ({
+                backgroundColor: theme.vars.palette.background.elevatedPaper,
                 borderRadius: "4px",
                 overflow: "hidden",
-            }}
+            })}
         >
             <CodeValidityBar code={code} />
-            <div
-                style={{
+            <Stack
+                direction="row"
+                sx={{
                     padding: "12px 20px 0px 20px",
-                    display: "flex",
-                    alignItems: "flex-start",
-                    minWidth: "320px",
+                    minWidth: "min(360px, 80svw)",
                     minHeight: "120px",
                     justifyContent: "space-between",
                 }}
             >
-                <div
-                    style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        alignItems: "flex-start",
-                        minWidth: "200px",
-                    }}
-                >
-                    <p
-                        style={{
-                            fontWeight: "bold",
-                            margin: "0px",
-                            fontSize: "14px",
-                            textAlign: "left",
-                        }}
-                    >
-                        {code.issuer ?? ""}
-                    </p>
-                    <p
-                        style={{
-                            marginTop: "0px",
-                            marginBottom: "8px",
-                            textAlign: "left",
-                            fontSize: "12px",
-                            maxWidth: "200px",
-                            minHeight: "16px",
-                            color: "grey",
-                        }}
+                <Stack style={{ gap: "4px", alignItems: "flex-start" }}>
+                    <Typography variant="small">{code.issuer}</Typography>
+                    <Typography
+                        variant="mini"
+                        sx={{ color: "text.faint", flex: 1, minHeight: "16px" }}
                     >
                         {code.account ?? ""}
-                    </p>
-                    <p
-                        style={{
-                            margin: "0px",
-                            marginBottom: "1rem",
-                            fontSize: "24px",
-                            fontWeight: "bold",
-                            textAlign: "left",
-                        }}
-                    >
+                    </Typography>
+                    <Typography variant="h3" sx={{ mb: "20px" }}>
                         {otp}
-                    </p>
-                </div>
-                <div style={{ flex: 1 }} />
-                <div
-                    style={{
-                        display: "flex",
-                        flexDirection: "column",
+                    </Typography>
+                </Stack>
+                <Stack
+                    sx={{
+                        justifyContent: "flex-end",
                         alignItems: "flex-end",
-                        minWidth: "120px",
                         textAlign: "right",
-                        marginTop: "auto",
-                        marginBottom: "1rem",
+                        mb: "1rem",
+                        gap: "2px",
                     }}
                 >
-                    <p
-                        style={{
-                            fontWeight: "bold",
-                            marginBottom: "0px",
-                            fontSize: "10px",
-                            marginTop: "auto",
-                            textAlign: "right",
-                            color: "grey",
-                        }}
-                    >
-                        {t("AUTH_NEXT")}
-                    </p>
-                    <p
-                        style={{
-                            fontSize: "14px",
-                            fontWeight: "bold",
-                            marginBottom: "0px",
-                            marginTop: "auto",
-                            textAlign: "right",
-                            color: "grey",
-                        }}
+                    <Typography variant="mini" sx={{ color: "text.faint" }}>
+                        {t("auth_next")}
+                    </Typography>
+                    <Typography
+                        variant="small"
+                        sx={{ fontWeight: "medium", color: "text.muted" }}
                     >
                         {nextOTP}
-                    </p>
-                </div>
-            </div>
-        </div>
+                    </Typography>
+                </Stack>
+            </Stack>
+        </Box>
     );
 };
 
@@ -355,6 +297,7 @@ interface CodeValidityBarProps {
 }
 
 const CodeValidityBar: React.FC<CodeValidityBarProps> = ({ code }) => {
+    const theme = useTheme();
     const [progress, setProgress] = useState(code.type == "hotp" ? 1 : 0);
 
     useEffect(() => {
@@ -370,15 +313,17 @@ const CodeValidityBar: React.FC<CodeValidityBarProps> = ({ code }) => {
         return () => ticker && clearInterval(ticker);
     }, [code]);
 
-    const color = progress > 0.4 ? "green" : "orange";
+    const progressColor =
+        progress > 0.4
+            ? theme.vars.palette.accent.light
+            : theme.vars.palette.warning.main;
 
     return (
         <div
             style={{
-                borderTopLeftRadius: "3px",
                 width: `${progress * 100}%`,
                 height: "3px",
-                backgroundColor: color,
+                backgroundColor: progressColor,
             }}
         />
     );
@@ -393,44 +338,57 @@ const UnparseableCode: React.FC<UnparseableCodeProps> = ({
     code,
     errorMessage,
 }) => {
-    const [showRawData, setShowRawData] = useState(false);
+    const [openCopied, setOpenCopied] = useState(false);
+
+    const copyRawData = () =>
+        void navigator.clipboard.writeText(code.uriString).then(() => {
+            setOpenCopied(true);
+            setTimeout(() => setOpenCopied(false), 2000);
+        });
 
     return (
-        <div className="code-info">
-            <div>{code.issuer}</div>
-            <div>{errorMessage}</div>
-            <div>
-                {showRawData ? (
-                    <div onClick={() => setShowRawData(false)}>
-                        {code.uriString}
-                    </div>
-                ) : (
-                    <div onClick={() => setShowRawData(true)}>Show rawData</div>
-                )}
-            </div>
-        </div>
+        <Stack
+            sx={(theme) => ({
+                backgroundColor: theme.vars.palette.background.elevatedPaper,
+                borderRadius: "4px",
+                overflow: "hidden",
+                p: "16px 20px",
+                minWidth: "min(360px, 80svw)",
+                maxWidth: "360px",
+                minHeight: "120px",
+                gap: "4px",
+            })}
+        >
+            <Typography variant="small">{code.issuer}</Typography>
+            <Typography
+                variant="small"
+                sx={{
+                    color: "critical.main",
+                    flex: 1,
+                    minHeight: "16px",
+                    mb: 2,
+                }}
+            >
+                {errorMessage}
+            </Typography>
+            <FocusVisibleButton color="secondary" onClick={copyRawData}>
+                Copy raw data
+            </FocusVisibleButton>
+            <Snackbar open={openCopied} message={t("copied")} />
+        </Stack>
     );
 };
 
 const Footer: React.FC = () => {
     return (
-        <Footer_>
-            <p>{t("AUTH_DOWNLOAD_MOBILE_APP")}</p>
+        <Stack sx={{ my: "4rem", gap: 2, alignItems: "center" }}>
+            <Typography>{t("auth_download_mobile_app")}</Typography>
             <a
                 href="https://github.com/ente-io/ente/tree/main/auth#-download"
                 download
             >
-                <Button color="accent">{t("DOWNLOAD")}</Button>
+                <Button color="accent">{t("download")}</Button>
             </a>
-        </Footer_>
+        </Stack>
     );
 };
-
-const Footer_ = styled("div")`
-    margin-block-start: 2rem;
-    margin-block-end: 4rem;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-`;

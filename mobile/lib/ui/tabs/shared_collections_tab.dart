@@ -1,4 +1,5 @@
 import 'dart:async';
+import "dart:math";
 
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
@@ -12,19 +13,18 @@ import 'package:photos/services/collections_service.dart';
 import "package:photos/ui/collections/album/row_item.dart";
 import "package:photos/ui/collections/collection_list_page.dart";
 import 'package:photos/ui/common/loading_widget.dart';
-import "package:photos/ui/components/buttons/button_widget.dart";
 import "package:photos/ui/components/buttons/icon_button_widget.dart";
-import "package:photos/ui/components/divider_widget.dart";
-import "package:photos/ui/components/models/button_type.dart";
 import 'package:photos/ui/tabs/section_title.dart';
+import "package:photos/ui/tabs/shared/all_quick_links_page.dart";
 import "package:photos/ui/tabs/shared/empty_state.dart";
 import "package:photos/ui/tabs/shared/quick_link_album_item.dart";
+import "package:photos/ui/viewer/gallery/collect_photos_card_widget.dart";
+import "package:photos/ui/viewer/gallery/collection_page.dart";
 import "package:photos/utils/debouncer.dart";
 import "package:photos/utils/navigation_util.dart";
-import "package:photos/utils/share_util.dart";
 
 class SharedCollectionsTab extends StatefulWidget {
-  const SharedCollectionsTab({Key? key}) : super(key: key);
+  const SharedCollectionsTab({super.key});
 
   @override
   State<SharedCollectionsTab> createState() => _SharedCollectionsTabState();
@@ -40,7 +40,9 @@ class _SharedCollectionsTabState extends State<SharedCollectionsTab>
   final _debouncer = Debouncer(
     const Duration(seconds: 2),
     executionInterval: const Duration(seconds: 5),
+    leading: true,
   );
+  static const heroTagPrefix = "outgoing_collection";
 
   @override
   void initState() {
@@ -80,7 +82,7 @@ class _SharedCollectionsTabState extends State<SharedCollectionsTab>
               (snapshot.data?.outgoing.length ?? 0) == 0) {
             return const Center(child: SharedEmptyStateWidget());
           }
-          return _getSharedCollectionsGallery(snapshot.data!);
+          return SafeArea(child: _getSharedCollectionsGallery(snapshot.data!));
         } else if (snapshot.hasError) {
           _logger.severe(
             "critical: failed to load share gallery",
@@ -97,7 +99,9 @@ class _SharedCollectionsTabState extends State<SharedCollectionsTab>
 
   Widget _getSharedCollectionsGallery(SharedCollections collections) {
     const maxThumbnailWidth = 160.0;
-    final bool hasQuickLinks = collections.quickLinks.isNotEmpty;
+    const maxQuickLinks = 4;
+    final numberOfQuickLinks = collections.quickLinks.length;
+    const quickLinkTitleHeroTag = "quick_link_title";
     final SectionTitle sharedWithYou =
         SectionTitle(title: S.of(context).sharedWithYou);
     final SectionTitle sharedByYou =
@@ -216,55 +220,79 @@ class _SharedCollectionsTabState extends State<SharedCollectionsTab>
                 ],
               ),
             ),
-            hasQuickLinks
+            numberOfQuickLinks > 0
                 ? Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8.0),
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 8.0,
+                    ),
                     child: Column(
                       children: [
                         SectionOptions(
-                          SectionTitle(title: S.of(context).quickLinks),
+                          Hero(
+                            tag: quickLinkTitleHeroTag,
+                            child: SectionTitle(
+                              title: S.of(context).quickLinks,
+                            ),
+                          ),
+                          trailingWidget: numberOfQuickLinks > maxQuickLinks
+                              ? IconButtonWidget(
+                                  icon: Icons.chevron_right,
+                                  iconButtonType: IconButtonType.secondary,
+                                  onTap: () {
+                                    unawaited(
+                                      routeToPage(
+                                        context,
+                                        AllQuickLinksPage(
+                                          titleHeroTag: quickLinkTitleHeroTag,
+                                          quickLinks: collections.quickLinks,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                )
+                              : null,
                         ),
                         const SizedBox(height: 2),
-                        ListView.builder(
+                        ListView.separated(
                           shrinkWrap: true,
-                          padding: const EdgeInsets.only(bottom: 12),
+                          padding: const EdgeInsets.only(
+                            bottom: 12,
+                            left: 12,
+                            right: 12,
+                          ),
                           physics: const NeverScrollableScrollPhysics(),
                           itemBuilder: (context, index) {
-                            return QuickLinkAlbumItem(
-                              c: collections.quickLinks[index],
+                            return GestureDetector(
+                              onTap: () async {
+                                final thumbnail = await CollectionsService
+                                    .instance
+                                    .getCover(collections.quickLinks[index]);
+                                final page = CollectionPage(
+                                  CollectionWithThumbnail(
+                                    collections.quickLinks[index],
+                                    thumbnail,
+                                  ),
+                                  tagPrefix: heroTagPrefix,
+                                );
+                                // ignore: unawaited_futures
+                                routeToPage(context, page);
+                              },
+                              child: QuickLinkAlbumItem(
+                                c: collections.quickLinks[index],
+                              ),
                             );
                           },
-                          itemCount: collections.quickLinks.length,
+                          separatorBuilder: (context, index) {
+                            return const SizedBox(height: 4);
+                          },
+                          itemCount: min(numberOfQuickLinks, maxQuickLinks),
                         ),
                       ],
                     ),
                   )
                 : const SizedBox.shrink(),
-            collections.incoming.isNotEmpty
-                ? Column(
-                    children: [
-                      const DividerWidget(dividerType: DividerType.bottomBar),
-                      const SizedBox(height: 32),
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
-                        child: ButtonWidget(
-                          buttonType:
-                              !hasQuickLinks && collections.outgoing.isEmpty
-                                  ? ButtonType.trailingIconSecondary
-                                  : ButtonType.trailingIconPrimary,
-                          labelText: S.of(context).inviteYourFriendsToEnte,
-                          icon: Icons.ios_share_outlined,
-                          onTap: () async {
-                            // ignore: unawaited_futures
-                            shareText(
-                              S.of(context).shareTextRecommendUsingEnte,
-                            );
-                          },
-                        ),
-                      ),
-                    ],
-                  )
-                : const SizedBox.shrink(),
+            const SizedBox(height: 4),
+            const CollectPhotosCardWidget(),
             const SizedBox(height: 32),
           ],
         ),
@@ -277,7 +305,7 @@ class _SharedCollectionsTabState extends State<SharedCollectionsTab>
     _localFilesSubscription.cancel();
     _collectionUpdatesSubscription.cancel();
     _loggedOutEvent.cancel();
-    _debouncer.cancelDebounce();
+    _debouncer.cancelDebounceTimer();
     super.dispose();
   }
 

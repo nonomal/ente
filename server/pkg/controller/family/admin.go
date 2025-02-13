@@ -57,7 +57,7 @@ func (c *Controller) CreateFamily(ctx context.Context, adminUserID int64) error 
 }
 
 // InviteMember invites a user to join the family plan of admin User
-func (c *Controller) InviteMember(ctx *gin.Context, adminUserID int64, email string) error {
+func (c *Controller) InviteMember(ctx *gin.Context, adminUserID int64, email string, storageLimit *int64) error {
 	err := c.BillingCtrl.IsActivePayingSubscriber(adminUserID)
 	if err != nil {
 		return stacktrace.Propagate(ente.ErrNoActiveSubscription, "you must be on a paid plan")
@@ -114,7 +114,7 @@ func (c *Controller) InviteMember(ctx *gin.Context, adminUserID int64, email str
 		return stacktrace.Propagate(err, "")
 	}
 
-	activeInviteToken, err := c.FamilyRepo.AddMemberInvite(ctx, adminUserID, potentialMemberUser.ID, inviteToken)
+	activeInviteToken, err := c.FamilyRepo.AddMemberInvite(ctx, adminUserID, potentialMemberUser.ID, inviteToken, storageLimit)
 	if err != nil {
 		return stacktrace.Propagate(err, "")
 	}
@@ -178,18 +178,65 @@ func (c *Controller) RevokeInvite(ctx context.Context, adminID int64, id uuid.UU
 }
 
 func (c *Controller) CloseFamily(ctx context.Context, adminID int64) error {
-	familyMembers, err := c.FamilyRepo.GetMembersWithStatus(adminID, repo.ActiveFamilyMemberStatus)
+	logger := logrus.WithField("adminID", adminID).WithField("operation", "CloseFamily")
+	err := c.removeMembers(ctx, adminID, logger)
 	if err != nil {
-		return stacktrace.Propagate(err, "")
-	}
-	if len(familyMembers) != 1 {
-		msg := fmt.Sprintf("can not close family with %d members", len(familyMembers))
-		return stacktrace.Propagate(ente.NewBadRequestWithMessage(msg), "")
+		return stacktrace.Propagate(err, "failed to remove members")
 	}
 	err = c.FamilyRepo.CloseFamily(ctx, adminID)
 	if err != nil {
 		return stacktrace.Propagate(err, "")
 	}
+	return nil
+}
+
+// ModifyMemberStorage allows admin user to update the storageLimit for a member in the family
+func (c *Controller) ModifyMemberStorage(ctx context.Context, actorUserID int64, id uuid.UUID, storageLimit *int64) error {
+	member, err := c.FamilyRepo.GetMemberById(ctx, id)
+	if err != nil {
+		return stacktrace.Propagate(err, "Couldn't fetch Family Member")
+	}
+
+	if member.AdminUserID != actorUserID {
+		return stacktrace.Propagate(ente.ErrPermissionDenied, "you do not have sufficient permission")
+	}
+
+	if member.IsAdmin {
+		return stacktrace.Propagate(ente.NewBadRequestWithMessage("can not limit admin storage"), "cannot modify admin storage limit")
+	}
+
+	if member.Status != ente.ACCEPTED && member.Status != ente.INVITED {
+		return stacktrace.Propagate(ente.ErrBadRequest, "user is not a part of family")
+	}
+
+	// gets admin subscription in order to get the size of total storage quota (including bonus)
+	if storageLimit != nil {
+		familyMembersData, err := c.FetchMembersForAdminID(ctx, member.AdminUserID)
+		if err != nil {
+			return stacktrace.Propagate(ente.ErrBadRequest, "couldn't get active subscription")
+		}
+		totalFamilyStorage := familyMembersData.Storage + familyMembersData.AdminBonus
+		if *storageLimit > totalFamilyStorage {
+			return stacktrace.Propagate(ente.ErrStorageLimitExceeded, "potential storage limit is more than subscription storage")
+		}
+
+		// Handle if the admin user tries reducing the storage Limit
+		// and the members Usage is more than the potential storage Limit
+		memberUsage, memUsageErr := c.UsageRepo.GetUsage(member.MemberUserID)
+		if memUsageErr != nil {
+			return stacktrace.Propagate(memUsageErr, "Couldn't find members storage usage")
+		}
+
+		if memberUsage > *storageLimit {
+			return stacktrace.Propagate(ente.NewBadRequestWithMessage("Failed to reduce storage"), "User's current usage is more")
+		}
+	}
+
+	modifyStorageErr := c.FamilyRepo.ModifyMemberStorage(ctx, actorUserID, member.ID, storageLimit)
+	if modifyStorageErr != nil {
+		return stacktrace.Propagate(modifyStorageErr, "Failed to modify members storage")
+	}
+
 	return nil
 }
 
@@ -220,18 +267,18 @@ func (c *Controller) sendNotification(ctx context.Context, adminUserID int64, me
 
 	if newStatus == ente.INVITED {
 		templateName = InviteTemplate
-		title = "You've been invited to join a family on ente!"
+		title = "You've been invited to join a family on Ente!"
 		emailTo = memberUser.Email
 		inlineImage["content"] = HappyHeaderImage
 	} else if newStatus == ente.REMOVED {
 		emailTo = memberUser.Email
 		templateName = RemovedTemplate
-		title = "You have been removed from the family account on ente"
+		title = "You have been removed from the family account on Ente"
 		inlineImage["content"] = SadHeaderImage
 	} else if newStatus == ente.LEFT {
 		emailTo = adminUser.Email
 		templateName = LeftTemplate
-		title = fmt.Sprintf("%s has left your family on ente", memberUser.Email)
+		title = fmt.Sprintf("%s has left your family on Ente", memberUser.Email)
 		inlineImage["content"] = SadHeaderImage
 	} else if newStatus == ente.ACCEPTED {
 		emailTo = adminUser.Email

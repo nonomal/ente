@@ -40,10 +40,22 @@ export const sidebar = [
                     },
                     { text: "Hidden photos", link: "/photos/features/hide" },
                     {
+                        text: "Legacy",
+                        link: "/photos/features/legacy/",
+                    },
+                    {
                         text: "Location tags",
                         link: "/photos/features/location-tags",
                     },
+                    {
+                        text: "Machine learning",
+                        link: "/photos/features/machine-learning",
+                    },
                     { text: "Map", link: "/photos/features/map" },
+                    {
+                        text: "Passkeys",
+                        link: "/photos/features/passkeys",
+                    },
                     {
                         text: "Public link",
                         link: "/photos/features/public-link",
@@ -101,9 +113,14 @@ export const sidebar = [
                 collapsed: true,
                 items: [
                     { text: "General", link: "/photos/faq/general" },
+                    { text: "Installation", link: "/photos/faq/installing" },
                     {
                         text: "Export",
                         link: "/photos/faq/export",
+                    },
+                    {
+                        text: "Metadata",
+                        link: "/photos/faq/metadata",
                     },
                     {
                         text: "Security and privacy",
@@ -116,6 +133,10 @@ export const sidebar = [
                     {
                         text: "Hide vs archive",
                         link: "/photos/faq/hidden-and-archive",
+                    },
+                    {
+                        text: "Machine Learning",
+                        link: "/photos/faq/machine-learning",
                     },
                 ],
             },
@@ -130,6 +151,18 @@ export const sidebar = [
                     {
                         text: "Files not uploading",
                         link: "/photos/troubleshooting/files-not-uploading",
+                    },
+                    {
+                        text: "Missing thumbnails",
+                        link: "/photos/troubleshooting/thumbnails",
+                    },
+                    {
+                        text: "Large uploads",
+                        link: "/photos/troubleshooting/large-uploads",
+                    },
+                    {
+                        text: "Network drives",
+                        link: "/photos/troubleshooting/nas",
                     },
                     {
                         text: "Sharing debug logs",
@@ -148,9 +181,14 @@ export const sidebar = [
                 collapsed: true,
                 items: [
                     { text: "General", link: "/auth/faq/" },
+                    { text: "Installation", link: "/auth/faq/installing" },
                     {
                         text: "Enteception",
                         link: "/auth/faq/enteception/",
+                    },
+                    {
+                        text: "Privacy disclosure",
+                        link: "/auth/faq/privacy-disclosure/",
                     },
                 ],
             },
@@ -168,8 +206,21 @@ export const sidebar = [
                         link: "/auth/migration-guides/steam/",
                     },
                     {
+                        text: "From others",
+                        link: "/auth/migration-guides/import",
+                    },
+                    {
                         text: "Exporting your data",
                         link: "/auth/migration-guides/export",
+                    },
+                ],
+            },
+            {
+                text: "Troubleshooting",
+                items: [
+                    {
+                        text: "Windows login",
+                        link: "/auth/troubleshooting/windows-login",
                     },
                 ],
             },
@@ -180,6 +231,10 @@ export const sidebar = [
         collapsed: true,
         items: [
             { text: "Getting started", link: "/self-hosting/" },
+            {
+                text: "System requirements",
+                link: "/self-hosting/guides/system-requirements",
+            },
             {
                 text: "Guides",
                 items: [
@@ -193,6 +248,26 @@ export const sidebar = [
                         link: "/self-hosting/guides/web-app",
                     },
                     {
+                        text: "Configuring S3",
+                        link: "/self-hosting/guides/configuring-s3",
+                    },
+                    {
+                        text: "Hosting Ente with external S3 (Community)",
+                        link: "/self-hosting/guides/external-s3",
+                    },
+                    {
+                        text: "DB migration",
+                        link: "/self-hosting/guides/db-migration",
+                    },
+                    {
+                        text: "Hosting Ente without Docker",
+                        link: "/self-hosting/guides/standalone-ente",
+                    },
+                    {
+                        text: "Configure CLI for Self Hosted Instance",
+                        link: "/self-hosting/guides/selfhost-cli",
+                    },
+                    {
                         text: "Administering your server",
                         link: "/self-hosting/guides/admin",
                     },
@@ -200,18 +275,6 @@ export const sidebar = [
                     {
                         text: "Mobile build",
                         link: "/self-hosting/guides/mobile-build",
-                    },
-                    {
-                        text: "System requirements",
-                        link: "/self-hosting/guides/system-requirements",
-                    },
-                    {
-                        text: "Configuring S3",
-                        link: "/self-hosting/guides/configuring-s3",
-                    },
-                    {
-                        text: "Using external S3",
-                        link: "/self-hosting/guides/external-s3",
                     },
                 ],
             },
@@ -227,6 +290,10 @@ export const sidebar = [
                         text: "Shared albums",
                         link: "/self-hosting/faq/sharing",
                     },
+                    {
+                        text: "Backups",
+                        link: "/self-hosting/faq/backup",
+                    },
                 ],
             },
             {
@@ -239,6 +306,10 @@ export const sidebar = [
                     {
                         text: "Yarn",
                         link: "/self-hosting/troubleshooting/yarn",
+                    },
+                    {
+                        text: "Ente CLI Secrets",
+                        link: "/self-hosting/troubleshooting/keyring",
                     },
                 ],
             },

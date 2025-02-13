@@ -1,12 +1,21 @@
+import "dart:async";
+import "dart:developer";
 import "dart:io";
 
 import "package:computer/computer.dart";
 import 'package:exif/exif.dart';
+import "package:ffmpeg_kit_flutter_full_gpl/ffprobe_kit.dart";
+import "package:ffmpeg_kit_flutter_full_gpl/media_information.dart";
+import "package:ffmpeg_kit_flutter_full_gpl/media_information_session.dart";
+import "package:flutter/foundation.dart";
 import 'package:intl/intl.dart';
 import 'package:logging/logging.dart';
+import "package:motion_photos/src/xmp_extractor.dart";
+import "package:photos/models/ffmpeg/ffprobe_props.dart";
 import 'package:photos/models/file/file.dart';
 import "package:photos/models/location/location.dart";
 import "package:photos/services/location_service.dart";
+import "package:photos/utils/ffprobe_util.dart";
 import 'package:photos/utils/file_util.dart';
 
 const kDateTimeOriginal = "EXIF DateTimeOriginal";
@@ -38,7 +47,7 @@ Future<Map<String, IfdTag>> getExif(EnteFile file) async {
   }
 }
 
-Future<Map<String, IfdTag>?> getExifFromSourceFile(File originFile) async {
+Future<Map<String, IfdTag>?> tryExifFromFile(File originFile) async {
   try {
     final exif = await readExifAsync(originFile);
     return exif;
@@ -48,7 +57,93 @@ Future<Map<String, IfdTag>?> getExifFromSourceFile(File originFile) async {
   }
 }
 
-Future<DateTime?> getCreationTimeFromEXIF(
+Future<Map<String, dynamic>> getXmp(File file) async {
+  return Computer.shared().compute(
+    _getXMPComputer,
+    param: {"file": file},
+    taskName: "getXMPAsync",
+  );
+}
+
+Map<String, dynamic> _getXMPComputer(Map<String, dynamic> args) {
+  final File originalFile = args["file"] as File;
+  return XMPExtractor().extract(originalFile.readAsBytesSync());
+}
+
+Future<FFProbeProps?> getVideoPropsAsync(File originalFile) async {
+  try {
+    final stopwatch = Stopwatch()..start();
+    final Map<int, StringBuffer> logs = {};
+    final completer = Completer<MediaInformation?>();
+
+    final session = await FFprobeKit.getMediaInformationAsync(
+      originalFile.path,
+      (MediaInformationSession session) async {
+        // This callback is called when the session is complete
+        final mediaInfo = session.getMediaInformation();
+        if (mediaInfo == null) {
+          _logger.warning("Failed to get video metadata");
+          final failStackTrace = await session.getFailStackTrace();
+          final output = await session.getOutput();
+          _logger.warning(
+            'Failed to get video metadata. failStackTrace=$failStackTrace, output=$output',
+          );
+        }
+        completer.complete(mediaInfo);
+      },
+      (log) {
+        // put log messages into a map
+        logs.putIfAbsent(log.getSessionId(), () => StringBuffer());
+        logs[log.getSessionId()]!.write(log.getMessage());
+      },
+    );
+
+    // Wait for the session to complete
+    await session.getReturnCode();
+    final mediaInfo = await completer.future;
+    if (kDebugMode) {
+      logs.forEach((key, value) {
+        log("log for session $key: $value", name: "FFprobeKit");
+      });
+    }
+    if (mediaInfo == null) {
+      return null;
+    }
+    final properties = await FFProbeUtil.getProperties(mediaInfo);
+    _logger.info("getVideoPropsAsync took ${stopwatch.elapsedMilliseconds}ms");
+    stopwatch.stop();
+    return properties;
+  } catch (e, s) {
+    _logger.severe("Failed to getVideoProps", e, s);
+    return null;
+  }
+}
+
+bool? checkPanoramaFromEXIF(File? file, Map<String, IfdTag>? exifData) {
+  final element = exifData?["EXIF CustomRendered"];
+  if (element?.printable == null) return null;
+  return element?.printable == "6";
+}
+
+class ParsedExifDateTime {
+  late final DateTime? time;
+  late final String? dateTime;
+  late final String? offsetTime;
+  ParsedExifDateTime(DateTime this.time, String? dateTime, this.offsetTime) {
+    if (dateTime != null && dateTime.endsWith('Z')) {
+      this.dateTime = dateTime.substring(0, dateTime.length - 1);
+    } else {
+      this.dateTime = dateTime;
+    }
+  }
+
+  @override
+  String toString() {
+    return "ParsedExifDateTime{time: $time, dateTime: $dateTime, offsetTime: $offsetTime}";
+  }
+}
+
+Future<ParsedExifDateTime?> tryParseExifDateTime(
   File? file,
   Map<String, IfdTag>? exifData,
 ) async {
@@ -60,46 +155,55 @@ Future<DateTime?> getCreationTimeFromEXIF(
         : exif.containsKey(kImageDateTime)
             ? exif[kImageDateTime]!.printable
             : null;
-    if (exifTime != null && exifTime != kEmptyExifDateTime) {
-      String? exifOffsetTime;
-      for (final key in kExifOffSetKeys) {
-        if (exif.containsKey(key)) {
-          exifOffsetTime = exif[key]!.printable;
-          break;
-        }
-      }
-      return getDateTimeInDeviceTimezone(exifTime, exifOffsetTime);
+    if (exifTime == null || exifTime == kEmptyExifDateTime) {
+      return null;
     }
+    String? exifOffsetTime;
+    for (final key in kExifOffSetKeys) {
+      if (exif.containsKey(key)) {
+        exifOffsetTime = exif[key]!.printable;
+        break;
+      }
+    }
+    return getDateTimeInDeviceTimezone(exifTime, exifOffsetTime);
   } catch (e) {
     _logger.severe("failed to getCreationTimeFromEXIF", e);
   }
   return null;
 }
 
-DateTime getDateTimeInDeviceTimezone(String exifTime, String? offsetString) {
-  final DateTime result = DateFormat(kExifDateTimePattern).parse(exifTime);
-  if (offsetString == null) {
-    return result;
+ParsedExifDateTime getDateTimeInDeviceTimezone(
+  String exifTime,
+  String? offsetString,
+) {
+  final hasOffset = (offsetString ?? '') != '';
+  final DateTime result =
+      DateFormat(kExifDateTimePattern).parse(exifTime, hasOffset);
+  if (hasOffset && offsetString!.toUpperCase() != "Z") {
+    try {
+      final List<String> splitHHMM = offsetString.split(":");
+      final int offsetHours = int.parse(splitHHMM[0]);
+      final int offsetMinutes =
+          int.parse(splitHHMM[1]) * (offsetHours.isNegative ? -1 : 1);
+      // Adjust the date for the offset to get the photo's correct UTC time
+      final photoUtcDate =
+          result.add(Duration(hours: -offsetHours, minutes: -offsetMinutes));
+      // Convert the UTC time to the device's local time
+      final deviceLocalTime = photoUtcDate.toLocal();
+      return ParsedExifDateTime(
+        deviceLocalTime,
+        result.toIso8601String(),
+        offsetString,
+      );
+    } catch (e, s) {
+      _logger.severe("offset parsing failed $exifTime &&  $offsetString", e, s);
+    }
   }
-  try {
-    final List<String> splitHHMM = offsetString.split(":");
-    // Parse the offset from the photo's time zone
-    final int offsetHours = int.parse(splitHHMM[0]);
-    final int offsetMinutes =
-        int.parse(splitHHMM[1]) * (offsetHours.isNegative ? -1 : 1);
-    // Adjust the date for the offset to get the photo's correct UTC time
-    final photoUtcDate =
-        result.add(Duration(hours: -offsetHours, minutes: -offsetMinutes));
-    // Getting the current device's time zone offset from UTC
-    final now = DateTime.now();
-    final localOffset = now.timeZoneOffset;
-    // Adjusting the photo's UTC time to the device's local time
-    final deviceLocalTime = photoUtcDate.add(localOffset);
-    return deviceLocalTime;
-  } catch (e, s) {
-    _logger.severe("tz offset adjust failed $offsetString", e, s);
-  }
-  return result;
+  return ParsedExifDateTime(
+    result,
+    result.toIso8601String(),
+    (offsetString ?? '').toUpperCase() == 'Z' ? 'Z' : null,
+  );
 }
 
 Location? locationFromExif(Map<String, IfdTag> exif) {

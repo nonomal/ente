@@ -1,10 +1,10 @@
 package user
 
 import (
+	"errors"
 	"github.com/ente-io/museum/ente"
 	"github.com/ente-io/museum/ente/details"
 	bonus "github.com/ente-io/museum/ente/storagebonus"
-	"github.com/ente-io/museum/pkg/utils/auth"
 	"github.com/ente-io/museum/pkg/utils/recover"
 	"github.com/ente-io/museum/pkg/utils/time"
 	"github.com/ente-io/stacktrace"
@@ -12,61 +12,14 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func (c *UserController) GetDetails(ctx *gin.Context) (details.UserDetailsResponse, error) {
-
-	enteApp := ctx.MustGet("app").(ente.App)
-
-	userID := auth.GetUserID(ctx.Request.Header)
+func (c *UserController) GetUser(userID int64) (ente.User, error) {
 	user, err := c.UserRepo.Get(userID)
-	if err != nil {
-		return details.UserDetailsResponse{}, stacktrace.Propagate(err, "")
+	if err != nil && errors.Is(err, ente.ErrUserDeleted) {
+		return ente.User{}, stacktrace.Propagate(ente.ErrUserNotFound, "")
 	}
-	usage, err := c.FileRepo.GetUsage(userID)
-	if err != nil {
-		return details.UserDetailsResponse{}, stacktrace.Propagate(err, "")
-	}
-	fileCount, err := c.FileRepo.GetFileCountForUser(userID, enteApp)
-	if err != nil {
-		return details.UserDetailsResponse{}, stacktrace.Propagate(err, "")
-	}
-	sharedCollectionsCount, err := c.CollectionRepo.GetSharedCollectionsCount(userID)
-	if err != nil {
-		return details.UserDetailsResponse{}, stacktrace.Propagate(err, "")
-	}
-	subscription, err := c.BillingController.GetSubscription(ctx, userID)
-	if err != nil {
-		return details.UserDetailsResponse{}, stacktrace.Propagate(err, "")
-	}
-	return details.UserDetailsResponse{
-		Email:                  user.Email,
-		Usage:                  usage,
-		FileCount:              &fileCount,
-		SharedCollectionsCount: &sharedCollectionsCount,
-		Subscription:           subscription,
-	}, nil
-}
+	return user, err
 
-func (c *UserController) getUserFileCountWithCache(userID int64, app ente.App) (int64, error) {
-	// Check if the value is present in the cache
-	if count, ok := c.UserCache.GetFileCount(userID, app); ok {
-		// Cache hit, update the cache asynchronously
-		go func() {
-			_, _ = c.getUserCountAndUpdateCache(userID, app)
-		}()
-		return count, nil
-	}
-	return c.getUserCountAndUpdateCache(userID, app)
 }
-
-func (c *UserController) getUserCountAndUpdateCache(userID int64, app ente.App) (int64, error) {
-	count, err := c.FileRepo.GetFileCountForUser(userID, app)
-	if err != nil {
-		return 0, stacktrace.Propagate(err, "")
-	}
-	c.UserCache.SetFileCount(userID, count, app)
-	return count, nil
-}
-
 func (c *UserController) GetDetailsV2(ctx *gin.Context, userID int64, fetchMemoryCount bool, app ente.App) (details.UserDetailsResponse, error) {
 
 	g := new(errgroup.Group)
@@ -74,10 +27,11 @@ func (c *UserController) GetDetailsV2(ctx *gin.Context, userID int64, fetchMemor
 	var familyData *ente.FamilyMemberResponse
 	var subscription *ente.Subscription
 	var canDisableEmailMFA bool
+	var passkeyCount int64
 	var fileCount, sharedCollectionCount, usage int64
 	var bonus *bonus.ActiveStorageBonus
 	g.Go(func() error {
-		resp, err := c.UserRepo.Get(userID)
+		resp, err := c.GetUser(userID)
 		if err != nil {
 			return stacktrace.Propagate(err, "failed to get user")
 		}
@@ -115,13 +69,22 @@ func (c *UserController) GetDetailsV2(ctx *gin.Context, userID int64, fetchMemor
 		canDisableEmailMFA = isSRPSetupDone
 		return nil
 	})
+
 	g.Go(func() error {
 		return recover.Int64ToInt64RecoverWrapper(userID, c.FileRepo.GetUsage, &usage)
+	})
+	g.Go(func() error {
+		cnt, err := c.PasskeyRepo.GetPasskeyCount(userID)
+		if err != nil {
+			return stacktrace.Propagate(err, "")
+		}
+		passkeyCount = cnt
+		return nil
 	})
 
 	if fetchMemoryCount {
 		g.Go(func() error {
-			fCount, err := c.getUserFileCountWithCache(userID, app)
+			fCount, err := c.UserCacheController.GetUserFileCountWithCache(userID, app)
 			if err == nil {
 				fileCount = fCount
 			}
@@ -158,6 +121,7 @@ func (c *UserController) GetDetailsV2(ctx *gin.Context, userID int64, fetchMemor
 			CanDisableEmailMFA: canDisableEmailMFA,
 			IsEmailMFAEnabled:  *user.IsEmailMFAEnabled,
 			IsTwoFactorEnabled: *user.IsTwoFactorEnabled,
+			PasskeyCount:       passkeyCount,
 		},
 		BonusData: bonus,
 	}

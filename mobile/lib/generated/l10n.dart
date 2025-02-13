@@ -70,6 +70,26 @@ class S {
     );
   }
 
+  /// `Email already registered.`
+  String get emailAlreadyRegistered {
+    return Intl.message(
+      'Email already registered.',
+      name: 'emailAlreadyRegistered',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Email not registered.`
+  String get emailNotRegistered {
+    return Intl.message(
+      'Email not registered.',
+      name: 'emailNotRegistered',
+      desc: '',
+      args: [],
+    );
+  }
+
   /// `Email`
   String get email {
     return Intl.message(
@@ -170,10 +190,10 @@ class S {
     );
   }
 
-  /// `Yes, I want to permanently delete this account and all its data.`
+  /// `Yes, I want to permanently delete this account and its data across all apps.`
   String get confirmDeletePrompt {
     return Intl.message(
-      'Yes, I want to permanently delete this account and all its data.',
+      'Yes, I want to permanently delete this account and its data across all apps.',
       name: 'confirmDeletePrompt',
       desc: '',
       args: [],
@@ -1250,10 +1270,10 @@ class S {
     );
   }
 
-  /// `Your recovery key is the only way to recover your photos if you forget your password. You can find your recovery key in Settings > Security.\n\nPlease enter your recovery key here to verify that you have saved it correctly.`
+  /// `Your recovery key is the only way to recover your photos if you forget your password. You can find your recovery key in Settings > Account.\n\nPlease enter your recovery key here to verify that you have saved it correctly.`
   String get recoveryKeyVerifyReason {
     return Intl.message(
-      'Your recovery key is the only way to recover your photos if you forget your password. You can find your recovery key in Settings > Security.\n\nPlease enter your recovery key here to verify that you have saved it correctly.',
+      'Your recovery key is the only way to recover your photos if you forget your password. You can find your recovery key in Settings > Account.\n\nPlease enter your recovery key here to verify that you have saved it correctly.',
       name: 'recoveryKeyVerifyReason',
       desc: '',
       args: [],
@@ -1475,6 +1495,26 @@ class S {
     return Intl.message(
       'Password lock',
       name: 'passwordLock',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Cannot open this album`
+  String get canNotOpenTitle {
+    return Intl.message(
+      'Cannot open this album',
+      name: 'canNotOpenTitle',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Sorry, this album cannot be opened in the app.`
+  String get canNotOpenBody {
+    return Intl.message(
+      'Sorry, this album cannot be opened in the app.',
+      name: 'canNotOpenBody',
       desc: '',
       args: [],
     );
@@ -2056,6 +2096,56 @@ class S {
     );
   }
 
+  /// `Change your referral code`
+  String get changeYourReferralCode {
+    return Intl.message(
+      'Change your referral code',
+      name: 'changeYourReferralCode',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Change`
+  String get change {
+    return Intl.message(
+      'Change',
+      name: 'change',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Sorry, this code is unavailable.`
+  String get unavailableReferralCode {
+    return Intl.message(
+      'Sorry, this code is unavailable.',
+      name: 'unavailableReferralCode',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Sorry, you've reached the limit of code changes.`
+  String get codeChangeLimitReached {
+    return Intl.message(
+      'Sorry, you\'ve reached the limit of code changes.',
+      name: 'codeChangeLimitReached',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Please contact {familyAdminEmail} to change your code.`
+  String onlyFamilyAdminCanChangeCode(Object familyAdminEmail) {
+    return Intl.message(
+      'Please contact $familyAdminEmail to change your code.',
+      name: 'onlyFamilyAdminCanChangeCode',
+      desc: '',
+      args: [familyAdminEmail],
+    );
+  }
+
   /// `{storageAmountInGB} GB`
   String storageInGB(Object storageAmountInGB) {
     return Intl.message(
@@ -2402,10 +2492,10 @@ class S {
     );
   }
 
-  /// `Looks like your subscription has expired. Please subscribe to enable sharing.`
+  /// `You need an active paid subscription to enable sharing.`
   String get subscribeToEnableSharing {
     return Intl.message(
-      'Looks like your subscription has expired. Please subscribe to enable sharing.',
+      'You need an active paid subscription to enable sharing.',
       name: 'subscribeToEnableSharing',
       desc: '',
       args: [],
@@ -2642,6 +2732,16 @@ class S {
     );
   }
 
+  /// `Please authenticate to view your trashed files`
+  String get authToViewTrashedFiles {
+    return Intl.message(
+      'Please authenticate to view your trashed files',
+      name: 'authToViewTrashedFiles',
+      desc: '',
+      args: [],
+    );
+  }
+
   /// `Trash`
   String get trash {
     return Intl.message(
@@ -2846,11 +2946,21 @@ class S {
     );
   }
 
-  /// `Manage device storage`
+  /// `Manage device cache`
   String get manageDeviceStorage {
     return Intl.message(
-      'Manage device storage',
+      'Manage device cache',
       name: 'manageDeviceStorage',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Review and clear local cache storage.`
+  String get manageDeviceStorageDesc {
+    return Intl.message(
+      'Review and clear local cache storage.',
+      name: 'manageDeviceStorageDesc',
       desc: '',
       args: [],
     );
@@ -2866,6 +2976,56 @@ class S {
     );
   }
 
+  /// `Enable machine learning`
+  String get mlConsent {
+    return Intl.message(
+      'Enable machine learning',
+      name: 'mlConsent',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Enable machine learning?`
+  String get mlConsentTitle {
+    return Intl.message(
+      'Enable machine learning?',
+      name: 'mlConsentTitle',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `If you enable machine learning, Ente will extract information like face geometry from files, including those shared with you.\n\nThis will happen on your device, and any generated biometric information will be end-to-end encrypted.`
+  String get mlConsentDescription {
+    return Intl.message(
+      'If you enable machine learning, Ente will extract information like face geometry from files, including those shared with you.\n\nThis will happen on your device, and any generated biometric information will be end-to-end encrypted.',
+      name: 'mlConsentDescription',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Please click here for more details about this feature in our privacy policy`
+  String get mlConsentPrivacy {
+    return Intl.message(
+      'Please click here for more details about this feature in our privacy policy',
+      name: 'mlConsentPrivacy',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `I understand, and wish to enable machine learning`
+  String get mlConsentConfirmation {
+    return Intl.message(
+      'I understand, and wish to enable machine learning',
+      name: 'mlConsentConfirmation',
+      desc: '',
+      args: [],
+    );
+  }
+
   /// `Magic search`
   String get magicSearch {
     return Intl.message(
@@ -2876,10 +3036,171 @@ class S {
     );
   }
 
-  /// `Please note that machine learning will result in a higher bandwidth and battery usage until all items are indexed.`
+  /// `Discover`
+  String get discover {
+    return Intl.message(
+      'Discover',
+      name: 'discover',
+      desc:
+          'The text to display for the discover section under which we show receipts, screenshots, sunsets, greenery, etc.',
+      args: [],
+    );
+  }
+
+  /// `Identity`
+  String get discover_identity {
+    return Intl.message(
+      'Identity',
+      name: 'discover_identity',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Screenshots`
+  String get discover_screenshots {
+    return Intl.message(
+      'Screenshots',
+      name: 'discover_screenshots',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Receipts`
+  String get discover_receipts {
+    return Intl.message(
+      'Receipts',
+      name: 'discover_receipts',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Notes`
+  String get discover_notes {
+    return Intl.message(
+      'Notes',
+      name: 'discover_notes',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Memes`
+  String get discover_memes {
+    return Intl.message(
+      'Memes',
+      name: 'discover_memes',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Visiting Cards`
+  String get discover_visiting_cards {
+    return Intl.message(
+      'Visiting Cards',
+      name: 'discover_visiting_cards',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Babies`
+  String get discover_babies {
+    return Intl.message(
+      'Babies',
+      name: 'discover_babies',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Pets`
+  String get discover_pets {
+    return Intl.message(
+      'Pets',
+      name: 'discover_pets',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Selfies`
+  String get discover_selfies {
+    return Intl.message(
+      'Selfies',
+      name: 'discover_selfies',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Wallpapers`
+  String get discover_wallpapers {
+    return Intl.message(
+      'Wallpapers',
+      name: 'discover_wallpapers',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Food`
+  String get discover_food {
+    return Intl.message(
+      'Food',
+      name: 'discover_food',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Celebrations`
+  String get discover_celebrations {
+    return Intl.message(
+      'Celebrations',
+      name: 'discover_celebrations',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Sunset`
+  String get discover_sunset {
+    return Intl.message(
+      'Sunset',
+      name: 'discover_sunset',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Hills`
+  String get discover_hills {
+    return Intl.message(
+      'Hills',
+      name: 'discover_hills',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Greenery`
+  String get discover_greenery {
+    return Intl.message(
+      'Greenery',
+      name: 'discover_greenery',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Please note that machine learning will result in a higher bandwidth and battery usage until all items are indexed. Consider using the desktop app for faster indexing, all results will be synced automatically.`
   String get mlIndexingDescription {
     return Intl.message(
-      'Please note that machine learning will result in a higher bandwidth and battery usage until all items are indexed.',
+      'Please note that machine learning will result in a higher bandwidth and battery usage until all items are indexed. Consider using the desktop app for faster indexing, all results will be synced automatically.',
       name: 'mlIndexingDescription',
       desc: '',
       args: [],
@@ -3072,6 +3393,26 @@ class S {
     );
   }
 
+  /// `Backup status`
+  String get backupStatus {
+    return Intl.message(
+      'Backup status',
+      name: 'backupStatus',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Items that have been backed up will show up here`
+  String get backupStatusDescription {
+    return Intl.message(
+      'Items that have been backed up will show up here',
+      name: 'backupStatusDescription',
+      desc: '',
+      args: [],
+    );
+  }
+
   /// `Backup over mobile data`
   String get backupOverMobileData {
     return Intl.message(
@@ -3157,6 +3498,16 @@ class S {
     return Intl.message(
       'Check for updates',
       name: 'checkForUpdates',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Check status`
+  String get checkStatus {
+    return Intl.message(
+      'Check status',
+      name: 'checkStatus',
       desc: '',
       args: [],
     );
@@ -3432,6 +3783,16 @@ class S {
     );
   }
 
+  /// `Save space on your device by clearing files that have been already backed up.`
+  String get freeUpDeviceSpaceDesc {
+    return Intl.message(
+      'Save space on your device by clearing files that have been already backed up.',
+      name: 'freeUpDeviceSpaceDesc',
+      desc: '',
+      args: [],
+    );
+  }
+
   /// `✨ All clear`
   String get allClear {
     return Intl.message(
@@ -3457,6 +3818,36 @@ class S {
     return Intl.message(
       'Remove duplicates',
       name: 'removeDuplicates',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Review and remove files that are exact duplicates.`
+  String get removeDuplicatesDesc {
+    return Intl.message(
+      'Review and remove files that are exact duplicates.',
+      name: 'removeDuplicatesDesc',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Large files`
+  String get viewLargeFiles {
+    return Intl.message(
+      'Large files',
+      name: 'viewLargeFiles',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `View files that are consuming the most amount of storage.`
+  String get viewLargeFilesDesc {
+    return Intl.message(
+      'View files that are consuming the most amount of storage.',
+      name: 'viewLargeFilesDesc',
       desc: '',
       args: [],
     );
@@ -3679,16 +4070,6 @@ class S {
     return Intl.message(
       'Please authenticate to change lockscreen setting',
       name: 'authToChangeLockscreenSetting',
-      desc: '',
-      args: [],
-    );
-  }
-
-  /// `To enable lockscreen, please setup device passcode or screen lock in your system settings.`
-  String get lockScreenEnablePreSteps {
-    return Intl.message(
-      'To enable lockscreen, please setup device passcode or screen lock in your system settings.',
-      name: 'lockScreenEnablePreSteps',
       desc: '',
       args: [],
     );
@@ -4585,6 +4966,26 @@ class S {
     );
   }
 
+  /// `Allow access to photos`
+  String get allowPermTitle {
+    return Intl.message(
+      'Allow access to photos',
+      name: 'allowPermTitle',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Please allow access to your photos from Settings so Ente can display and backup your library.`
+  String get allowPermBody {
+    return Intl.message(
+      'Please allow access to your photos from Settings so Ente can display and backup your library.',
+      name: 'allowPermBody',
+      desc: '',
+      args: [],
+    );
+  }
+
   /// `Open Settings`
   String get openSettings {
     return Intl.message(
@@ -5117,10 +5518,10 @@ class S {
     );
   }
 
-  /// `Remove from favorite`
+  /// `Remove from favorites`
   String get removeFromFavorite {
     return Intl.message(
-      'Remove from favorite',
+      'Remove from favorites',
       name: 'removeFromFavorite',
       desc: '',
       args: [],
@@ -5511,11 +5912,11 @@ class S {
     );
   }
 
-  /// `{count, plural, =0 {} =1 {1 day} other {{count} days}}`
+  /// `{count, plural, =0 {Soon} =1 {1 day} other {{count} days}}`
   String trashDaysLeft(int count) {
     return Intl.plural(
       count,
-      zero: '',
+      zero: 'Soon',
       one: '1 day',
       other: '$count days',
       name: 'trashDaysLeft',
@@ -6409,6 +6810,26 @@ class S {
     );
   }
 
+  /// `Preserving {count} memories...`
+  String uploadingMultipleMemories(String count) {
+    return Intl.message(
+      'Preserving $count memories...',
+      name: 'uploadingMultipleMemories',
+      desc: 'Text to tell user how many memories are being preserved',
+      args: [count],
+    );
+  }
+
+  /// `Preserving 1 memory...`
+  String get uploadingSingleMemory {
+    return Intl.message(
+      'Preserving 1 memory...',
+      name: 'uploadingSingleMemory',
+      desc: '',
+      args: [],
+    );
+  }
+
   /// `Archiving...`
   String get archiving {
     return Intl.message(
@@ -6969,10 +7390,10 @@ class S {
     );
   }
 
-  /// `Persons will be shown here once indexing is done`
+  /// `People will be shown here once indexing is done`
   String get searchFaceEmptySection {
     return Intl.message(
-      'Persons will be shown here once indexing is done',
+      'People will be shown here once indexing is done',
       name: 'searchFaceEmptySection',
       desc: '',
       args: [],
@@ -7402,10 +7823,10 @@ class S {
   }
 
   /// `{freeAmount} {storageUnit} free`
-  String freeStorageSpace(Object freeAmount, Object storageUnit) {
+  String availableStorageSpace(Object freeAmount, Object storageUnit) {
     return Intl.message(
       '$freeAmount $storageUnit free',
-      name: 'freeStorageSpace',
+      name: 'availableStorageSpace',
       desc: '',
       args: [freeAmount, storageUnit],
     );
@@ -7925,6 +8346,16 @@ class S {
     );
   }
 
+  /// `Resumable uploads`
+  String get resumableUploads {
+    return Intl.message(
+      'Resumable uploads',
+      name: 'resumableUploads',
+      desc: '',
+      args: [],
+    );
+  }
+
   /// `Add to hidden album`
   String get addToHiddenAlbum {
     return Intl.message(
@@ -8368,6 +8799,46 @@ class S {
     );
   }
 
+  /// `Login with TOTP`
+  String get loginWithTOTP {
+    return Intl.message(
+      'Login with TOTP',
+      name: 'loginWithTOTP',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Verification is still pending`
+  String get passKeyPendingVerification {
+    return Intl.message(
+      'Verification is still pending',
+      name: 'passKeyPendingVerification',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Session expired`
+  String get loginSessionExpired {
+    return Intl.message(
+      'Session expired',
+      name: 'loginSessionExpired',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Your session has expired. Please login again.`
+  String get loginSessionExpiredDetails {
+    return Intl.message(
+      'Your session has expired. Please login again.',
+      name: 'loginSessionExpiredDetails',
+      desc: '',
+      args: [],
+    );
+  }
+
   /// `Verify passkey`
   String get verifyPasskey {
     return Intl.message(
@@ -8448,22 +8919,23 @@ class S {
     );
   }
 
-  /// `Descriptions`
-  String get descriptions {
-    return Intl.message(
-      'Descriptions',
-      name: 'descriptions',
-      desc: '',
-      args: [],
-    );
-  }
-
   /// `Add a name`
   String get addAName {
     return Intl.message(
       'Add a name',
       name: 'addAName',
       desc: '',
+      args: [],
+    );
+  }
+
+  /// `Find them quickly`
+  String get findThemQuickly {
+    return Intl.message(
+      'Find them quickly',
+      name: 'findThemQuickly',
+      desc:
+          'Subtitle to indicate that the user can find people quickly by name',
       args: [],
     );
   }
@@ -8614,6 +9086,76 @@ class S {
     );
   }
 
+  /// `Enter name`
+  String get enterName {
+    return Intl.message(
+      'Enter name',
+      name: 'enterName',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Save person`
+  String get savePerson {
+    return Intl.message(
+      'Save person',
+      name: 'savePerson',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Edit person`
+  String get editPerson {
+    return Intl.message(
+      'Edit person',
+      name: 'editPerson',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Merged photos`
+  String get mergedPhotos {
+    return Intl.message(
+      'Merged photos',
+      name: 'mergedPhotos',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Or merge with existing`
+  String get orMergeWithExistingPerson {
+    return Intl.message(
+      'Or merge with existing',
+      name: 'orMergeWithExistingPerson',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Birthday (optional)`
+  String get enterDateOfBirth {
+    return Intl.message(
+      'Birthday (optional)',
+      name: 'enterDateOfBirth',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Birthday`
+  String get birthday {
+    return Intl.message(
+      'Birthday',
+      name: 'birthday',
+      desc: '',
+      args: [],
+    );
+  }
+
   /// `Remove person label`
   String get removePersonLabel {
     return Intl.message(
@@ -8734,6 +9276,16 @@ class S {
     );
   }
 
+  /// `Saving edits...`
+  String get savingEdits {
+    return Intl.message(
+      'Saving edits...',
+      name: 'savingEdits',
+      desc: '',
+      args: [],
+    );
+  }
+
   /// `Auto pair`
   String get autoPair {
     return Intl.message(
@@ -8793,6 +9345,1891 @@ class S {
       args: [],
     );
   }
+
+  /// `Trim`
+  String get trim {
+    return Intl.message(
+      'Trim',
+      name: 'trim',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Crop`
+  String get crop {
+    return Intl.message(
+      'Crop',
+      name: 'crop',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Rotate`
+  String get rotate {
+    return Intl.message(
+      'Rotate',
+      name: 'rotate',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Left`
+  String get left {
+    return Intl.message(
+      'Left',
+      name: 'left',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Right`
+  String get right {
+    return Intl.message(
+      'Right',
+      name: 'right',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `What's new`
+  String get whatsNew {
+    return Intl.message(
+      'What\'s new',
+      name: 'whatsNew',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Review suggestions`
+  String get reviewSuggestions {
+    return Intl.message(
+      'Review suggestions',
+      name: 'reviewSuggestions',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Review`
+  String get review {
+    return Intl.message(
+      'Review',
+      name: 'review',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Use as cover`
+  String get useAsCover {
+    return Intl.message(
+      'Use as cover',
+      name: 'useAsCover',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Not {name}?`
+  String notPersonLabel(String name) {
+    return Intl.message(
+      'Not $name?',
+      name: 'notPersonLabel',
+      desc:
+          'Label to indicate that the person in the photo is not the person whose name is mentioned',
+      args: [name],
+    );
+  }
+
+  /// `Enable`
+  String get enable {
+    return Intl.message(
+      'Enable',
+      name: 'enable',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Enabled`
+  String get enabled {
+    return Intl.message(
+      'Enabled',
+      name: 'enabled',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `More details`
+  String get moreDetails {
+    return Intl.message(
+      'More details',
+      name: 'moreDetails',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Ente supports on-device machine learning for face recognition, magic search and other advanced search features`
+  String get enableMLIndexingDesc {
+    return Intl.message(
+      'Ente supports on-device machine learning for face recognition, magic search and other advanced search features',
+      name: 'enableMLIndexingDesc',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Magic search allows to search photos by their contents, e.g. 'flower', 'red car', 'identity documents'`
+  String get magicSearchHint {
+    return Intl.message(
+      'Magic search allows to search photos by their contents, e.g. \'flower\', \'red car\', \'identity documents\'',
+      name: 'magicSearchHint',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Panorama`
+  String get panorama {
+    return Intl.message(
+      'Panorama',
+      name: 'panorama',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Re-enter password`
+  String get reenterPassword {
+    return Intl.message(
+      'Re-enter password',
+      name: 'reenterPassword',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Re-enter PIN`
+  String get reenterPin {
+    return Intl.message(
+      'Re-enter PIN',
+      name: 'reenterPin',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Device lock`
+  String get deviceLock {
+    return Intl.message(
+      'Device lock',
+      name: 'deviceLock',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `PIN lock`
+  String get pinLock {
+    return Intl.message(
+      'PIN lock',
+      name: 'pinLock',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Next`
+  String get next {
+    return Intl.message(
+      'Next',
+      name: 'next',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Set new password`
+  String get setNewPassword {
+    return Intl.message(
+      'Set new password',
+      name: 'setNewPassword',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Enter PIN`
+  String get enterPin {
+    return Intl.message(
+      'Enter PIN',
+      name: 'enterPin',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Set new PIN`
+  String get setNewPin {
+    return Intl.message(
+      'Set new PIN',
+      name: 'setNewPin',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `App lock`
+  String get appLock {
+    return Intl.message(
+      'App lock',
+      name: 'appLock',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `No system lock found`
+  String get noSystemLockFound {
+    return Intl.message(
+      'No system lock found',
+      name: 'noSystemLockFound',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Tap to unlock`
+  String get tapToUnlock {
+    return Intl.message(
+      'Tap to unlock',
+      name: 'tapToUnlock',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Too many incorrect attempts`
+  String get tooManyIncorrectAttempts {
+    return Intl.message(
+      'Too many incorrect attempts',
+      name: 'tooManyIncorrectAttempts',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Video Info`
+  String get videoInfo {
+    return Intl.message(
+      'Video Info',
+      name: 'videoInfo',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Auto lock`
+  String get autoLock {
+    return Intl.message(
+      'Auto lock',
+      name: 'autoLock',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Immediately`
+  String get immediately {
+    return Intl.message(
+      'Immediately',
+      name: 'immediately',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Time after which the app locks after being put in the background`
+  String get autoLockFeatureDescription {
+    return Intl.message(
+      'Time after which the app locks after being put in the background',
+      name: 'autoLockFeatureDescription',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Hide content`
+  String get hideContent {
+    return Intl.message(
+      'Hide content',
+      name: 'hideContent',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Hides app content in the app switcher and disables screenshots`
+  String get hideContentDescriptionAndroid {
+    return Intl.message(
+      'Hides app content in the app switcher and disables screenshots',
+      name: 'hideContentDescriptionAndroid',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Hides app content in the app switcher`
+  String get hideContentDescriptionIos {
+    return Intl.message(
+      'Hides app content in the app switcher',
+      name: 'hideContentDescriptionIos',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Password strength is calculated considering the length of the password, used characters, and whether or not the password appears in the top 10,000 most used passwords`
+  String get passwordStrengthInfo {
+    return Intl.message(
+      'Password strength is calculated considering the length of the password, used characters, and whether or not the password appears in the top 10,000 most used passwords',
+      name: 'passwordStrengthInfo',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `No quick links selected`
+  String get noQuickLinksSelected {
+    return Intl.message(
+      'No quick links selected',
+      name: 'noQuickLinksSelected',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Please select quick links to remove`
+  String get pleaseSelectQuickLinksToRemove {
+    return Intl.message(
+      'Please select quick links to remove',
+      name: 'pleaseSelectQuickLinksToRemove',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Remove public links`
+  String get removePublicLinks {
+    return Intl.message(
+      'Remove public links',
+      name: 'removePublicLinks',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `This will remove public links of all selected quick links.`
+  String get thisWillRemovePublicLinksOfAllSelectedQuickLinks {
+    return Intl.message(
+      'This will remove public links of all selected quick links.',
+      name: 'thisWillRemovePublicLinksOfAllSelectedQuickLinks',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Guest view`
+  String get guestView {
+    return Intl.message(
+      'Guest view',
+      name: 'guestView',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `To enable guest view, please setup device passcode or screen lock in your system settings.`
+  String get guestViewEnablePreSteps {
+    return Intl.message(
+      'To enable guest view, please setup device passcode or screen lock in your system settings.',
+      name: 'guestViewEnablePreSteps',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Name the album`
+  String get nameTheAlbum {
+    return Intl.message(
+      'Name the album',
+      name: 'nameTheAlbum',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Create a link where your friends can upload photos in original quality.`
+  String get collectPhotosDescription {
+    return Intl.message(
+      'Create a link where your friends can upload photos in original quality.',
+      name: 'collectPhotosDescription',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Collect`
+  String get collect {
+    return Intl.message(
+      'Collect',
+      name: 'collect',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Choose between your device's default lock screen and a custom lock screen with a PIN or password.`
+  String get appLockDescriptions {
+    return Intl.message(
+      'Choose between your device\'s default lock screen and a custom lock screen with a PIN or password.',
+      name: 'appLockDescriptions',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `To enable app lock, please setup device passcode or screen lock in your system settings.`
+  String get toEnableAppLockPleaseSetupDevicePasscodeOrScreen {
+    return Intl.message(
+      'To enable app lock, please setup device passcode or screen lock in your system settings.',
+      name: 'toEnableAppLockPleaseSetupDevicePasscodeOrScreen',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Please authenticate to view your passkey`
+  String get authToViewPasskey {
+    return Intl.message(
+      'Please authenticate to view your passkey',
+      name: 'authToViewPasskey',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Loop video on`
+  String get loopVideoOn {
+    return Intl.message(
+      'Loop video on',
+      name: 'loopVideoOn',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Loop video off`
+  String get loopVideoOff {
+    return Intl.message(
+      'Loop video off',
+      name: 'loopVideoOff',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Looks like something went wrong since local photos sync is taking more time than expected. Please reach out to our support team`
+  String get localSyncErrorMessage {
+    return Intl.message(
+      'Looks like something went wrong since local photos sync is taking more time than expected. Please reach out to our support team',
+      name: 'localSyncErrorMessage',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Show person`
+  String get showPerson {
+    return Intl.message(
+      'Show person',
+      name: 'showPerson',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Sort`
+  String get sort {
+    return Intl.message(
+      'Sort',
+      name: 'sort',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Most recent`
+  String get mostRecent {
+    return Intl.message(
+      'Most recent',
+      name: 'mostRecent',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Most relevant`
+  String get mostRelevant {
+    return Intl.message(
+      'Most relevant',
+      name: 'mostRelevant',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Loading your photos...`
+  String get loadingYourPhotos {
+    return Intl.message(
+      'Loading your photos...',
+      name: 'loadingYourPhotos',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Processing {folderName}...`
+  String processingImport(Object folderName) {
+    return Intl.message(
+      'Processing $folderName...',
+      name: 'processingImport',
+      desc: '',
+      args: [folderName],
+    );
+  }
+
+  /// `Person name`
+  String get personName {
+    return Intl.message(
+      'Person name',
+      name: 'personName',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Add new person`
+  String get addNewPerson {
+    return Intl.message(
+      'Add new person',
+      name: 'addNewPerson',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Add name or merge`
+  String get addNameOrMerge {
+    return Intl.message(
+      'Add name or merge',
+      name: 'addNameOrMerge',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Merge with existing`
+  String get mergeWithExisting {
+    return Intl.message(
+      'Merge with existing',
+      name: 'mergeWithExisting',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `New person`
+  String get newPerson {
+    return Intl.message(
+      'New person',
+      name: 'newPerson',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Add name`
+  String get addName {
+    return Intl.message(
+      'Add name',
+      name: 'addName',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Add`
+  String get add {
+    return Intl.message(
+      'Add',
+      name: 'add',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Extra photos found for {text}`
+  String extraPhotosFoundFor(String text) {
+    return Intl.message(
+      'Extra photos found for $text',
+      name: 'extraPhotosFoundFor',
+      desc: '',
+      args: [text],
+    );
+  }
+
+  /// `Extra photos found`
+  String get extraPhotosFound {
+    return Intl.message(
+      'Extra photos found',
+      name: 'extraPhotosFound',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Configuration`
+  String get configuration {
+    return Intl.message(
+      'Configuration',
+      name: 'configuration',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Local indexing`
+  String get localIndexing {
+    return Intl.message(
+      'Local indexing',
+      name: 'localIndexing',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Processed`
+  String get processed {
+    return Intl.message(
+      'Processed',
+      name: 'processed',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Remove`
+  String get resetPerson {
+    return Intl.message(
+      'Remove',
+      name: 'resetPerson',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Are you sure you want to reset this person?`
+  String get areYouSureYouWantToResetThisPerson {
+    return Intl.message(
+      'Are you sure you want to reset this person?',
+      name: 'areYouSureYouWantToResetThisPerson',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `All groupings for this person will be reset, and you will lose all suggestions made for this person`
+  String get allPersonGroupingWillReset {
+    return Intl.message(
+      'All groupings for this person will be reset, and you will lose all suggestions made for this person',
+      name: 'allPersonGroupingWillReset',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Yes, reset person`
+  String get yesResetPerson {
+    return Intl.message(
+      'Yes, reset person',
+      name: 'yesResetPerson',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Only them`
+  String get onlyThem {
+    return Intl.message(
+      'Only them',
+      name: 'onlyThem',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Checking models...`
+  String get checkingModels {
+    return Intl.message(
+      'Checking models...',
+      name: 'checkingModels',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Enable machine learning for magic search and face recognition`
+  String get enableMachineLearningBanner {
+    return Intl.message(
+      'Enable machine learning for magic search and face recognition',
+      name: 'enableMachineLearningBanner',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Images will be shown here once processing and syncing is complete`
+  String get searchDiscoverEmptySection {
+    return Intl.message(
+      'Images will be shown here once processing and syncing is complete',
+      name: 'searchDiscoverEmptySection',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `People will be shown here once processing and syncing is complete`
+  String get searchPersonsEmptySection {
+    return Intl.message(
+      'People will be shown here once processing and syncing is complete',
+      name: 'searchPersonsEmptySection',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `{count, plural, =0 {Added 0 viewer} =1 {Added 1 viewer} other {Added {count} viewers}}`
+  String viewersSuccessfullyAdded(int count) {
+    return Intl.plural(
+      count,
+      zero: 'Added 0 viewer',
+      one: 'Added 1 viewer',
+      other: 'Added $count viewers',
+      name: 'viewersSuccessfullyAdded',
+      desc: 'Number of viewers that were successfully added to an album.',
+      args: [count],
+    );
+  }
+
+  /// `{count, plural, =0 {Added 0 collaborator} =1 {Added 1 collaborator} other {Added {count} collaborators}}`
+  String collaboratorsSuccessfullyAdded(int count) {
+    return Intl.plural(
+      count,
+      zero: 'Added 0 collaborator',
+      one: 'Added 1 collaborator',
+      other: 'Added $count collaborators',
+      name: 'collaboratorsSuccessfullyAdded',
+      desc: 'Number of collaborators that were successfully added to an album.',
+      args: [count],
+    );
+  }
+
+  /// `Account is already configured.`
+  String get accountIsAlreadyConfigured {
+    return Intl.message(
+      'Account is already configured.',
+      name: 'accountIsAlreadyConfigured',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Session ID mismatch`
+  String get sessionIdMismatch {
+    return Intl.message(
+      'Session ID mismatch',
+      name: 'sessionIdMismatch',
+      desc:
+          'In passkey page, deeplink is ignored because of session ID mismatch.',
+      args: [],
+    );
+  }
+
+  /// `Failed to fetch active sessions`
+  String get failedToFetchActiveSessions {
+    return Intl.message(
+      'Failed to fetch active sessions',
+      name: 'failedToFetchActiveSessions',
+      desc:
+          'In session page, warn user (in toast) that active sessions could not be fetched.',
+      args: [],
+    );
+  }
+
+  /// `Failed to refresh subscription`
+  String get failedToRefreshStripeSubscription {
+    return Intl.message(
+      'Failed to refresh subscription',
+      name: 'failedToRefreshStripeSubscription',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Failed to play video`
+  String get failedToPlayVideo {
+    return Intl.message(
+      'Failed to play video',
+      name: 'failedToPlayVideo',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Upload is ignored due to {ignoreReason}`
+  String uploadIsIgnoredDueToIgnorereason(String ignoreReason) {
+    return Intl.message(
+      'Upload is ignored due to $ignoreReason',
+      name: 'uploadIsIgnoredDueToIgnorereason',
+      desc: '',
+      args: [ignoreReason],
+    );
+  }
+
+  /// `Type of gallery {galleryType} is not supported for rename`
+  String typeOfGallerGallerytypeIsNotSupportedForRename(String galleryType) {
+    return Intl.message(
+      'Type of gallery $galleryType is not supported for rename',
+      name: 'typeOfGallerGallerytypeIsNotSupportedForRename',
+      desc: '',
+      args: [galleryType],
+    );
+  }
+
+  /// `Tap to upload, upload is currently ignored due to {ignoreReason}`
+  String tapToUploadIsIgnoredDue(String ignoreReason) {
+    return Intl.message(
+      'Tap to upload, upload is currently ignored due to $ignoreReason',
+      name: 'tapToUploadIsIgnoredDue',
+      desc: 'Shown in upload icon widet, inside a tooltip.',
+      args: [ignoreReason],
+    );
+  }
+
+  /// `Tap to upload`
+  String get tapToUpload {
+    return Intl.message(
+      'Tap to upload',
+      name: 'tapToUpload',
+      desc: 'Shown in upload icon widet, inside a tooltip.',
+      args: [],
+    );
+  }
+
+  /// `Info`
+  String get info {
+    return Intl.message(
+      'Info',
+      name: 'info',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Add Files`
+  String get addFiles {
+    return Intl.message(
+      'Add Files',
+      name: 'addFiles',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Cast album`
+  String get castAlbum {
+    return Intl.message(
+      'Cast album',
+      name: 'castAlbum',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Image not analyzed`
+  String get imageNotAnalyzed {
+    return Intl.message(
+      'Image not analyzed',
+      name: 'imageNotAnalyzed',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `No faces found`
+  String get noFacesFound {
+    return Intl.message(
+      'No faces found',
+      name: 'noFacesFound',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `File not uploaded yet`
+  String get fileNotUploadedYet {
+    return Intl.message(
+      'File not uploaded yet',
+      name: 'fileNotUploadedYet',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `No suggestions for {personName}`
+  String noSuggestionsForPerson(String personName) {
+    return Intl.message(
+      'No suggestions for $personName',
+      name: 'noSuggestionsForPerson',
+      desc: '',
+      args: [personName],
+    );
+  }
+
+  /// `month`
+  String get month {
+    return Intl.message(
+      'month',
+      name: 'month',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `yr`
+  String get yearShort {
+    return Intl.message(
+      'yr',
+      name: 'yearShort',
+      desc: 'Appears in pricing page (/yr)',
+      args: [],
+    );
+  }
+
+  /// `currently running`
+  String get currentlyRunning {
+    return Intl.message(
+      'currently running',
+      name: 'currentlyRunning',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `ignored`
+  String get ignored {
+    return Intl.message(
+      'ignored',
+      name: 'ignored',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `{count, plural, =0 {0 photo} =1 {1 photo} other {{count} photos}}`
+  String photosCount(int count) {
+    return Intl.plural(
+      count,
+      zero: '0 photo',
+      one: '1 photo',
+      other: '$count photos',
+      name: 'photosCount',
+      desc: '',
+      args: [count],
+    );
+  }
+
+  /// `File`
+  String get file {
+    return Intl.message(
+      'File',
+      name: 'file',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Sections length mismatch: {snapshotLength} != {searchLength}`
+  String searchSectionsLengthMismatch(int snapshotLength, int searchLength) {
+    return Intl.message(
+      'Sections length mismatch: $snapshotLength != $searchLength',
+      name: 'searchSectionsLengthMismatch',
+      desc: 'Appears in search tab page',
+      args: [snapshotLength, searchLength],
+    );
+  }
+
+  /// `Select mail app`
+  String get selectMailApp {
+    return Intl.message(
+      'Select mail app',
+      name: 'selectMailApp',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `All`
+  String get selectAllShort {
+    return Intl.message(
+      'All',
+      name: 'selectAllShort',
+      desc:
+          'Text that appears in bottom right when you start to select multiple photos. When clicked, it selects all photos.',
+      args: [],
+    );
+  }
+
+  /// `Magic Search Improvement`
+  String get changeLogMagicSearchImprovementTitle {
+    return Intl.message(
+      'Magic Search Improvement',
+      name: 'changeLogMagicSearchImprovementTitle',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `We have improved magic search to become much faster, so you don\'t have to wait to find what you\'re looking for.`
+  String get changeLogMagicSearchImprovementContent {
+    return Intl.message(
+      'We have improved magic search to become much faster, so you don\\\'t have to wait to find what you\\\'re looking for.',
+      name: 'changeLogMagicSearchImprovementContent',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Backup Status`
+  String get changeLogBackupStatusTitle {
+    return Intl.message(
+      'Backup Status',
+      name: 'changeLogBackupStatusTitle',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `We\'ve added a log of all the files that have been uploaded to Ente, including failures and queued.`
+  String get changeLogBackupStatusContent {
+    return Intl.message(
+      'We\\\'ve added a log of all the files that have been uploaded to Ente, including failures and queued.',
+      name: 'changeLogBackupStatusContent',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Discover`
+  String get changeLogDiscoverTitle {
+    return Intl.message(
+      'Discover',
+      name: 'changeLogDiscoverTitle',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Looking for photos of your id cards, notes, or even memes? Go to the search tab and check out Discover. Based on our semantic search, it\'s a place to find photos that might be important for you.\n\nOnly available if you have enabled Machine Learning.`
+  String get changeLogDiscoverContent {
+    return Intl.message(
+      'Looking for photos of your id cards, notes, or even memes? Go to the search tab and check out Discover. Based on our semantic search, it\\\'s a place to find photos that might be important for you.\\n\\nOnly available if you have enabled Machine Learning.',
+      name: 'changeLogDiscoverContent',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Select cover photo`
+  String get selectCoverPhoto {
+    return Intl.message(
+      'Select cover photo',
+      name: 'selectCoverPhoto',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `New location`
+  String get newLocation {
+    return Intl.message(
+      'New location',
+      name: 'newLocation',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Face not clustered yet, please come back later`
+  String get faceNotClusteredYet {
+    return Intl.message(
+      'Face not clustered yet, please come back later',
+      name: 'faceNotClusteredYet',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `The link you are trying to access has expired.`
+  String get theLinkYouAreTryingToAccessHasExpired {
+    return Intl.message(
+      'The link you are trying to access has expired.',
+      name: 'theLinkYouAreTryingToAccessHasExpired',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Open file`
+  String get openFile {
+    return Intl.message(
+      'Open file',
+      name: 'openFile',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Backup file`
+  String get backupFile {
+    return Intl.message(
+      'Backup file',
+      name: 'backupFile',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Open album in browser`
+  String get openAlbumInBrowser {
+    return Intl.message(
+      'Open album in browser',
+      name: 'openAlbumInBrowser',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Please use the web app to add photos to this album`
+  String get openAlbumInBrowserTitle {
+    return Intl.message(
+      'Please use the web app to add photos to this album',
+      name: 'openAlbumInBrowserTitle',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Allow`
+  String get allow {
+    return Intl.message(
+      'Allow',
+      name: 'allow',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Allow app to open shared album links`
+  String get allowAppToOpenSharedAlbumLinks {
+    return Intl.message(
+      'Allow app to open shared album links',
+      name: 'allowAppToOpenSharedAlbumLinks',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `See public album links in app`
+  String get seePublicAlbumLinksInApp {
+    return Intl.message(
+      'See public album links in app',
+      name: 'seePublicAlbumLinksInApp',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Emergency Contacts`
+  String get emergencyContacts {
+    return Intl.message(
+      'Emergency Contacts',
+      name: 'emergencyContacts',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Accept Invite`
+  String get acceptTrustInvite {
+    return Intl.message(
+      'Accept Invite',
+      name: 'acceptTrustInvite',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Decline Invite`
+  String get declineTrustInvite {
+    return Intl.message(
+      'Decline Invite',
+      name: 'declineTrustInvite',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Remove yourself as trusted contact`
+  String get removeYourselfAsTrustedContact {
+    return Intl.message(
+      'Remove yourself as trusted contact',
+      name: 'removeYourselfAsTrustedContact',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Legacy`
+  String get legacy {
+    return Intl.message(
+      'Legacy',
+      name: 'legacy',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Legacy allows trusted contacts to access your account in your absence.`
+  String get legacyPageDesc {
+    return Intl.message(
+      'Legacy allows trusted contacts to access your account in your absence.',
+      name: 'legacyPageDesc',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Trusted contacts can initiate account recovery, and if not blocked within 30 days, reset your password and access your account.`
+  String get legacyPageDesc2 {
+    return Intl.message(
+      'Trusted contacts can initiate account recovery, and if not blocked within 30 days, reset your password and access your account.',
+      name: 'legacyPageDesc2',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Legacy accounts`
+  String get legacyAccounts {
+    return Intl.message(
+      'Legacy accounts',
+      name: 'legacyAccounts',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Trusted contacts`
+  String get trustedContacts {
+    return Intl.message(
+      'Trusted contacts',
+      name: 'trustedContacts',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Add Trusted Contact`
+  String get addTrustedContact {
+    return Intl.message(
+      'Add Trusted Contact',
+      name: 'addTrustedContact',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Remove invite`
+  String get removeInvite {
+    return Intl.message(
+      'Remove invite',
+      name: 'removeInvite',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `A trusted contact is trying to access your account`
+  String get recoveryWarning {
+    return Intl.message(
+      'A trusted contact is trying to access your account',
+      name: 'recoveryWarning',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Reject recovery`
+  String get rejectRecovery {
+    return Intl.message(
+      'Reject recovery',
+      name: 'rejectRecovery',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Recovery initiated`
+  String get recoveryInitiated {
+    return Intl.message(
+      'Recovery initiated',
+      name: 'recoveryInitiated',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `You can access the account after {days} days. A notification will be sent to {email}.`
+  String recoveryInitiatedDesc(int days, String email) {
+    return Intl.message(
+      'You can access the account after $days days. A notification will be sent to $email.',
+      name: 'recoveryInitiatedDesc',
+      desc: '',
+      args: [days, email],
+    );
+  }
+
+  /// `Cancel recovery`
+  String get cancelAccountRecovery {
+    return Intl.message(
+      'Cancel recovery',
+      name: 'cancelAccountRecovery',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Recover account`
+  String get recoveryAccount {
+    return Intl.message(
+      'Recover account',
+      name: 'recoveryAccount',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Are you sure you want to cancel recovery?`
+  String get cancelAccountRecoveryBody {
+    return Intl.message(
+      'Are you sure you want to cancel recovery?',
+      name: 'cancelAccountRecoveryBody',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Start recovery`
+  String get startAccountRecoveryTitle {
+    return Intl.message(
+      'Start recovery',
+      name: 'startAccountRecoveryTitle',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Trusted contact can help in recovering your data.`
+  String get whyAddTrustContact {
+    return Intl.message(
+      'Trusted contact can help in recovering your data.',
+      name: 'whyAddTrustContact',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `You can now recover {email}'s account by setting a new password.`
+  String recoveryReady(String email) {
+    return Intl.message(
+      'You can now recover $email\'s account by setting a new password.',
+      name: 'recoveryReady',
+      desc: '',
+      args: [email],
+    );
+  }
+
+  /// `{email} is trying to recover your account.`
+  String recoveryWarningBody(Object email) {
+    return Intl.message(
+      '$email is trying to recover your account.',
+      name: 'recoveryWarningBody',
+      desc: '',
+      args: [email],
+    );
+  }
+
+  /// `You have been invited to be a legacy contact by {email}.`
+  String trustedInviteBody(Object email) {
+    return Intl.message(
+      'You have been invited to be a legacy contact by $email.',
+      name: 'trustedInviteBody',
+      desc: '',
+      args: [email],
+    );
+  }
+
+  /// `Warning`
+  String get warning {
+    return Intl.message(
+      'Warning',
+      name: 'warning',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Proceed`
+  String get proceed {
+    return Intl.message(
+      'Proceed',
+      name: 'proceed',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `You are about to add {email} as a trusted contact. They will be able to recover your account if you are absent for {numOfDays} days.`
+  String confirmAddingTrustedContact(String email, int numOfDays) {
+    return Intl.message(
+      'You are about to add $email as a trusted contact. They will be able to recover your account if you are absent for $numOfDays days.',
+      name: 'confirmAddingTrustedContact',
+      desc: '',
+      args: [email, numOfDays],
+    );
+  }
+
+  /// `{email} has invited you to be a trusted contact`
+  String legacyInvite(Object email) {
+    return Intl.message(
+      '$email has invited you to be a trusted contact',
+      name: 'legacyInvite',
+      desc: '',
+      args: [email],
+    );
+  }
+
+  /// `Please authenticate to manage your trusted contacts`
+  String get authToManageLegacy {
+    return Intl.message(
+      'Please authenticate to manage your trusted contacts',
+      name: 'authToManageLegacy',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Having trouble playing this video? Long press here to try a different player.`
+  String get useDifferentPlayerInfo {
+    return Intl.message(
+      'Having trouble playing this video? Long press here to try a different player.',
+      name: 'useDifferentPlayerInfo',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Hide shared items from home gallery`
+  String get hideSharedItemsFromHomeGallery {
+    return Intl.message(
+      'Hide shared items from home gallery',
+      name: 'hideSharedItemsFromHomeGallery',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Gallery`
+  String get gallery {
+    return Intl.message(
+      'Gallery',
+      name: 'gallery',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Join album`
+  String get joinAlbum {
+    return Intl.message(
+      'Join album',
+      name: 'joinAlbum',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `to view and add your photos`
+  String get joinAlbumSubtext {
+    return Intl.message(
+      'to view and add your photos',
+      name: 'joinAlbumSubtext',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `to add this to shared albums`
+  String get joinAlbumSubtextViewer {
+    return Intl.message(
+      'to add this to shared albums',
+      name: 'joinAlbumSubtextViewer',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Join`
+  String get join {
+    return Intl.message(
+      'Join',
+      name: 'join',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Link email`
+  String get linkEmail {
+    return Intl.message(
+      'Link email',
+      name: 'linkEmail',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Link`
+  String get link {
+    return Intl.message(
+      'Link',
+      name: 'link',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `No Ente account!`
+  String get noEnteAccountExclamation {
+    return Intl.message(
+      'No Ente account!',
+      name: 'noEnteAccountExclamation',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `or pick from your contacts`
+  String get orPickFromYourContacts {
+    return Intl.message(
+      'or pick from your contacts',
+      name: 'orPickFromYourContacts',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `{email} does not have an Ente account.`
+  String emailDoesNotHaveEnteAccount(String email) {
+    return Intl.message(
+      '$email does not have an Ente account.',
+      name: 'emailDoesNotHaveEnteAccount',
+      desc: 'Shown when email doesn\'t have an Ente account',
+      args: [email],
+    );
+  }
+
+  /// `{title} (Me)`
+  String accountOwnerPersonAppbarTitle(String title) {
+    return Intl.message(
+      '$title (Me)',
+      name: 'accountOwnerPersonAppbarTitle',
+      desc: 'Title of appbar for account owner person',
+      args: [title],
+    );
+  }
+
+  /// `Reassign "Me"`
+  String get reassignMe {
+    return Intl.message(
+      'Reassign "Me"',
+      name: 'reassignMe',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Me`
+  String get me {
+    return Intl.message(
+      'Me',
+      name: 'me',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `for faster sharing`
+  String get linkEmailToContactBannerCaption {
+    return Intl.message(
+      'for faster sharing',
+      name: 'linkEmailToContactBannerCaption',
+      desc:
+          'Caption for the \'Link email\' title. It should be a continuation of the \'Link email\' title. Just like how \'Link email\' + \'for faster sharing\' forms a proper sentence in English, the combination of these two strings should also be a proper sentence in other languages.',
+      args: [],
+    );
+  }
+
+  /// `Select person to link`
+  String get selectPersonToLink {
+    return Intl.message(
+      'Select person to link',
+      name: 'selectPersonToLink',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Link person to {email}`
+  String linkPersonToEmail(String email) {
+    return Intl.message(
+      'Link person to $email',
+      name: 'linkPersonToEmail',
+      desc: '',
+      args: [email],
+    );
+  }
+
+  /// `This will link {personName} to {email}`
+  String linkPersonToEmailConfirmation(String personName, String email) {
+    return Intl.message(
+      'This will link $personName to $email',
+      name: 'linkPersonToEmailConfirmation',
+      desc: 'Confirmation message when linking a person to an email',
+      args: [personName, email],
+    );
+  }
+
+  /// `Select your face`
+  String get selectYourFace {
+    return Intl.message(
+      'Select your face',
+      name: 'selectYourFace',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Reassigning...`
+  String get reassigningLoading {
+    return Intl.message(
+      'Reassigning...',
+      name: 'reassigningLoading',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Reassigned you to {name}`
+  String reassignedToName(String name) {
+    return Intl.message(
+      'Reassigned you to $name',
+      name: 'reassignedToName',
+      desc: '',
+      args: [name],
+    );
+  }
+
+  /// `Save changes before leaving?`
+  String get saveChangesBeforeLeavingQuestion {
+    return Intl.message(
+      'Save changes before leaving?',
+      name: 'saveChangesBeforeLeavingQuestion',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Don't save`
+  String get dontSave {
+    return Intl.message(
+      'Don\'t save',
+      name: 'dontSave',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `This is me!`
+  String get thisIsMeExclamation {
+    return Intl.message(
+      'This is me!',
+      name: 'thisIsMeExclamation',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Link person`
+  String get linkPerson {
+    return Intl.message(
+      'Link person',
+      name: 'linkPerson',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `for better sharing experience`
+  String get linkPersonCaption {
+    return Intl.message(
+      'for better sharing experience',
+      name: 'linkPersonCaption',
+      desc:
+          'Caption for the \'Link person\' title. It should be a continuation of the \'Link person\' title. Just like how \'Link person\' + \'for better sharing experience\' forms a proper sentence in English, the combination of these two strings should also be a proper sentence in other languages.',
+      args: [],
+    );
+  }
+
+  /// `Video streaming`
+  String get videoStreaming {
+    return Intl.message(
+      'Video streaming',
+      name: 'videoStreaming',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Processing videos`
+  String get processingVideos {
+    return Intl.message(
+      'Processing videos',
+      name: 'processingVideos',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Stream details`
+  String get streamDetails {
+    return Intl.message(
+      'Stream details',
+      name: 'streamDetails',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Processing`
+  String get processing {
+    return Intl.message(
+      'Processing',
+      name: 'processing',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Queued`
+  String get queued {
+    return Intl.message(
+      'Queued',
+      name: 'queued',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Ineligible`
+  String get ineligible {
+    return Intl.message(
+      'Ineligible',
+      name: 'ineligible',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Failed`
+  String get failed {
+    return Intl.message(
+      'Failed',
+      name: 'failed',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Play stream`
+  String get playStream {
+    return Intl.message(
+      'Play stream',
+      name: 'playStream',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Play original`
+  String get playOriginal {
+    return Intl.message(
+      'Play original',
+      name: 'playOriginal',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Joining an album will make your email visible to its participants.`
+  String get joinAlbumConfirmationDialogBody {
+    return Intl.message(
+      'Joining an album will make your email visible to its participants.',
+      name: 'joinAlbumConfirmationDialogBody',
+      desc: '',
+      args: [],
+    );
+  }
 }
 
 class AppLocalizationDelegate extends LocalizationsDelegate<S> {
@@ -8801,16 +11238,44 @@ class AppLocalizationDelegate extends LocalizationsDelegate<S> {
   List<Locale> get supportedLocales {
     return const <Locale>[
       Locale.fromSubtags(languageCode: 'en'),
+      Locale.fromSubtags(languageCode: 'ar'),
+      Locale.fromSubtags(languageCode: 'be'),
+      Locale.fromSubtags(languageCode: 'bg'),
+      Locale.fromSubtags(languageCode: 'ca'),
       Locale.fromSubtags(languageCode: 'cs'),
+      Locale.fromSubtags(languageCode: 'da'),
       Locale.fromSubtags(languageCode: 'de'),
+      Locale.fromSubtags(languageCode: 'el'),
       Locale.fromSubtags(languageCode: 'es'),
+      Locale.fromSubtags(languageCode: 'et'),
+      Locale.fromSubtags(languageCode: 'fa'),
       Locale.fromSubtags(languageCode: 'fr'),
+      Locale.fromSubtags(languageCode: 'gu'),
+      Locale.fromSubtags(languageCode: 'he'),
+      Locale.fromSubtags(languageCode: 'hi'),
+      Locale.fromSubtags(languageCode: 'hu'),
+      Locale.fromSubtags(languageCode: 'id'),
       Locale.fromSubtags(languageCode: 'it'),
+      Locale.fromSubtags(languageCode: 'ja'),
+      Locale.fromSubtags(languageCode: 'km'),
       Locale.fromSubtags(languageCode: 'ko'),
+      Locale.fromSubtags(languageCode: 'lt'),
+      Locale.fromSubtags(languageCode: 'ml'),
       Locale.fromSubtags(languageCode: 'nl'),
       Locale.fromSubtags(languageCode: 'no'),
       Locale.fromSubtags(languageCode: 'pl'),
       Locale.fromSubtags(languageCode: 'pt'),
+      Locale.fromSubtags(languageCode: 'ro'),
+      Locale.fromSubtags(languageCode: 'ru'),
+      Locale.fromSubtags(languageCode: 'sl'),
+      Locale.fromSubtags(languageCode: 'sv'),
+      Locale.fromSubtags(languageCode: 'ta'),
+      Locale.fromSubtags(languageCode: 'te'),
+      Locale.fromSubtags(languageCode: 'th'),
+      Locale.fromSubtags(languageCode: 'ti'),
+      Locale.fromSubtags(languageCode: 'tr'),
+      Locale.fromSubtags(languageCode: 'uk'),
+      Locale.fromSubtags(languageCode: 'vi'),
       Locale.fromSubtags(languageCode: 'zh'),
     ];
   }

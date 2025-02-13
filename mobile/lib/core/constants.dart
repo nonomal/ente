@@ -43,9 +43,11 @@ const supportEmail = 'support@ente.io';
 
 // this is the chunk size of the un-encrypted file which is read and encrypted before uploading it as a single part.
 const multipartPartSize = 20 * 1024 * 1024;
-const multipartPartSizeInternal = 8 * 1024 * 1024;
 
 const kDefaultProductionEndpoint = 'https://api.ente.io';
+const kAccountsUrl = 'https://accounts.ente.io';
+const kCasUrl = 'https://cas.ente.io';
+const kFamilyUrl = 'https://family.ente.io';
 
 const int intMaxValue = 9223372036854775807;
 
@@ -108,3 +110,6 @@ const uploadTempFilePrefix = "upload_file_";
 final tempDirCleanUpInterval = kDebugMode
     ? const Duration(seconds: 30).inMicroseconds
     : const Duration(hours: 6).inMicroseconds;
+
+const kFilterChipHeight = 32.0;
+const kMaxAppbarFilters = 14;

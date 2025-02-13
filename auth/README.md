@@ -12,7 +12,7 @@ multi-device sync.
 ### Android
 
 This repository's [GitHub
-releases](https://github.com/ente-io/ente/releases?q=tag%3Aauth-v2)
+releases](https://github.com/ente-io/ente/releases?q=tag%3Aauth-v4)
 contains APKs, built straight from source. These builds keep themselves updated,
 without relying on third party stores.
 
@@ -33,7 +33,7 @@ You can alternatively install the build from PlayStore or F-Droid.
 
 ### Desktop
 
-You can [**download**](https://github.com/ente-io/ente/releases?q=tag%3Aauth-v2)
+You can [**download**](https://github.com/ente-io/ente/releases?q=tag%3Aauth-v4)
 a native desktop app from this repository's GitHub releases. The desktop app
 works on Windows, Linux and macOS.
 
@@ -99,6 +99,16 @@ The best way to support this project is by checking out [Ente
 Photos](../mobile/README.md) or spreading the word.
 
 For more ways to contribute, see [../CONTRIBUTING.md](../CONTRIBUTING.md).
+
+## Certificate Fingerprints
+
+- **SHA1**: 57:E8:C6:59:C3:AA:C9:38:B0:10:70:5E:90:85:BC:20:67:E6:8F:4B
+- **SHA256**: BA:8B:F0:32:98:62:70:05:ED:DF:F6:B1:D6:0B:3B:FA:A1:4E:E8:BD:C7:61:4F:FB:3B:B1:1C:58:8D:9E:3A:D7
+
+To verify these fingerprints, use the following command:
+```bash
+apksigner verify --print-certs <path_to_apk>
+```
 
 ## ⭐️ About
 

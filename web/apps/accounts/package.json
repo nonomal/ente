@@ -3,9 +3,11 @@
     "version": "0.0.0",
     "private": true,
     "dependencies": {
-        "@/next": "*",
-        "@ente/accounts": "*",
-        "@ente/eslint-config": "*",
+        "@/accounts": "*",
+        "@/base": "*",
         "@ente/shared": "*"
+    },
+    "devDependencies": {
+        "@/build-config": "*"
     }
 }

@@ -9,35 +9,24 @@ import "package:photos/core/event_bus.dart";
 import "package:photos/events/machine_learning_control_event.dart";
 
 class MachineLearningController {
-  MachineLearningController._privateConstructor();
-
-  static final MachineLearningController instance =
-      MachineLearningController._privateConstructor();
-
   final _logger = Logger("MachineLearningController");
 
   static const kMaximumTemperature = 42; // 42 degree celsius
   static const kMinimumBatteryLevel = 20; // 20%
-  static const kDefaultInteractionTimeout = Duration(seconds: 15);
+  final kDefaultInteractionTimeout = Duration(seconds: Platform.isIOS ? 5 : 15);
   static const kUnhealthyStates = ["over_heat", "over_voltage", "dead"];
 
   bool _isDeviceHealthy = true;
   bool _isUserInteracting = true;
   bool _canRunML = false;
+  bool mlInteractionOverride = false;
   late Timer _userInteractionTimer;
 
   bool get isDeviceHealthy => _isDeviceHealthy;
 
-  void init() {
-    _logger.info('init called');
-    if (Platform.isAndroid) {
-      _startInteractionTimer();
-      BatteryInfoPlugin()
-          .androidBatteryInfoStream
-          .listen((AndroidBatteryInfo? batteryInfo) {
-        _onAndroidBatteryStateUpdate(batteryInfo);
-      });
-    }
+  MachineLearningController() {
+    _logger.info('MachineLearningController constructor');
+    _startInteractionTimer(kDefaultInteractionTimeout);
     if (Platform.isIOS) {
       BatteryInfoPlugin()
           .iosBatteryInfoStream
@@ -45,14 +34,17 @@ class MachineLearningController {
         _oniOSBatteryStateUpdate(batteryInfo);
       });
     }
-    _fireControlEvent();
+    if (Platform.isAndroid) {
+      BatteryInfoPlugin()
+          .androidBatteryInfoStream
+          .listen((AndroidBatteryInfo? batteryInfo) {
+        _onAndroidBatteryStateUpdate(batteryInfo);
+      });
+    }
     _logger.info('init done');
   }
 
   void onUserInteraction() {
-    if (Platform.isIOS) {
-      return;
-    }
     if (!_isUserInteracting) {
       _logger.info("User is interacting with the app");
       _isUserInteracting = true;
@@ -61,19 +53,28 @@ class MachineLearningController {
     _resetTimer();
   }
 
+  bool _canRunGivenUserInteraction() {
+    return !_isUserInteracting || mlInteractionOverride;
+  }
+
+  void forceOverrideML({required bool turnOn}) {
+    _logger.info("Forcing to turn on ML: $turnOn");
+    mlInteractionOverride = turnOn;
+    _fireControlEvent();
+  }
+
   void _fireControlEvent() {
-    final shouldRunML =
-        _isDeviceHealthy && (Platform.isAndroid ? !_isUserInteracting : true);
+    final shouldRunML = _isDeviceHealthy && _canRunGivenUserInteraction();
     if (shouldRunML != _canRunML) {
       _canRunML = shouldRunML;
       _logger.info(
-        "Firing event with $shouldRunML, device health: $_isDeviceHealthy and user interaction: $_isUserInteracting",
+        "Firing event: $shouldRunML      (device health: $_isDeviceHealthy, user interaction: $_isUserInteracting, mlInteractionOverride: $mlInteractionOverride)",
       );
       Bus.instance.fire(MachineLearningControlEvent(shouldRunML));
     }
   }
 
-  void _startInteractionTimer({Duration timeout = kDefaultInteractionTimeout}) {
+  void _startInteractionTimer(Duration timeout) {
     _userInteractionTimer = Timer(timeout, () {
       _logger.info("User is not interacting with the app");
       _isUserInteracting = false;
@@ -83,7 +84,7 @@ class MachineLearningController {
 
   void _resetTimer() {
     _userInteractionTimer.cancel();
-    _startInteractionTimer();
+    _startInteractionTimer(kDefaultInteractionTimeout);
   }
 
   void _onAndroidBatteryStateUpdate(AndroidBatteryInfo? batteryInfo) {

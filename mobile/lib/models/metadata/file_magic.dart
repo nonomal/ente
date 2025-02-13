@@ -1,5 +1,6 @@
 import "dart:convert";
 
+import "package:flutter/cupertino.dart";
 import 'package:photos/models/metadata/common_keys.dart';
 
 const editTimeKey = 'editedTime';
@@ -8,10 +9,13 @@ const captionKey = "caption";
 const uploaderNameKey = "uploaderName";
 const widthKey = 'w';
 const heightKey = 'h';
+const mediaTypeKey = 'mediaType';
 const latKey = "lat";
 const longKey = "long";
 const motionVideoIndexKey = "mvi";
 const noThumbKey = "noThumb";
+const dateTimeKey = 'dateTime';
+const offsetTimeKey = 'offsetTime';
 
 class MagicMetadata {
   // 0 -> visible
@@ -44,6 +48,11 @@ class PubMagicMetadata {
   double? lat;
   double? long;
 
+  // ISO 8601 datetime without timezone. This contains the date and time of the photo in the original tz
+  // where the photo was taken.
+  String? dateTime;
+  String? offsetTime;
+
   // Motion Video Index. Positive value (>0) indicates that the file is a motion
   // photo
   int? mvi;
@@ -54,6 +63,11 @@ class PubMagicMetadata {
   // this new field to the pub metadata. For static thumbnail, all thumbnails
   // should have exact same hash with should match the constant `blackThumbnailBase64`
   bool? noThumb;
+
+  // null -> not computed
+  // 0 -> normal
+  // 1 -> panorama
+  int? mediaType;
 
   PubMagicMetadata({
     this.editedTime,
@@ -66,6 +80,9 @@ class PubMagicMetadata {
     this.long,
     this.mvi,
     this.noThumb,
+    this.mediaType,
+    this.dateTime,
+    this.offsetTime,
   });
 
   factory PubMagicMetadata.fromEncodedJson(String encodedJson) =>
@@ -81,12 +98,23 @@ class PubMagicMetadata {
       editedName: map[editNameKey],
       caption: map[captionKey],
       uploaderName: map[uploaderNameKey],
-      w: map[widthKey],
-      h: map[heightKey],
+      w: safeParseInt(map[widthKey], widthKey),
+      h: safeParseInt(map[heightKey], heightKey),
       lat: map[latKey],
       long: map[longKey],
       mvi: map[motionVideoIndexKey],
       noThumb: map[noThumbKey],
+      mediaType: map[mediaTypeKey],
+      dateTime: map[dateTimeKey],
+      offsetTime: map[offsetTimeKey],
     );
+  }
+
+  static int? safeParseInt(dynamic value, String key) {
+    if (value == null) return null;
+    if (value is int) return value;
+    debugPrint("PubMagicMetadata key: $key Unexpected value: $value");
+    if (value is String) return int.tryParse(value);
+    return null;
   }
 }

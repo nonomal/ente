@@ -1,18 +1,22 @@
+import "dart:async";
 import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import "package:logging/logging.dart";
+import "package:photos/core/event_bus.dart";
+import "package:photos/events/guest_view_event.dart";
 import "package:photos/generated/l10n.dart";
+import "package:photos/models/file/extensions/file_props.dart";
 import 'package:photos/models/file/file.dart';
 import 'package:photos/models/file/file_type.dart';
 import 'package:photos/models/file/trash_file.dart';
 import 'package:photos/models/selected_files.dart';
-import "package:photos/theme/colors.dart";
-import "package:photos/theme/ente_theme.dart";
+
 import "package:photos/ui/actions/file/file_actions.dart";
 import 'package:photos/ui/collections/collection_action_sheet.dart';
 import 'package:photos/utils/delete_file_util.dart';
+import "package:photos/utils/panorama_util.dart";
 import 'package:photos/utils/share_util.dart';
 
 class FileBottomBar extends StatefulWidget {
@@ -30,8 +34,8 @@ class FileBottomBar extends StatefulWidget {
     required this.onFileRemoved,
     required this.enableFullScreenNotifier,
     this.userID,
-    Key? key,
-  }) : super(key: key);
+    super.key,
+  });
 
   @override
   FileBottomBarState createState() => FileBottomBarState();
@@ -39,9 +43,36 @@ class FileBottomBar extends StatefulWidget {
 
 class FileBottomBarState extends State<FileBottomBar> {
   final GlobalKey shareButtonKey = GlobalKey();
+  bool isGuestView = false;
+  late final StreamSubscription<GuestViewEvent> _guestViewEventSubscription;
+  int? lastFileGenID;
+
+  @override
+  void initState() {
+    super.initState();
+    _guestViewEventSubscription =
+        Bus.instance.on<GuestViewEvent>().listen((event) {
+      setState(() {
+        isGuestView = event.isGuestView;
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _guestViewEventSubscription.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
+    if (widget.file.canBePanorama()) {
+      lastFileGenID = widget.file.generatedID;
+      if (lastFileGenID != widget.file.generatedID) {
+        guardedCheckPanorama(widget.file).ignore();
+      }
+    }
+
     return _getBottomBar();
   }
 
@@ -59,9 +90,9 @@ class FileBottomBarState extends State<FileBottomBar> {
         widget.file.ownerID == null || widget.file.ownerID == widget.userID;
     children.add(
       Tooltip(
-        message: "Info",
+        message: S.of(context).info,
         child: Padding(
-          padding: const EdgeInsets.only(top: 12, bottom: 12),
+          padding: const EdgeInsets.only(top: 12),
           child: IconButton(
             icon: Icon(
               Platform.isAndroid ? Icons.info_outline : CupertinoIcons.info,
@@ -85,12 +116,13 @@ class FileBottomBarState extends State<FileBottomBar> {
 
     if (!widget.showOnlyInfoButton && widget.file is! TrashFile) {
       if (widget.file.fileType == FileType.image ||
-          widget.file.fileType == FileType.livePhoto) {
+          widget.file.fileType == FileType.livePhoto ||
+          (widget.file.fileType == FileType.video)) {
         children.add(
           Tooltip(
-            message: "Edit",
+            message: S.of(context).edit,
             child: Padding(
-              padding: const EdgeInsets.only(top: 12, bottom: 12),
+              padding: const EdgeInsets.only(top: 12),
               child: IconButton(
                 icon: const Icon(
                   Icons.tune_outlined,
@@ -109,7 +141,7 @@ class FileBottomBarState extends State<FileBottomBar> {
           Tooltip(
             message: S.of(context).delete,
             child: Padding(
-              padding: const EdgeInsets.only(top: 12, bottom: 12),
+              padding: const EdgeInsets.only(top: 12),
               child: IconButton(
                 icon: Icon(
                   Platform.isAndroid
@@ -125,11 +157,12 @@ class FileBottomBarState extends State<FileBottomBar> {
           ),
         );
       }
+
       children.add(
         Tooltip(
           message: S.of(context).share,
           child: Padding(
-            padding: const EdgeInsets.only(top: 12, bottom: 12),
+            padding: const EdgeInsets.only(top: 12),
             child: IconButton(
               key: shareButtonKey,
               icon: Icon(
@@ -146,15 +179,15 @@ class FileBottomBarState extends State<FileBottomBar> {
         ),
       );
     }
-    final safeAreaBottomPadding = MediaQuery.of(context).padding.bottom * .5;
     return ValueListenableBuilder(
       valueListenable: widget.enableFullScreenNotifier,
       builder: (BuildContext context, bool isFullScreen, _) {
         return IgnorePointer(
-          ignoring: isFullScreen,
+          ignoring: isFullScreen || isGuestView,
           child: AnimatedOpacity(
-            opacity: isFullScreen ? 0 : 1,
-            duration: const Duration(milliseconds: 150),
+            opacity: isFullScreen || isGuestView ? 0 : 1,
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeInOut,
             child: Align(
               alignment: Alignment.bottomCenter,
               child: Container(
@@ -170,44 +203,13 @@ class FileBottomBarState extends State<FileBottomBar> {
                     stops: const [0, 0.8, 1],
                   ),
                 ),
-                child: Padding(
-                  padding: EdgeInsets.only(bottom: safeAreaBottomPadding),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      widget.file.caption?.isNotEmpty ?? false
-                          ? Padding(
-                              padding: const EdgeInsets.fromLTRB(
-                                16,
-                                12,
-                                16,
-                                0,
-                              ),
-                              child: GestureDetector(
-                                onTap: () async {
-                                  await _displayDetails(widget.file);
-                                  await Future.delayed(
-                                    const Duration(milliseconds: 500),
-                                  ); //Waiting for some time till the caption gets updated in db if the user closes the bottom sheet without pressing 'done'
-                                  safeRefresh();
-                                },
-                                child: Text(
-                                  widget.file.caption!,
-                                  overflow: TextOverflow.ellipsis,
-                                  maxLines: 1,
-                                  style: getEnteTextTheme(context)
-                                      .mini
-                                      .copyWith(color: textBaseDark),
-                                  textAlign: TextAlign.center,
-                                ),
-                              ),
-                            )
-                          : const SizedBox.shrink(),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceAround,
-                        children: children,
-                      ),
-                    ],
+                child: SafeArea(
+                  top: false,
+                  left: false,
+                  right: false,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: children,
                   ),
                 ),
               ),
@@ -231,7 +233,7 @@ class FileBottomBarState extends State<FileBottomBar> {
       Tooltip(
         message: S.of(context).restore,
         child: Padding(
-          padding: const EdgeInsets.only(top: 12, bottom: 12),
+          padding: const EdgeInsets.only(top: 12),
           child: IconButton(
             icon: const Icon(
               Icons.restore_outlined,
@@ -255,7 +257,7 @@ class FileBottomBarState extends State<FileBottomBar> {
       Tooltip(
         message: S.of(context).delete,
         child: Padding(
-          padding: const EdgeInsets.only(top: 12, bottom: 12),
+          padding: const EdgeInsets.only(top: 12),
           child: IconButton(
             icon: const Icon(
               Icons.delete_forever_outlined,

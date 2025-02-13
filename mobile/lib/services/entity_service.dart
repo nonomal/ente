@@ -5,7 +5,6 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
 import "package:photos/core/configuration.dart";
-import "package:photos/core/network/network.dart";
 import "package:photos/db/entities_db.dart";
 import "package:photos/db/files_db.dart";
 import "package:photos/gateways/entity_gw.dart";
@@ -14,24 +13,19 @@ import "package:photos/models/api/entity/key.dart";
 import "package:photos/models/api/entity/type.dart";
 import "package:photos/models/local_entity_data.dart";
 import "package:photos/utils/crypto_util.dart";
+import "package:photos/utils/gzip.dart";
 import 'package:shared_preferences/shared_preferences.dart';
 
 class EntityService {
   static const int fetchLimit = 500;
   final _logger = Logger((EntityService).toString());
+  final SharedPreferences _prefs;
+  final EntityGateway _gateway;
   final _config = Configuration.instance;
-  late SharedPreferences _prefs;
-  late EntityGateway _gateway;
-  late FilesDB _db;
+  late final FilesDB _db = FilesDB.instance;
 
-  EntityService._privateConstructor();
-
-  static final EntityService instance = EntityService._privateConstructor();
-
-  Future<void> init() async {
-    _prefs = await SharedPreferences.getInstance();
-    _db = FilesDB.instance;
-    _gateway = EntityGateway(NetworkClient.instance.enteDio);
+  EntityService(this._prefs, this._gateway) {
+    debugPrint("EntityService constructor");
   }
 
   String _getEntityKeyPrefix(EntityType type) {
@@ -56,17 +50,23 @@ class EntityService {
 
   Future<LocalEntityData> addOrUpdate(
     EntityType type,
-    String plainText, {
+    Map<String, dynamic> jsonMap, {
     String? id,
   }) async {
+    final String plainText = jsonEncode(jsonMap);
     final key = await getOrCreateEntityKey(type);
-    final encryptedKeyData = await CryptoUtil.encryptChaCha(
-      utf8.encode(plainText),
-      key,
-    );
-    final String encryptedData =
-        CryptoUtil.bin2base64(encryptedKeyData.encryptedData!);
-    final String header = CryptoUtil.bin2base64(encryptedKeyData.header!);
+    late String encryptedData, header;
+    if (type.isZipped()) {
+      final ChaChaEncryptionResult result =
+          await gzipAndEncryptJson(jsonMap, key);
+      encryptedData = result.encData;
+      header = result.header;
+    } else {
+      final encryptedKeyData =
+          await CryptoUtil.encryptChaCha(utf8.encode(plainText), key);
+      encryptedData = CryptoUtil.bin2base64(encryptedKeyData.encryptedData!);
+      header = CryptoUtil.bin2base64(encryptedKeyData.header!);
+    }
     debugPrint(
       " ${id == null ? 'Adding' : 'Updating'} entity of type: " +
           type.typeToString(),
@@ -94,13 +94,25 @@ class EntityService {
   Future<void> syncEntities() async {
     try {
       await _remoteToLocalSync(EntityType.location);
-      await _remoteToLocalSync(EntityType.person);
+      await _remoteToLocalSync(EntityType.cgroup);
     } catch (e) {
       _logger.severe("Failed to sync entities", e);
     }
   }
 
-  Future<void> _remoteToLocalSync(EntityType type) async {
+  Future<int> syncEntity(EntityType type) async {
+    try {
+      return _remoteToLocalSync(type);
+    } catch (e) {
+      _logger.severe("Failed to sync entities", e);
+      return -1;
+    }
+  }
+
+  Future<int> _remoteToLocalSync(
+    EntityType type, {
+    int prevFetchCount = 0,
+  }) async {
     final int lastSyncTime =
         _prefs.getInt(_getEntityLastSyncTimePrefix(type)) ?? 0;
     final List<EntityData> result = await _gateway.getDiff(
@@ -109,8 +121,7 @@ class EntityService {
       limit: fetchLimit,
     );
     if (result.isEmpty) {
-      debugPrint("No $type entries to sync");
-      return;
+      return prevFetchCount;
     }
     final bool hasMoreItems = result.length == fetchLimit;
     _logger.info("${result.length} entries of type $type fetched");
@@ -127,12 +138,22 @@ class EntityService {
       final List<LocalEntityData> entities = [];
       for (EntityData e in result) {
         try {
-          final decryptedValue = await CryptoUtil.decryptChaCha(
-            CryptoUtil.base642bin(e.encryptedData!),
-            entityKey,
-            CryptoUtil.base642bin(e.header!),
-          );
-          final String plainText = utf8.decode(decryptedValue);
+          late String plainText;
+          if (type.isZipped()) {
+            final jsonMap = await decryptAndUnzipJson(
+              entityKey,
+              encryptedData: e.encryptedData!,
+              header: e.header!,
+            );
+            plainText = jsonEncode(jsonMap);
+          } else {
+            final Uint8List decryptedValue = await CryptoUtil.decryptChaCha(
+              CryptoUtil.base642bin(e.encryptedData!),
+              entityKey,
+              CryptoUtil.base642bin(e.header!),
+            );
+            plainText = utf8.decode(decryptedValue);
+          }
           entities.add(
             LocalEntityData(
               id: e.id,
@@ -144,6 +165,7 @@ class EntityService {
           );
         } catch (e, s) {
           _logger.severe("Failed to decrypted data for key $type", e, s);
+          rethrow;
         }
       }
       if (entities.isNotEmpty) {
@@ -153,8 +175,12 @@ class EntityService {
     await _prefs.setInt(_getEntityLastSyncTimePrefix(type), maxSyncTime);
     if (hasMoreItems) {
       _logger.info("Diff limit reached, pulling again");
-      await _remoteToLocalSync(type);
+      await _remoteToLocalSync(
+        type,
+        prevFetchCount: prevFetchCount + result.length,
+      );
     }
+    return prevFetchCount + result.length;
   }
 
   Future<Uint8List> getOrCreateEntityKey(EntityType type) async {

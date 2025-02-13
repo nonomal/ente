@@ -11,8 +11,8 @@ class EnteLoadingWidget extends StatelessWidget {
     this.size = 14,
     this.padding = 5,
     this.alignment = Alignment.center,
-    Key? key,
-  }) : super(key: key);
+    super.key,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -25,6 +25,7 @@ class EnteLoadingWidget extends StatelessWidget {
           child: CircularProgressIndicator(
             strokeWidth: 2,
             color: color ?? getEnteColorScheme(context).strokeBase,
+            strokeCap: StrokeCap.round,
           ),
         ),
       ),

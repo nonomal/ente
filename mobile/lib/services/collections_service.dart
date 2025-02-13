@@ -4,7 +4,9 @@ import 'dart:math';
 
 import 'package:collection/collection.dart';
 import 'package:dio/dio.dart';
+import "package:fast_base58/fast_base58.dart";
 import 'package:flutter/foundation.dart';
+import "package:flutter/material.dart";
 import 'package:logging/logging.dart';
 import 'package:photos/core/configuration.dart';
 import 'package:photos/core/constants.dart';
@@ -21,6 +23,7 @@ import 'package:photos/events/force_reload_home_gallery_event.dart';
 import 'package:photos/events/local_photos_updated_event.dart';
 import 'package:photos/extensions/list.dart';
 import 'package:photos/extensions/stop_watch.dart';
+import "package:photos/generated/l10n.dart";
 import 'package:photos/models/api/collection/create_request.dart';
 import "package:photos/models/api/collection/public_url.dart";
 import "package:photos/models/api/collection/user.dart";
@@ -30,13 +33,15 @@ import 'package:photos/models/collection/collection_items.dart';
 import 'package:photos/models/file/file.dart';
 import "package:photos/models/files_split.dart";
 import "package:photos/models/metadata/collection_magic.dart";
+import "package:photos/service_locator.dart";
 import 'package:photos/services/app_lifecycle_service.dart';
 import "package:photos/services/favorites_service.dart";
 import 'package:photos/services/file_magic_service.dart';
 import 'package:photos/services/local_sync_service.dart';
 import 'package:photos/services/remote_sync_service.dart';
 import 'package:photos/utils/crypto_util.dart';
-import 'package:photos/utils/file_download_util.dart';
+import "package:photos/utils/dialog_util.dart";
+import "package:photos/utils/file_key.dart";
 import "package:photos/utils/local_settings.dart";
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -63,6 +68,12 @@ class CollectionsService {
   Collection? cachedUncategorizedCollection;
   final Map<String, EnteFile> _coverCache = <String, EnteFile>{};
   final Map<int, int> _countCache = <int, int>{};
+
+  //Used for links-in-app
+  final _cachedPublicAlbumToken = <int, String>{};
+  final _cachedPublicAlbumJWT = <int, String>{};
+  final _cachedPublicCollectionID = <int>[];
+  final _cachedPublicAlbumKey = <int, String>{};
 
   CollectionsService._privateConstructor() {
     _db = CollectionsDB.instance;
@@ -128,7 +139,7 @@ class CollectionsService {
         }
       }
       // remove reference for incoming collections when unshared/deleted
-      if (collection.isDeleted && ownerID != collection.owner?.id) {
+      if (collection.isDeleted && ownerID != collection.owner.id) {
         await _db.deleteCollection(collection.id);
       } else {
         // keep entry for deletedCollection as collectionKey may be used during
@@ -171,7 +182,11 @@ class CollectionsService {
     _collectionIDToCollections.clear();
     cachedDefaultHiddenCollection = null;
     cachedUncategorizedCollection = null;
+    _cachedPublicAlbumToken.clear();
+    _cachedPublicAlbumJWT.clear();
+    _cachedPublicCollectionID.clear();
     _cachedKeys.clear();
+    _cachedPublicAlbumKey.clear();
   }
 
   Future<Map<int, int>> getCollectionIDsToBeSynced() async {
@@ -379,7 +394,7 @@ class CollectionsService {
     final List<Collection> collections =
         getCollectionsForUI(includedShared: true);
     for (final c in collections) {
-      if (c.owner!.id == Configuration.instance.getUserID()) {
+      if (c.owner.id == Configuration.instance.getUserID()) {
         if (c.hasSharees || c.hasLink && !c.isQuickLinkCollection()) {
           outgoing.add(c);
         } else if (c.isQuickLinkCollection()) {
@@ -399,7 +414,7 @@ class CollectionsService {
   }
 
   Future<List<Collection>> getCollectionForOnEnteSection() async {
-    final AlbumSortKey sortKey = LocalSettings.instance.albumSortKey();
+    final AlbumSortKey sortKey = localSettings.albumSortKey();
     final List<Collection> collections =
         CollectionsService.instance.getCollectionsForUI();
     final bool hasFavorites = FavoritesService.instance.hasFavorites();
@@ -431,7 +446,8 @@ class CollectionsService {
     for (final collection in collections) {
       if (collection.type == CollectionType.uncategorized ||
           collection.isQuickLinkCollection() ||
-          collection.isHidden()) {
+          collection.isHidden() ||
+          collection.isArchived()) {
         continue;
       }
       if (collection.type == CollectionType.favorites) {
@@ -456,8 +472,8 @@ class CollectionsService {
     if (collectionID != null) {
       final Collection? collection = getCollectionByID(collectionID);
       if (collection != null) {
-        if (collection.owner?.id == userID) {
-          _cachedUserIdToUser[userID] = collection.owner!;
+        if (collection.owner.id == userID) {
+          _cachedUserIdToUser[userID] = collection.owner;
         } else {
           final matchingUser = collection.getSharees().firstWhereOrNull(
                 (u) => u.id == userID,
@@ -537,7 +553,7 @@ class CollectionsService {
       unawaited(_db.insert([_collectionIDToCollections[collectionID]!]));
       RemoteSyncService.instance.sync(silently: true).ignore();
       return sharees;
-    } on DioError catch (e) {
+    } on DioException catch (e) {
       if (e.response?.statusCode == 402) {
         throw SharingNotPermittedForFreeAccountsError();
       }
@@ -625,7 +641,7 @@ class CollectionsService {
       } else {
         await _handleCollectionDeletion(collection);
       }
-    } on DioError catch (e) {
+    } on DioException catch (e) {
       if (e.response != null) {
         debugPrint("Error " + e.response!.toString());
       }
@@ -682,7 +698,7 @@ class CollectionsService {
     );
     final encryptedKey = CryptoUtil.base642bin(collection.encryptedKey);
     Uint8List? collectionKey;
-    if (collection.owner?.id == _config.getUserID()) {
+    if (collection.owner.id == _config.getUserID()) {
       // If the collection is owned by the user, decrypt with the master key
       if (_config.getKey() == null) {
         // Possible during AppStore account migration, where SecureStorage
@@ -728,7 +744,7 @@ class CollectionsService {
       collection.setName(newName);
       sync().ignore();
     } catch (e, s) {
-      _logger.severe("failed to rename collection", e, s);
+      _logger.warning("failed to rename collection", e, s);
       rethrow;
     }
   }
@@ -751,7 +767,7 @@ class CollectionsService {
   ) async {
     final int ownerID = Configuration.instance.getUserID()!;
     try {
-      if (collection.owner?.id != ownerID) {
+      if (collection.owner.id != ownerID) {
         throw AssertionError("cannot modify albums not owned by you");
       }
       // read the existing magic metadata and apply new updates to existing data
@@ -792,7 +808,7 @@ class CollectionsService {
 
       // trigger sync to fetch the latest collection state from server
       sync().ignore();
-    } on DioError catch (e) {
+    } on DioException catch (e) {
       if (e.response != null && e.response?.statusCode == 409) {
         _logger.severe('collection magic data out of sync');
         sync().ignore();
@@ -810,7 +826,7 @@ class CollectionsService {
   ) async {
     final int ownerID = Configuration.instance.getUserID()!;
     try {
-      if (collection.owner?.id != ownerID) {
+      if (collection.owner.id != ownerID) {
         throw AssertionError("cannot modify albums not owned by you");
       }
       // read the existing magic metadata and apply new updates to existing data
@@ -851,7 +867,7 @@ class CollectionsService {
       _cacheLocalPathAndCollection(collection);
       // trigger sync to fetch the latest collection state from server
       sync().ignore();
-    } on DioError catch (e) {
+    } on DioException catch (e) {
       if (e.response != null && e.response?.statusCode == 409) {
         _logger.severe('collection magic data out of sync');
         sync().ignore();
@@ -869,7 +885,7 @@ class CollectionsService {
   ) async {
     final int ownerID = Configuration.instance.getUserID()!;
     try {
-      if (collection.owner?.id == ownerID) {
+      if (collection.owner.id == ownerID) {
         throw AssertionError("cannot modify sharee settings for albums owned "
             "by you");
       }
@@ -911,7 +927,7 @@ class CollectionsService {
       _cacheLocalPathAndCollection(collection);
       // trigger sync to fetch the latest collection state from server
       sync().ignore();
-    } on DioError catch (e) {
+    } on DioException catch (e) {
       if (e.response != null && e.response?.statusCode == 409) {
         _logger.severe('collection magic data out of sync');
         sync().ignore();
@@ -933,15 +949,16 @@ class CollectionsService {
         data: {
           "collectionID": collection.id,
           "enableCollect": enableCollect,
+          "enableJoin": true,
         },
       );
-      collection.publicURLs?.add(PublicURL.fromMap(response.data["result"]));
+      collection.publicURLs.add(PublicURL.fromMap(response.data["result"]));
       await _db.insert(List.from([collection]));
       _collectionIDToCollections[collection.id] = collection;
       Bus.instance.fire(
         CollectionUpdatedEvent(collection.id, <EnteFile>[], "shareUrL"),
       );
-    } on DioError catch (e) {
+    } on DioException catch (e) {
       if (e.response?.statusCode == 402) {
         throw SharingNotPermittedForFreeAccountsError();
       }
@@ -963,14 +980,14 @@ class CollectionsService {
         data: json.encode(prop),
       );
       // remove existing url information
-      collection.publicURLs?.clear();
-      collection.publicURLs?.add(PublicURL.fromMap(response.data["result"]));
+      collection.publicURLs.clear();
+      collection.publicURLs.add(PublicURL.fromMap(response.data["result"]));
       await _db.insert(List.from([collection]));
       _collectionIDToCollections[collection.id] = collection;
       Bus.instance.fire(
         CollectionUpdatedEvent(collection.id, <EnteFile>[], "updateUrl"),
       );
-    } on DioError catch (e) {
+    } on DioException catch (e) {
       if (e.response?.statusCode == 402) {
         throw SharingNotPermittedForFreeAccountsError();
       }
@@ -986,7 +1003,7 @@ class CollectionsService {
       await _enteDio.delete(
         "/collections/share-url/" + collection.id.toString(),
       );
-      collection.publicURLs?.clear();
+      collection.publicURLs.clear();
       await _db.insert(List.from([collection]));
       _collectionIDToCollections[collection.id] = collection;
       Bus.instance.fire(
@@ -996,7 +1013,7 @@ class CollectionsService {
           "disableShareUrl",
         ),
       );
-    } on DioError catch (e) {
+    } on DioException catch (e) {
       _logger.info(e);
       rethrow;
     }
@@ -1021,11 +1038,167 @@ class CollectionsService {
       return collections;
     } catch (e, s) {
       _logger.warning(e, s);
-      if (e is DioError && e.response?.statusCode == 401) {
+      if (e is DioException && e.response?.statusCode == 401) {
         throw UnauthorizedError();
       }
       rethrow;
     }
+  }
+
+  Future<Collection> getCollectionFromPublicLink(
+    BuildContext context,
+    Uri uri,
+  ) async {
+    final String? authToken = uri.queryParameters["t"];
+    final String albumKey = uri.fragment;
+    try {
+      final response = await _enteDio.get(
+        "/public-collection/info",
+        options: Options(
+          headers: {"X-Auth-Access-Token": authToken},
+        ),
+      );
+
+      final collectionData = response.data["collection"];
+      final Collection collection = Collection.fromMap(collectionData);
+      final Uint8List collectionKey =
+          Uint8List.fromList(Base58Decode(albumKey));
+
+      _cachedKeys[collection.id] = collectionKey;
+      _cachedPublicAlbumToken[collection.id] = authToken!;
+      _cachedPublicCollectionID.add(collection.id);
+      _cachedPublicAlbumKey[collection.id] = albumKey;
+
+      if (collectionData['pubMagicMetadata'] != null) {
+        final utfEncodedMmd = await CryptoUtil.decryptChaCha(
+          CryptoUtil.base642bin(collectionData['pubMagicMetadata']['data']),
+          collectionKey,
+          CryptoUtil.base642bin(
+            collectionData['pubMagicMetadata']['header'],
+          ),
+        );
+        collection.mMdPubEncodedJson = utf8.decode(utfEncodedMmd);
+        collection.mMbPubVersion =
+            collectionData['pubMagicMetadata']['version'];
+        collection.pubMagicMetadata =
+            CollectionPubMagicMetadata.fromEncodedJson(
+          collection.mMdPubEncodedJson ?? '{}',
+        );
+      }
+
+      collection.setName(_getDecryptedCollectionName(collection));
+      return collection;
+    } catch (e, s) {
+      _logger.warning(e, s);
+      _logger.severe("Failed to fetch public collection");
+      if (e is DioException && e.response?.statusCode == 410) {
+        await showInfoDialog(
+          context,
+          title: S.of(context).linkExpired,
+          body: S.of(context).theLinkYouAreTryingToAccessHasExpired,
+        );
+        throw UnauthorizedError();
+      }
+      await showGenericErrorDialog(context: context, error: e);
+      if (e is DioException && e.response?.statusCode == 401) {
+        throw UnauthorizedError();
+      }
+      rethrow;
+    }
+  }
+
+  Future<bool> verifyPublicCollectionPassword(
+    BuildContext context,
+    String passwordHash,
+    int collectionID,
+  ) async {
+    final authToken = await getSharedPublicAlbumToken(collectionID);
+    try {
+      final response = await _enteDio.post(
+        "/public-collection/verify-password",
+        data: {"passHash": passwordHash},
+        options: Options(
+          headers: {
+            "X-Auth-Access-Token": authToken,
+          },
+        ),
+      );
+      final jwtToken = response.data["jwtToken"];
+      if (response.statusCode == 200) {
+        await setPublicAlbumTokenJWT(collectionID, jwtToken);
+        return true;
+      }
+      return false;
+    } catch (e) {
+      _logger.warning("Failed to verify public collection password $e");
+      await showErrorDialog(
+        context,
+        S.of(context).incorrectPasswordTitle,
+        S.of(context).pleaseTryAgain,
+      );
+      return false;
+    }
+  }
+
+  Future<void> joinPublicCollection(
+    BuildContext context,
+    int collectionID,
+  ) async {
+    final authToken = await getSharedPublicAlbumToken(collectionID);
+    final jwtToken = await getSharedPublicAlbumTokenJWT(collectionID);
+    final key = await getSharedPublicAlbumKey(collectionID);
+    if (key.isEmpty) {
+      throw Exception("Collection key not found");
+    }
+    final encryptedKey = CryptoUtil.sealSync(
+      getCollectionKey(collectionID),
+      CryptoUtil.base642bin(
+        Configuration.instance.getKeyAttributes()!.publicKey,
+      ),
+    );
+    await _enteDio.post(
+      "/collections/join-link",
+      data: {
+        "collectionID": collectionID,
+        "encryptedKey": CryptoUtil.bin2base64(encryptedKey),
+      },
+      options: Options(
+        headers: {
+          "X-Auth-Access-Token": authToken,
+          "X-Auth-Access-Token-JWT": jwtToken,
+        },
+      ),
+    );
+  }
+
+  Future<String> getSharedPublicAlbumKey(int collectionID) async {
+    if (_cachedPublicAlbumKey.containsKey(collectionID)) {
+      return _cachedPublicAlbumKey[collectionID]!;
+    }
+    return "";
+  }
+
+  Future<String?> getSharedPublicAlbumToken(int collectionID) async {
+    if (_cachedPublicAlbumToken.containsKey(collectionID)) {
+      return _cachedPublicAlbumToken[collectionID];
+    }
+    return null;
+  }
+
+  Future<String?> getSharedPublicAlbumTokenJWT(int collectionID) async {
+    if (_cachedPublicAlbumJWT.containsKey(collectionID)) {
+      return _cachedPublicAlbumJWT[collectionID];
+    }
+    return null;
+  }
+
+  /// Is a public link opened in the app
+  bool isSharedPublicLink(int collectionID) {
+    return _cachedPublicCollectionID.contains(collectionID);
+  }
+
+  Future<void> setPublicAlbumTokenJWT(int collectionID, String token) async {
+    _cachedPublicAlbumJWT[collectionID] = token;
   }
 
   Future<Collection> _fromRemoteCollection(
@@ -1127,7 +1300,7 @@ class CollectionsService {
       _cacheLocalPathAndCollection(collection);
       return collection;
     } catch (e) {
-      if (e is DioError && e.response?.statusCode == 401) {
+      if (e is DioException && e.response?.statusCode == 401) {
         throw UnauthorizedError();
       }
       _logger.severe('failed to fetch collection: $collectionID', e);

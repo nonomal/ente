@@ -5,41 +5,43 @@ description: How to report bugs and share the logs from your Ente Photos app
 
 # Sharing debug logs
 
-In some cases when you report a bug, our customer support might request you to
-share debug logs from your app to help our developers find the issue.
+In some cases when you report an issue, our customer support might request you
+to share debug logs from your app to help our developers find the issue.
 
 Note that the debug logs contain potentially sensitive information like the file
 names, so please feel free to not share them if you have any hesitation or want
 to keep these private. We will try to diagnose the issue even without the logs,
 the logs just make the process a bit faster and easier.
 
-### Mobile
+## Mobile
 
-To **_Report a bug_** on your mobile device, follow these steps:
+- Open settings (tap on the three horizontal lines button).
+- Tap on _Support_ from the settings.
+- Select for the option to _Report a Bug_.
+- Tap on _Report a bug_.
 
--   Tap on the three horizontal lines to access the settings.
--   Tap on **"Support"** from the settings.
--   Select for the option to **"Report a Bug"**.
--   Tap on **"Report a bug"** .
+## Desktop and Web
 
-### Desktop
+- Open settings (click on the three horizontal lines button located at the top
+  left corner of the screen).
+- Click on the _Help_ option towards the bottom of settings.
+- Click on _View logs_. This will show you the location of the logs on your
+  system (desktop), or download them from the browser onto your computer (web).
+- Go back to settings.
+- Click on _Support_. This will open your email client where you can attach the
+  logs in the email and describe the issue.
 
-To **_Report a bug_** on the desktop app, follow these steps:
+## Desktop
 
--   Click on the three horizontal lines located in the top left corner of the
-    screen to access the settings.
--   Click on **"Debug logs"** from the settings.
--   Click on **Download logs**.
--   Then Click on **"Support"**.
--   Attach the downloaded logs in the email and describe the issue.
+On the desktop app, you can also directly view the logs on your computer at the
+following locations:
 
-### Web
+- macOS: `~/Library/Logs/ente/ente.log`
+- Linux: `~/.config/ente/logs/ente.log`
+- Windows: `%USERPROFILE%\AppData\Roaming\ente\logs\ente.log`
 
-To **_Report a bug_** on the web, follow these steps:
+## Send email manually
 
--   Click on the three horizontal lines located in the top left corner of the
-    screen to access the settings.
--   Click on **"Debug Logs"**
--   Click on **Download logs**
--   Click on **"Support"** from the settings.
--   Attach the downloaded logs in the email and describe the issue.
+If _Report a bug_ or _Support_ doesn't automatically open your email client, you
+can also directly send a mail to <a
+href="mailto:support@ente.io">support@ente.io</a>.

@@ -1,27 +1,36 @@
-import { basename } from "@/next/file";
-import log from "@/next/log";
-import type { CollectionMapping, Electron, ZipItem } from "@/next/types/ipc";
+import { isDesktop } from "@/base/app";
+import { useModalVisibility } from "@/base/components/utils/modal";
+import { basename } from "@/base/file-name";
+import log from "@/base/log";
+import type { CollectionMapping, Electron, ZipItem } from "@/base/types/ipc";
+import type { Collection } from "@/media/collection";
+import type { EnteFile } from "@/media/file";
+import { UploaderNameInput } from "@/new/albums/components/UploaderNameInput";
+import { CollectionMappingChoice } from "@/new/photos/components/CollectionMappingChoice";
+import type { CollectionSelectorAttributes } from "@/new/photos/components/CollectionSelector";
+import { downloadAppDialogAttributes } from "@/new/photos/components/utils/download";
+import { getLatestCollections } from "@/new/photos/services/collections";
+import { exportMetadataDirectoryName } from "@/new/photos/services/export";
+import type {
+    FileAndPath,
+    UploadItem,
+    UploadPhase,
+} from "@/new/photos/services/upload/types";
+import { redirectToCustomerPortal } from "@/new/photos/services/user-details";
+import { useAppContext } from "@/new/photos/types/context";
 import { firstNonEmpty } from "@/utils/array";
-import { ensure } from "@/utils/ensure";
 import { CustomError } from "@ente/shared/error";
-import { isPromise } from "@ente/shared/utils";
 import DiscFullIcon from "@mui/icons-material/DiscFull";
-import UserNameInputDialog from "components/UserNameInputDialog";
-import { UPLOAD_STAGES } from "constants/upload";
+import InfoRoundedIcon from "@mui/icons-material/InfoRounded";
 import { t } from "i18next";
-import isElectron from "is-electron";
-import { AppContext } from "pages/_app";
 import { GalleryContext } from "pages/gallery";
 import { useContext, useEffect, useRef, useState } from "react";
-import billingService from "services/billingService";
-import { getLatestCollections } from "services/collectionService";
-import { exportMetadataDirectoryName } from "services/export";
+import { Trans } from "react-i18next";
 import {
     getPublicCollectionUID,
     getPublicCollectionUploaderName,
     savePublicCollectionUploaderName,
 } from "services/publicCollectionService";
-import type { FileAndPath, UploadItem } from "services/upload/types";
 import type {
     InProgressUpload,
     SegregatedFinishedUploads,
@@ -31,26 +40,15 @@ import type {
 } from "services/upload/uploadManager";
 import uploadManager from "services/upload/uploadManager";
 import watcher from "services/watch";
-import { NotificationAttributes } from "types/Notification";
-import { Collection } from "types/collection";
-import {
-    CollectionSelectorIntent,
-    SetCollectionSelectorAttributes,
-    SetCollections,
-    SetFiles,
-    SetLoading,
-    UploadTypeSelectorIntent,
-} from "types/gallery";
+import { SetLoading } from "types/gallery";
 import { getOrCreateAlbum } from "utils/collection";
 import { PublicCollectionGalleryContext } from "utils/publicCollectionGallery";
-import {
-    getDownloadAppMessage,
-    getRootLevelFileWithFolderNotAllowMessage,
-} from "utils/ui";
 import { SetCollectionNamerAttributes } from "../Collections/CollectionNamer";
-import { CollectionMappingChoiceModal } from "./CollectionMappingChoiceModal";
-import UploadProgress from "./UploadProgress";
-import UploadTypeSelector from "./UploadTypeSelector";
+import { UploadProgress } from "./UploadProgress";
+import {
+    UploadTypeSelector,
+    type UploadTypeSelectorIntent,
+} from "./UploadTypeSelector";
 
 enum PICKED_UPLOAD_TYPE {
     FILES = "files",
@@ -60,15 +58,28 @@ enum PICKED_UPLOAD_TYPE {
 
 interface Props {
     syncWithRemote: (force?: boolean, silent?: boolean) => Promise<void>;
-    closeCollectionSelector?: () => void;
     closeUploadTypeSelector: () => void;
-    setCollectionSelectorAttributes?: SetCollectionSelectorAttributes;
+    /**
+     * Show the collection selector with the given {@link attributes}.
+     */
+    onOpenCollectionSelector?: (
+        attributes: CollectionSelectorAttributes,
+    ) => void;
+    /**
+     * Close the collection selector if it is open.
+     */
+    onCloseCollectionSelector?: () => void;
     setCollectionNamerAttributes?: SetCollectionNamerAttributes;
     setLoading: SetLoading;
     setShouldDisableDropzone: (value: boolean) => void;
     showCollectionSelector?: () => void;
-    setFiles: SetFiles;
-    setCollections?: SetCollections;
+    /**
+     * Callback invoked when a file is uploaded.
+     *
+     * @param file The newly uploaded file.
+     */
+    onUploadFile: (file: EnteFile) => void;
+    setCollections?: (cs: Collection[]) => void;
     isFirstUpload?: boolean;
     uploadTypeSelectorView: boolean;
     showSessionExpiredMessage: () => void;
@@ -93,18 +104,23 @@ export default function Uploader({
     folderSelectorFiles,
     openZipFileSelector,
     fileSelectorZipFiles,
+    onUploadFile,
+    showSessionExpiredMessage,
     ...props
 }: Props) {
-    const appContext = useContext(AppContext);
+    const {
+        showMiniDialog,
+        showNotification,
+        onGenericError,
+        watchFolderView,
+    } = useAppContext();
     const galleryContext = useContext(GalleryContext);
     const publicCollectionGalleryContext = useContext(
         PublicCollectionGalleryContext,
     );
 
     const [uploadProgressView, setUploadProgressView] = useState(false);
-    const [uploadStage, setUploadStage] = useState<UPLOAD_STAGES>(
-        UPLOAD_STAGES.START,
-    );
+    const [uploadPhase, setUploadPhase] = useState<UploadPhase>("preparing");
     const [uploadFileNames, setUploadFileNames] = useState<UploadFileNames>();
     const [uploadCounter, setUploadCounter] = useState<UploadCounter>({
         finished: 0,
@@ -118,12 +134,15 @@ export default function Uploader({
     const [percentComplete, setPercentComplete] = useState(0);
     const [hasLivePhotos, setHasLivePhotos] = useState(false);
 
-    const [choiceModalView, setChoiceModalView] = useState(false);
-    const [userNameInputDialogView, setUserNameInputDialogView] =
+    const [openCollectionMappingChoice, setOpenCollectionMappingChoice] =
         useState(false);
     const [importSuggestion, setImportSuggestion] = useState<ImportSuggestion>(
         DEFAULT_IMPORT_SUGGESTION,
     );
+    const {
+        show: showUploaderNameInput,
+        props: uploaderNameInputVisibilityProps,
+    } = useModalVisibility();
 
     /**
      * {@link File}s that the user drag-dropped or selected for uploads (web).
@@ -194,7 +213,7 @@ export default function Uploader({
      */
     const pickedUploadType = useRef<PICKED_UPLOAD_TYPE>(null);
 
-    const currentUploadPromise = useRef<Promise<void>>(null);
+    const currentUploadPromise = useRef<Promise<void> | undefined>(undefined);
     const uploadRunning = useRef(false);
     const uploaderNameRef = useRef<string>(null);
     const isDragAndDrop = useRef(false);
@@ -202,10 +221,9 @@ export default function Uploader({
     const electron = globalThis.electron;
 
     const closeUploadProgress = () => setUploadProgressView(false);
-    const showUserNameInputDialog = () => setUserNameInputDialogView(true);
 
-    const handleChoiceModalClose = () => {
-        setChoiceModalView(false);
+    const handleCollectionMappingChoiceClose = () => {
+        setOpenCollectionMappingChoice(false);
         uploadRunning.current = false;
     };
 
@@ -213,8 +231,8 @@ export default function Uploader({
         uploadRunning.current = false;
     };
 
-    const handleUserNameInputDialogClose = () => {
-        setUserNameInputDialogView(false);
+    const handleUploaderNameInputClose = () => {
+        uploaderNameInputVisibilityProps.onClose();
         uploadRunning.current = false;
     };
 
@@ -225,14 +243,13 @@ export default function Uploader({
                 setUploadCounter,
                 setInProgressUploads,
                 setFinishedUploads,
-                setUploadStage,
+                setUploadPhase,
                 setUploadFilenames: setUploadFileNames,
                 setHasLivePhotos,
                 setUploadProgressView,
             },
-            props.setFiles,
-            publicCollectionGalleryContext,
-            appContext.isCFProxyDisabled,
+            onUploadFile,
+            publicCollectionGalleryContext.credentials,
         );
 
         if (uploadManager.isUploadRunning()) {
@@ -247,7 +264,7 @@ export default function Uploader({
             };
 
             const requestSyncWithRemote = () => {
-                props.syncWithRemote().catch((e) => {
+                props.syncWithRemote().catch((e: unknown) => {
                     log.error(
                         "Ignoring error when syncing trash changes with remote",
                         e,
@@ -271,23 +288,19 @@ export default function Uploader({
                 setDesktopZipItems(zipItems);
             });
         }
-    }, [
-        publicCollectionGalleryContext.accessedThroughSharedURL,
-        publicCollectionGalleryContext.token,
-        publicCollectionGalleryContext.passwordToken,
-        appContext.isCFProxyDisabled,
-    ]);
+    }, [publicCollectionGalleryContext.credentials]);
 
     // Handle selected files when user selects files for upload through the open
     // file / open folder selection dialog, or drag-and-drops them.
     useEffect(() => {
-        if (appContext.watchFolderView) {
+        if (watchFolderView) {
             // if watch folder dialog is open don't catch the dropped file
             // as they are folder being dropped for watching
             return;
         }
 
         let files: File[];
+        isDragAndDrop.current = false;
 
         switch (pickedUploadType.current) {
             case PICKED_UPLOAD_TYPE.FILES:
@@ -303,6 +316,7 @@ export default function Uploader({
                 break;
 
             default:
+                isDragAndDrop.current = true;
                 files = dragAndDropFiles;
                 break;
         }
@@ -391,23 +405,22 @@ export default function Uploader({
         );
         setImportSuggestion(importSuggestion);
 
-        log.debug(() => "Uploader invoked:");
-        log.debug(() => uploadItemsAndPaths.current);
-        log.debug(() => importSuggestion);
+        log.debug(() => ["Upload request", uploadItemsAndPaths.current]);
+        log.debug(() => ["Import suggestion", importSuggestion]);
 
         const _pickedUploadType = pickedUploadType.current;
         pickedUploadType.current = null;
         props.setLoading(false);
 
         (async () => {
-            if (publicCollectionGalleryContext.accessedThroughSharedURL) {
+            if (publicCollectionGalleryContext.credentials) {
                 const uploaderName = await getPublicCollectionUploaderName(
                     getPublicCollectionUID(
-                        publicCollectionGalleryContext.token,
+                        publicCollectionGalleryContext.credentials.accessToken,
                     ),
                 );
                 uploaderNameRef.current = uploaderName;
-                showUserNameInputDialog();
+                showUploaderNameInput();
                 return;
             }
 
@@ -449,25 +462,25 @@ export default function Uploader({
 
             let showNextModal = () => {};
             if (importSuggestion.hasNestedFolders) {
-                showNextModal = () => setChoiceModalView(true);
+                showNextModal = () => setOpenCollectionMappingChoice(true);
             } else {
                 showNextModal = () =>
                     showCollectionCreateModal(importSuggestion.rootFolderName);
             }
 
-            props.setCollectionSelectorAttributes({
-                callback: uploadFilesToExistingCollection,
+            props.onOpenCollectionSelector({
+                action: "upload",
+                onSelectCollection: uploadFilesToExistingCollection,
+                onCreateCollection: showNextModal,
                 onCancel: handleCollectionSelectorCancel,
-                showNextModal,
-                intent: CollectionSelectorIntent.upload,
             });
         })();
     }, [webFiles, desktopFiles, desktopFilePaths, desktopZipItems]);
 
     const preCollectionCreationAction = async () => {
-        props.closeCollectionSelector?.();
+        props.onCloseCollectionSelector?.();
         props.setShouldDisableDropzone(!uploadManager.shouldAllowNewUpload());
-        setUploadStage(UPLOAD_STAGES.START);
+        setUploadPhase("preparing");
         setUploadProgressView(true);
     };
 
@@ -533,13 +546,8 @@ export default function Uploader({
             }
         } catch (e) {
             closeUploadProgress();
-            log.error("Failed to create album", e);
-            appContext.setDialogMessage({
-                title: t("ERROR"),
-                close: { variant: "critical" },
-                content: t("CREATE_ALBUM_FAILED"),
-            });
-            throw e;
+            onGenericError(e);
+            return;
         }
         await waitInQueueAndUploadFiles(uploadItemsWithCollection, collections);
         uploadItemsAndPaths.current = null;
@@ -551,15 +559,14 @@ export default function Uploader({
         uploaderName?: string,
     ) => {
         const currentPromise = currentUploadPromise.current;
-        currentUploadPromise.current = waitAndRun(
-            currentPromise,
-            async () =>
-                await uploadFiles(
-                    uploadItemsWithCollection,
-                    collections,
-                    uploaderName,
-                ),
-        );
+        currentUploadPromise.current = (async () => {
+            if (currentPromise) await currentPromise;
+            return uploadFiles(
+                uploadItemsWithCollection,
+                collections,
+                uploaderName,
+            );
+        })();
         await currentUploadPromise.current;
     };
 
@@ -601,7 +608,7 @@ export default function Uploader({
                 uploaderName,
             );
             if (!wereFilesProcessed) closeUploadProgress();
-            if (isElectron()) {
+            if (isDesktop) {
                 if (watcher.isUploadRunning()) {
                     await watcher.allFileUploadsDone(
                         uploadItemsWithCollection,
@@ -640,35 +647,35 @@ export default function Uploader({
     };
 
     function showUserFacingError(err: string) {
-        let notification: NotificationAttributes;
         switch (err) {
             case CustomError.SESSION_EXPIRED:
-                return props.showSessionExpiredMessage();
+                showSessionExpiredMessage();
+                break;
             case CustomError.SUBSCRIPTION_EXPIRED:
-                notification = {
-                    variant: "critical",
-                    subtext: t("SUBSCRIPTION_EXPIRED"),
-                    message: t("RENEW_NOW"),
-                    onClick: () => billingService.redirectToCustomerPortal(),
-                };
+                showNotification({
+                    color: "critical",
+                    captionFirst: true,
+                    caption: t("subscription_expired"),
+                    title: t("renew_now"),
+                    onClick: redirectToCustomerPortal,
+                });
                 break;
             case CustomError.STORAGE_QUOTA_EXCEEDED:
-                notification = {
-                    variant: "critical",
-                    subtext: t("STORAGE_QUOTA_EXCEEDED"),
-                    message: t("UPGRADE_NOW"),
-                    onClick: () => galleryContext.showPlanSelectorModal(),
+                showNotification({
+                    color: "critical",
+                    captionFirst: true,
+                    caption: t("storage_quota_exceeded"),
+                    title: t("upgrade_now"),
+                    onClick: galleryContext.showPlanSelectorModal,
                     startIcon: <DiscFullIcon />,
-                };
+                });
                 break;
             default:
-                notification = {
-                    variant: "critical",
-                    message: t("UNKNOWN_ERROR"),
-                    onClick: () => null,
-                };
+                showNotification({
+                    color: "critical",
+                    title: t("generic_error_retry"),
+                });
         }
-        appContext.setNotificationAttributes(notification);
     }
 
     const uploadToSingleNewCollection = (collectionName: string) => {
@@ -677,8 +684,8 @@ export default function Uploader({
 
     const showCollectionCreateModal = (suggestedName: string) => {
         props.setCollectionNamerAttributes({
-            title: t("CREATE_COLLECTION"),
-            buttonText: t("CREATE"),
+            title: t("new_album"),
+            buttonText: t("create"),
             autoFilledName: suggestedName,
             callback: uploadToSingleNewCollection,
         });
@@ -698,7 +705,7 @@ export default function Uploader({
             if (openZipFileSelector && electron) {
                 openZipFileSelector();
             } else {
-                appContext.setDialogMessage(getDownloadAppMessage());
+                showMiniDialog(downloadAppDialogAttributes());
             }
         }
     };
@@ -715,7 +722,7 @@ export default function Uploader({
             if (!skipSave) {
                 savePublicCollectionUploaderName(
                     getPublicCollectionUID(
-                        publicCollectionGalleryContext.token,
+                        publicCollectionGalleryContext.credentials.accessToken,
                     ),
                     uploaderName,
                 );
@@ -729,7 +736,7 @@ export default function Uploader({
         }
     };
 
-    const didSelectCollectionMapping = (mapping: CollectionMapping) => {
+    const handleCollectionMappingSelect = (mapping: CollectionMapping) => {
         switch (mapping) {
             case "root":
                 uploadToSingleNewCollection(
@@ -750,9 +757,18 @@ export default function Uploader({
                 break;
             case "parent":
                 if (importSuggestion.hasRootLevelFileWithFolder) {
-                    appContext.setDialogMessage(
-                        getRootLevelFileWithFolderNotAllowMessage(),
-                    );
+                    showMiniDialog({
+                        icon: <InfoRoundedIcon />,
+                        title: t("root_level_file_with_folder_not_allowed"),
+                        message: (
+                            <Trans
+                                i18nKey={
+                                    "root_level_file_with_folder_not_allowed_message"
+                                }
+                            />
+                        ),
+                        cancel: t("ok"),
+                    });
                 } else {
                     uploadFilesToNewCollections("parent");
                 }
@@ -761,18 +777,18 @@ export default function Uploader({
 
     return (
         <>
-            <CollectionMappingChoiceModal
-                open={choiceModalView}
-                onClose={handleChoiceModalClose}
-                didSelect={didSelectCollectionMapping}
+            <CollectionMappingChoice
+                open={openCollectionMappingChoice}
+                onClose={handleCollectionMappingChoiceClose}
+                onSelect={handleCollectionMappingSelect}
             />
             <UploadTypeSelector
-                show={props.uploadTypeSelectorView}
+                open={props.uploadTypeSelectorView}
                 onClose={props.closeUploadTypeSelector}
+                intent={props.uploadTypeSelectorIntent}
                 uploadFiles={handleFileUpload}
                 uploadFolders={handleFolderUpload}
                 uploadGoogleTakeoutZips={handleZipUpload}
-                uploadTypeSelectorIntent={props.uploadTypeSelectorIntent}
             />
             <UploadProgress
                 open={uploadProgressView}
@@ -780,32 +796,22 @@ export default function Uploader({
                 percentComplete={percentComplete}
                 uploadFileNames={uploadFileNames}
                 uploadCounter={uploadCounter}
-                uploadStage={uploadStage}
+                uploadPhase={uploadPhase}
                 inProgressUploads={inProgressUploads}
                 hasLivePhotos={hasLivePhotos}
                 retryFailed={retryFailed}
                 finishedUploads={finishedUploads}
                 cancelUploads={cancelUploads}
             />
-            <UserNameInputDialog
-                open={userNameInputDialogView}
-                onClose={handleUserNameInputDialogClose}
-                onNameSubmit={handlePublicUpload}
-                toUploadFilesCount={uploadItemsAndPaths.current?.length}
+            <UploaderNameInput
+                open={uploaderNameInputVisibilityProps.open}
+                onClose={handleUploaderNameInputClose}
                 uploaderName={uploaderNameRef.current}
+                uploadFileCount={uploadItemsAndPaths.current?.length ?? 0}
+                onSubmit={handlePublicUpload}
             />
         </>
     );
-}
-
-async function waitAndRun(
-    waitPromise: Promise<void>,
-    task: () => Promise<void>,
-) {
-    if (waitPromise && isPromise(waitPromise)) {
-        await waitPromise;
-    }
-    await task();
 }
 
 const desktopFilesAndZipItems = async (electron: Electron, files: File[]) => {
@@ -843,17 +849,13 @@ const desktopFilesAndZipItems = async (electron: Electron, files: File[]) => {
  *    https://github.com/react-dropzone/file-selector/blob/master/src/file.ts#L1214
  */
 const pathLikeForWebFile = (file: File): string =>
-    ensure(
-        firstNonEmpty([
-            // We need to check first, since path is not a property of
-            // the standard File objects.
-            "path" in file && typeof file.path == "string"
-                ? file.path
-                : undefined,
-            file.webkitRelativePath,
-            file.name,
-        ]),
-    );
+    firstNonEmpty([
+        // We need to check first, since path is not a property of
+        // the standard File objects.
+        "path" in file && typeof file.path == "string" ? file.path : undefined,
+        file.webkitRelativePath,
+        file.name,
+    ])!;
 
 // This is used to prompt the user the make upload strategy choice
 interface ImportSuggestion {
@@ -872,12 +874,15 @@ function getImportSuggestion(
     uploadType: PICKED_UPLOAD_TYPE,
     paths: string[],
 ): ImportSuggestion {
-    if (isElectron() && uploadType === PICKED_UPLOAD_TYPE.FILES) {
+    if (isDesktop && uploadType === PICKED_UPLOAD_TYPE.FILES) {
         return DEFAULT_IMPORT_SUGGESTION;
     }
 
-    const getCharCount = (str: string) => (str.match(/\//g) ?? []).length;
-    paths.sort((path1, path2) => getCharCount(path1) - getCharCount(path2));
+    const separatorCounts = new Map(
+        paths.map((s) => [s, s.match(/\//g)?.length ?? 0]),
+    );
+    const separatorCount = (s: string) => separatorCounts.get(s)!;
+    paths.sort((path1, path2) => separatorCount(path1) - separatorCount(path2));
     const firstPath = paths[0];
     const lastPath = paths[paths.length - 1];
 

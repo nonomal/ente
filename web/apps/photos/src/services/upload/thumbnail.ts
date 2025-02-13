@@ -1,17 +1,38 @@
-import { FILE_TYPE, type FileTypeInfo } from "@/media/file-type";
+import log from "@/base/log";
+import { type Electron } from "@/base/types/ipc";
+import * as ffmpeg from "@/gallery/services/ffmpeg";
+import { FileType, type FileTypeInfo } from "@/media/file-type";
+import { isHEICExtension } from "@/media/formats";
+import { heicToJPEG } from "@/media/heic-convert";
 import { scaledImageDimensions } from "@/media/image";
-import log from "@/next/log";
-import { type Electron } from "@/next/types/ipc";
-import { ensure } from "@/utils/ensure";
+import {
+    toDataOrPathOrZipEntry,
+    type DesktopUploadItem,
+} from "@/new/photos/services/upload/types";
 import { withTimeout } from "@/utils/promise";
-import * as ffmpeg from "services/ffmpeg";
-import { heicToJPEG } from "services/heic-convert";
-import { toDataOrPathOrZipEntry, type DesktopUploadItem } from "./types";
 
 /** Maximum width or height of the generated thumbnail */
 const maxThumbnailDimension = 720;
 /** Maximum size (in bytes) of the generated thumbnail */
 const maxThumbnailSize = 100 * 1024; // 100 KB
+
+/**
+ * Timeout (ms) to wait before giving up on canvas thumbnail generation.
+ *
+ * [Note: Rendering arbitrary file types to the canvas needs a timeout]
+ *
+ * When generating thumbnails on the web (or as a fallback on the desktop app),
+ * we use an HTML canvas. We take the file's content, a blob, and load it on the
+ * canvas by creating an image URL for this blob (using `createObjectURL`).
+ *
+ * In case when the browser knows how to render images of this type, this works
+ * great. Later we can read off the thumbnail from the (resized) canvas.
+ *
+ * However, if this in not a file format that the browser can understand, then
+ * this process just hangs. There isn't a trivial way of knowing beforehand
+ * which browser will support which file type, so we need to add a timeout.
+ */
+const canvasThumbnailGenerationTimeout = 30 * 1000;
 
 /**
  * Generate a JPEG thumbnail for the given image or video blob.
@@ -31,7 +52,7 @@ export const generateThumbnailWeb = async (
     blob: Blob,
     fileTypeInfo: FileTypeInfo,
 ): Promise<Uint8Array> =>
-    fileTypeInfo.fileType === FILE_TYPE.IMAGE
+    fileTypeInfo.fileType === FileType.image
         ? await generateImageThumbnailWeb(blob, fileTypeInfo)
         : await generateVideoThumbnailWeb(blob);
 
@@ -39,7 +60,7 @@ const generateImageThumbnailWeb = async (
     blob: Blob,
     { extension }: FileTypeInfo,
 ) => {
-    if (extension == "heic" || extension == "heif") {
+    if (isHEICExtension(extension)) {
         log.debug(() => `Pre-converting HEIC to JPEG for thumbnail generation`);
         blob = await heicToJPEG(blob);
     }
@@ -49,7 +70,7 @@ const generateImageThumbnailWeb = async (
 
 const generateImageThumbnailUsingCanvas = async (blob: Blob) => {
     const canvas = document.createElement("canvas");
-    const canvasCtx = ensure(canvas.getContext("2d"));
+    const canvasCtx = canvas.getContext("2d")!;
 
     const imageURL = URL.createObjectURL(blob);
     await withTimeout(
@@ -73,7 +94,7 @@ const generateImageThumbnailUsingCanvas = async (blob: Blob) => {
                 }
             };
         }),
-        30 * 1000,
+        canvasThumbnailGenerationTimeout,
     );
 
     return await compressedJPEGData(canvas);
@@ -97,7 +118,7 @@ const compressedJPEGData = async (canvas: HTMLCanvasElement) => {
         percentageSizeDiff(blob.size, prevSize) >= 10
     );
 
-    return new Uint8Array(await ensure(blob).arrayBuffer());
+    return new Uint8Array(await blob!.arrayBuffer());
 };
 
 const percentageSizeDiff = (
@@ -110,7 +131,7 @@ const generateVideoThumbnailWeb = async (blob: Blob) => {
         return await ffmpeg.generateVideoThumbnailWeb(blob);
     } catch (e) {
         log.error(
-            `Failed to generate video thumbnail using the wasm FFmpeg web worker, will fallback to canvas`,
+            `Failed to generate video thumbnail using the Wasm FFmpeg web worker, will fallback to canvas`,
             e,
         );
         return generateVideoThumbnailUsingCanvas(blob);
@@ -119,7 +140,7 @@ const generateVideoThumbnailWeb = async (blob: Blob) => {
 
 export const generateVideoThumbnailUsingCanvas = async (blob: Blob) => {
     const canvas = document.createElement("canvas");
-    const canvasCtx = ensure(canvas.getContext("2d"));
+    const canvasCtx = canvas.getContext("2d")!;
 
     const videoURL = URL.createObjectURL(blob);
     await withTimeout(
@@ -144,7 +165,7 @@ export const generateVideoThumbnailUsingCanvas = async (blob: Blob) => {
                 }
             });
         }),
-        30 * 1000,
+        canvasThumbnailGenerationTimeout,
     );
 
     return await compressedJPEGData(canvas);
@@ -172,7 +193,7 @@ export const generateThumbnailNative = async (
     desktopUploadItem: DesktopUploadItem,
     fileTypeInfo: FileTypeInfo,
 ): Promise<Uint8Array> =>
-    fileTypeInfo.fileType === FILE_TYPE.IMAGE
+    fileTypeInfo.fileType === FileType.image
         ? await electron.generateImageThumbnail(
               toDataOrPathOrZipEntry(desktopUploadItem),
               maxThumbnailDimension,

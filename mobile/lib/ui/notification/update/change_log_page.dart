@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import "package:photos/generated/l10n.dart";
-import 'package:photos/services/update_service.dart';
+import "package:photos/service_locator.dart";
 import 'package:photos/theme/ente_theme.dart';
 import 'package:photos/ui/components/buttons/button_widget.dart';
 import 'package:photos/ui/components/divider_widget.dart';
@@ -10,19 +10,14 @@ import 'package:photos/ui/notification/update/change_log_entry.dart';
 
 class ChangeLogPage extends StatefulWidget {
   const ChangeLogPage({
-    Key? key,
-  }) : super(key: key);
+    super.key,
+  });
 
   @override
   State<ChangeLogPage> createState() => _ChangeLogPageState();
 }
 
 class _ChangeLogPageState extends State<ChangeLogPage> {
-  @override
-  void initState() {
-    super.initState();
-  }
-
   @override
   Widget build(BuildContext context) {
     final enteColorScheme = getEnteColorScheme(context);
@@ -38,17 +33,17 @@ class _ChangeLogPageState extends State<ChangeLogPage> {
             ),
             Container(
               alignment: Alignment.centerLeft,
-              child: const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16.0),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
                 child: TitleBarTitleWidget(
-                  title: "What's new",
+                  title: S.of(context).whatsNew,
                 ),
               ),
             ),
             const SizedBox(
               height: 24,
             ),
-            Expanded(child: _getChangeLog()),
+            Expanded(child: _getChangeLog(context)),
             const DividerWidget(
               dividerType: DividerType.solid,
             ),
@@ -69,7 +64,7 @@ class _ChangeLogPageState extends State<ChangeLogPage> {
                       labelText: S.of(context).continueLabel,
                       icon: Icons.arrow_forward_outlined,
                       onTap: () async {
-                        await UpdateService.instance.hideChangeLog();
+                        await updateService.hideChangeLog();
                         if (mounted && Navigator.of(context).canPop()) {
                           Navigator.of(context).pop();
                         }
@@ -78,21 +73,6 @@ class _ChangeLogPageState extends State<ChangeLogPage> {
                     const SizedBox(
                       height: 8,
                     ),
-                    // ButtonWidget(
-                    //   buttonType: ButtonType.trailingIconSecondary,
-                    //   buttonSize: ButtonSize.large,
-                    //   labelText: S.of(context).joinDiscord,
-                    //   icon: Icons.discord_outlined,
-                    //   iconColor: enteColorScheme.primary500,
-                    //   onTap: () async {
-                    //     unawaited(
-                    //       launchUrlString(
-                    //         "https://discord.com/invite/z2YVKkycX3",
-                    //         mode: LaunchMode.externalApplication,
-                    //       ),
-                    //     );
-                    //   },
-                    // ),
                     ButtonWidget(
                       buttonType: ButtonType.trailingIconSecondary,
                       buttonSize: ButtonSize.large,
@@ -100,9 +80,10 @@ class _ChangeLogPageState extends State<ChangeLogPage> {
                       icon: Icons.favorite_rounded,
                       iconColor: enteColorScheme.primary500,
                       onTap: () async {
-                        await UpdateService.instance.launchReviewUrl();
+                        await updateService.launchReviewUrl();
                       },
                     ),
+                    const SizedBox(height: 8),
                     const SizedBox(height: 8),
                   ],
                 ),
@@ -114,25 +95,23 @@ class _ChangeLogPageState extends State<ChangeLogPage> {
     );
   }
 
-  Widget _getChangeLog() {
+  Widget _getChangeLog(BuildContext ctx) {
     final scrollController = ScrollController();
     final List<ChangeLogEntry> items = [];
     items.addAll([
       ChangeLogEntry(
-        "Cast albums to TV ✨",
-        "View a slideshow of your albums on any big screen! Open an album and click on the Cast button to get started.",
+        "Deep Links",
+        "We have made public links even more powerful. Open links for Ente album directly in the app.\n\n"
+            "Join the album as a viewer or collaborator, and experience it like any other shared album.",
       ),
       ChangeLogEntry(
-        "Organize shared photos",
-        "You can now add shared items to your favorites or to any of your personal albums. Ente will create a copy that is fully owned by you and can be organized to your liking.",
-      ),
+          "Search Shared Files",
+          "Indexes will now be shared along with shared memories.\n\n"
+              "Which means you can now search for them using semantic search and label the people in shared photos. "),
       ChangeLogEntry(
-        "Download multiple items",
-        "You can now download multiple items to your gallery at once. Select the items you want to download and click on the download button.",
-      ),
-      ChangeLogEntry(
-        "Performance improvements",
-        "This release also brings in major changes that should improve responsiveness. If you discover room for improvement, please let us know!",
+        "Link Contact with people",
+        "You dont have to deal with email addresses while sharing anymore.\n\n"
+            "Connect a contact with a face and name. Go to the contact or people section to get started.",
       ),
     ]);
 

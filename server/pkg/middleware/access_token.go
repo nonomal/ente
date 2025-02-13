@@ -117,7 +117,7 @@ func (m *AccessTokenMiddleware) validateOwnersSubscription(cID int64) error {
 	if err != nil {
 		return stacktrace.Propagate(err, "")
 	}
-	return m.BillingCtrl.HasActiveSelfOrFamilySubscription(userID)
+	return m.BillingCtrl.HasActiveSelfOrFamilySubscription(userID, false)
 }
 
 func (m *AccessTokenMiddleware) isDeviceLimitReached(ctx context.Context,
@@ -126,9 +126,7 @@ func (m *AccessTokenMiddleware) isDeviceLimitReached(ctx context.Context,
 	if network.IsCFWorkerIP(ip) {
 		return false, nil
 	}
-	if collectionSummary.DeviceLimit <= 0 { // no device limit was added
-		return false, nil
-	}
+
 	sharedID := collectionSummary.ID
 	hasAccessedInPast, err := m.PublicCollectionRepo.AccessedInPast(ctx, sharedID, ip, ua)
 	if err != nil {
@@ -156,7 +154,7 @@ func (m *AccessTokenMiddleware) isDeviceLimitReached(ctx context.Context,
 		}
 	}
 
-	if count >= deviceLimit {
+	if deviceLimit > 0 && count >= deviceLimit {
 		return true, nil
 	}
 	err = m.PublicCollectionRepo.RecordAccessHistory(ctx, sharedID, ip, ua)

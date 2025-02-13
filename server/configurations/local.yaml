@@ -5,12 +5,13 @@
 #    load one of the files from the `configurations/` directory. If not present,
 #    then by default `local.yaml` (this file) will get loaded.
 #
-# 2. Then, museum will look for a file named `museum.yaml` in the current
-#    working directory. If found, this file will also be loaded, and entries
-#    specified therein will override the defaults specified here.
+# 2. If the "credentials-file" config option is set then museum will look for
+#    that file. If found, that file will also be loaded, and entries specified
+#    therein will override the defaults specified here.
 #
-# 3. If the "credentials-file" config option is set, then museum will also load
-#    that and merge it in.
+# 3. Then, museum will look for a file named `museum.yaml` (gitignored) in the
+#    current working directory. If found, this file will also be loaded and
+#    merged.
 #
 # 4. Config can be overridden with via environment variables (details below).
 #
@@ -78,6 +79,14 @@ apps:
     # If you're running a self hosted instance and wish to serve public links,
     # set this to the URL where your albums web app is running.
     public-albums:
+    # Default is https://cast.ente.io
+    cast:
+    # Default is https://accounts.ente.io
+    # Set this to the URL where your accounts web app is running, primarily used for
+    # passkey based 2FA.
+    accounts:
+    # Default is https://family.ente.io
+    family:
 
 # Database connection parameters
 db:
@@ -91,6 +100,9 @@ db:
     # as ENTE_DB_USER and ENTE_DB_PASSWORD.
     user:
     password:
+    # This can be used to provide parameters that are appended verbatim to the
+    # generated DSN used for connecting to the DB.
+    # extra:
 
 # Map of data centers
 #
@@ -169,6 +181,17 @@ s3:
     # resolved, e.g. when running a local instance, or when using MinIO as a
     # production store.
     #use_path_style_urls: true
+    #
+    # Warning: For file-storage, do not specify buckets with any lock or versioning enabled.
+    # The application does not handle these cases. By default, we will use the derived-storage or hot storage bucket
+    # as the primary bucket for file-data-config.
+    # file-data-config:
+    #     mldata:
+    #         primaryBucket:
+    #         replicaBuckets: []
+    #     img_preview:
+    #         primaryBucket:
+    #         replicaBuckets: []
 
 # Key used for encrypting customer emails before storing them in DB
 #
@@ -194,6 +217,9 @@ jwt:
 # The smtp credentials will be used if the host is specified. Otherwise it will
 # try to use the transmail credentials. Ideally, one of smtp or transmail should
 # be configured for a production instance.
+#
+# username and password are optional (e.g. if you're using a local relay server
+# and don't need authentication).
 smtp:
     host:
     port:
@@ -202,6 +228,9 @@ smtp:
     # The email address from which to send the email. Set this to an email
     # address whose credentials you're providing.
     email:
+    # Optional override for the sender name in the emails. If specified, it will
+    # be used for all emails sent by the instance (default is email specific).
+    sender-name:
 
 # Zoho Zeptomail config (optional)
 #
@@ -233,22 +262,16 @@ stripe:
         success: ?status=success&session_id={CHECKOUT_SESSION_ID}
         cancel: ?status=fail&reason=canceled
 
-# Passkey support (WIP)
+# Passkey support (optional)
+# Use case: MFA
 webauthn:
-    rpid: "example.com"
+    # Our "Relying Party" ID. This scopes the generated credentials.
+    # See: https://www.w3.org/TR/webauthn-3/#rp-id
+    rpid: localhost
+    # Whitelist of origins from where we will accept WebAuthn requests.
+    # See: https://github.com/go-webauthn/webauthn
     rporigins:
-        - "https://example.com:3005"
-
-# Roadmap SSO (optional)
-#
-# Allow the user to sign into an hosted roadmap service using their ente.io
-# credentials. Here we can can configure the URL prefix and service levels
-# credentials for SSO.
-roadmap:
-    # The prefix of the URL the user should be redirected to
-    url-prefix:
-    # This secret can be obtained from the roadmap dashboard
-    sso-secret:
+        - "http://localhost:3001"
 
 # Discord config (optional)
 # Use case: Devops
@@ -303,7 +326,17 @@ internal:
     #     local-domain-suffix: "@example.org"
     #     local-domain-value: 123456
     # List of user IDs that can use the admin API endpoints.
+    # If this is not set, as a fallback, the first user is considered an admin.
     admins: []
+    # In case there is a single admin, it can be alternatively specified by as
+    # the "admin" instead of "admins". This can be useful e.g. when wishing to
+    # pass the admin as an environment variable.
+    admin:
+    # If set to true, users will not be able to register a new account.
+    #
+    # During sign up, the client will get an unauthorized error and
+    # thus cannot create new accounts.
+    disable-registration: false
 
 # Replication config
 #
@@ -312,7 +345,7 @@ internal:
 replication:
     enabled: false
     # The Cloudflare worker to use to download files from the primary hot
-    # bucket. Must be specified if replication is enabled.
+    # bucket. If this isn't specified, files will be downloaded directly.
     worker-url:
     # Number of go routines to spawn for replication
     # This is not related to the worker-url above.

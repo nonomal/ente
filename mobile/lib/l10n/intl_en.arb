@@ -1,6 +1,9 @@
 {
+  "@@locale ": "en",
   "enterYourEmailAddress": "Enter your email address",
   "accountWelcomeBack": "Welcome back!",
+  "emailAlreadyRegistered": "Email already registered.",
+  "emailNotRegistered": "Email not registered.",
   "email": "Email",
   "cancel": "Cancel",
   "verify": "Verify",
@@ -11,7 +14,7 @@
   "deleteAccountFeedbackPrompt": "We are sorry to see you go. Please share your feedback to help us improve.",
   "feedback": "Feedback",
   "kindlyHelpUsWithThisInformation": "Kindly help us with this information",
-  "confirmDeletePrompt": "Yes, I want to permanently delete this account and all its data.",
+  "confirmDeletePrompt": "Yes, I want to permanently delete this account and its data across all apps.",
   "confirmAccountDeletion": "Confirm Account Deletion",
   "deleteAccountPermanentlyButton": "Delete Account Permanently",
   "yourAccountHasBeenDeleted": "Your account has been deleted",
@@ -149,7 +152,7 @@
   "tryAgain": "Try again",
   "viewRecoveryKey": "View recovery key",
   "confirmRecoveryKey": "Confirm recovery key",
-  "recoveryKeyVerifyReason": "Your recovery key is the only way to recover your photos if you forget your password. You can find your recovery key in Settings > Security.\n\nPlease enter your recovery key here to verify that you have saved it correctly.",
+  "recoveryKeyVerifyReason": "Your recovery key is the only way to recover your photos if you forget your password. You can find your recovery key in Settings > Account.\n\nPlease enter your recovery key here to verify that you have saved it correctly.",
   "confirmYourRecoveryKey": "Confirm your recovery key",
   "addViewer": "Add viewer",
   "addCollaborator": "Add collaborator",
@@ -184,6 +187,8 @@
   },
   "allowAddPhotosDescription": "Allow people with the link to also add photos to the shared album.",
   "passwordLock": "Password lock",
+  "canNotOpenTitle": "Cannot open this album",
+  "canNotOpenBody": "Sorry, this album cannot be opened in the app.",
   "disableDownloadWarningTitle": "Please note",
   "disableDownloadWarningBody": "Viewers can still take screenshots or save a copy of your photos using external tools",
   "allowDownloads": "Allow downloads",
@@ -272,6 +277,11 @@
   "failedToApplyCode": "Failed to apply code",
   "enterReferralCode": "Enter referral code",
   "codeAppliedPageTitle": "Code applied",
+  "changeYourReferralCode": "Change your referral code",
+  "change": "Change",
+  "unavailableReferralCode": "Sorry, this code is unavailable.",
+  "codeChangeLimitReached": "Sorry, you've reached the limit of code changes.",
+  "onlyFamilyAdminCanChangeCode": "Please contact {familyAdminEmail} to change your code.",
   "storageInGB": "{storageAmountInGB} GB",
   "claimed": "Claimed",
   "@claimed": {
@@ -321,7 +331,7 @@
   "removingFromFavorites": "Removing from favorites...",
   "sorryCouldNotAddToFavorites": "Sorry, could not add to favorites!",
   "sorryCouldNotRemoveFromFavorites": "Sorry, could not remove from favorites!",
-  "subscribeToEnableSharing": "Looks like your subscription has expired. Please subscribe to enable sharing.",
+  "subscribeToEnableSharing": "You need an active paid subscription to enable sharing.",
   "subscribe": "Subscribe",
   "canOnlyRemoveFilesOwnedByYou": "Can only remove files owned by you",
   "deleteSharedAlbum": "Delete shared album?",
@@ -345,6 +355,7 @@
   "failedToLoadAlbums": "Failed to load albums",
   "hidden": "Hidden",
   "authToViewYourHiddenFiles": "Please authenticate to view your hidden files",
+  "authToViewTrashedFiles": "Please authenticate to view your trashed files",
   "trash": "Trash",
   "uncategorized": "Uncategorized",
   "videoSmallCase": "video",
@@ -406,10 +417,35 @@
     "description": "The text to display in the advanced settings section"
   },
   "photoGridSize": "Photo grid size",
-  "manageDeviceStorage": "Manage device storage",
+  "manageDeviceStorage": "Manage device cache",
+  "manageDeviceStorageDesc": "Review and clear local cache storage.",
   "machineLearning": "Machine learning",
+  "mlConsent": "Enable machine learning",
+  "mlConsentTitle": "Enable machine learning?",
+  "mlConsentDescription": "If you enable machine learning, Ente will extract information like face geometry from files, including those shared with you.\n\nThis will happen on your device, and any generated biometric information will be end-to-end encrypted.",
+  "mlConsentPrivacy": "Please click here for more details about this feature in our privacy policy",
+  "mlConsentConfirmation": "I understand, and wish to enable machine learning",
   "magicSearch": "Magic search",
-  "mlIndexingDescription": "Please note that machine learning will result in a higher bandwidth and battery usage until all items are indexed.",
+  "discover": "Discover",
+  "@discover": {
+    "description": "The text to display for the discover section under which we show receipts, screenshots, sunsets, greenery, etc."
+  },
+  "discover_identity": "Identity",
+  "discover_screenshots": "Screenshots",
+  "discover_receipts": "Receipts",
+  "discover_notes": "Notes",
+  "discover_memes": "Memes",
+  "discover_visiting_cards": "Visiting Cards",
+  "discover_babies": "Babies",
+  "discover_pets": "Pets",
+  "discover_selfies": "Selfies",
+  "discover_wallpapers": "Wallpapers",
+  "discover_food": "Food",
+  "discover_celebrations": "Celebrations",
+  "discover_sunset": "Sunset",
+  "discover_hills": "Hills",
+  "discover_greenery": "Greenery",
+  "mlIndexingDescription": "Please note that machine learning will result in a higher bandwidth and battery usage until all items are indexed. Consider using the desktop app for faster indexing, all results will be synced automatically.",
   "loadingModel": "Downloading models...",
   "waitingForWifi": "Waiting for WiFi...",
   "status": "Status",
@@ -442,6 +478,8 @@
   "showMemories": "Show memories",
   "yearsAgo": "{count, plural, one{{count} year ago} other{{count} years ago}}",
   "backupSettings": "Backup settings",
+  "backupStatus": "Backup status",
+  "backupStatusDescription": "Items that have been backed up will show up here",
   "backupOverMobileData": "Backup over mobile data",
   "backupVideos": "Backup videos",
   "disableAutoLock": "Disable auto lock",
@@ -451,6 +489,7 @@
   "privacy": "Privacy",
   "terms": "Terms",
   "checkForUpdates": "Check for updates",
+  "checkStatus": "Check status",
   "checking": "Checking...",
   "youAreOnTheLatestVersion": "You are on the latest version",
   "account": "Account",
@@ -478,9 +517,13 @@
   "backedUpFolders": "Backed up folders",
   "backup": "Backup",
   "freeUpDeviceSpace": "Free up device space",
+  "freeUpDeviceSpaceDesc": "Save space on your device by clearing files that have been already backed up.",
   "allClear": "✨ All clear",
   "noDeviceThatCanBeDeleted": "You've no files on this device that can be deleted",
   "removeDuplicates": "Remove duplicates",
+  "removeDuplicatesDesc": "Review and remove files that are exact duplicates.",
+  "viewLargeFiles": "Large files",
+  "viewLargeFilesDesc": "View files that are consuming the most amount of storage.",
   "noDuplicates": "✨ No duplicates",
   "youveNoDuplicateFilesThatCanBeCleared": "You've no duplicate files that can be cleared",
   "success": "Success",
@@ -527,7 +570,6 @@
   "authToConfigureTwofactorAuthentication": "Please authenticate to configure two-factor authentication",
   "lockscreen": "Lockscreen",
   "authToChangeLockscreenSetting": "Please authenticate to change lockscreen setting",
-  "lockScreenEnablePreSteps": "To enable lockscreen, please setup device passcode or screen lock in your system settings.",
   "viewActiveSessions": "View active sessions",
   "authToViewYourActiveSessions": "Please authenticate to view your active sessions",
   "disableTwofactor": "Disable two-factor",
@@ -652,6 +694,8 @@
   "noPhotosAreBeingBackedUpRightNow": "No photos are being backed up right now",
   "preserveMore": "Preserve more",
   "grantFullAccessPrompt": "Please allow access to all photos in the Settings app",
+  "allowPermTitle": "Allow access to photos",
+  "allowPermBody": "Please allow access to your photos from Settings so Ente can display and backup your library.",
   "openSettings": "Open Settings",
   "selectMorePhotos": "Select more photos",
   "existingUser": "Existing user",
@@ -735,7 +779,7 @@
   "unhide": "Unhide",
   "unarchive": "Unarchive",
   "favorite": "Favorite",
-  "removeFromFavorite": "Remove from favorite",
+  "removeFromFavorite": "Remove from favorites",
   "shareLink": "Share link",
   "createCollage": "Create collage",
   "saveCollage": "Save collage",
@@ -780,7 +824,7 @@
   "referFriendsAnd2xYourPlan": "Refer friends and 2x your plan",
   "shareAlbumHint": "Open an album and tap the share button on the top right to share.",
   "itemsShowTheNumberOfDaysRemainingBeforePermanentDeletion": "Items show the number of days remaining before permanent deletion",
-  "trashDaysLeft": "{count, plural, =0 {} =1 {1 day} other {{count} days}}",
+  "trashDaysLeft": "{count, plural, =0 {Soon} =1 {1 day} other {{count} days}}",
   "@trashDaysLeft": {
     "description": "Text to indicate number of days remaining before permanent deletion",
     "placeholders": {
@@ -920,6 +964,16 @@
   "encryptingBackup": "Encrypting backup...",
   "syncStopped": "Sync stopped",
   "syncProgress": "{completed}/{total} memories preserved",
+  "uploadingMultipleMemories": "Preserving {count} memories...",
+  "@uploadingMultipleMemories": {
+    "description": "Text to tell user how many memories are being preserved",
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "uploadingSingleMemory": "Preserving 1 memory...",
   "@syncProgress": {
     "description": "Text to tell user how many memories have been preserved",
     "placeholders": {
@@ -987,7 +1041,7 @@
   "fileTypesAndNames": "File types and names",
   "location": "Location",
   "moments": "Moments",
-  "searchFaceEmptySection": "Persons will be shown here once indexing is done",
+  "searchFaceEmptySection": "People will be shown here once indexing is done",
   "searchDatesEmptySection": "Search by a date, month or year",
   "searchLocationEmptySection": "Group photos that are taken within some radius of a photo",
   "searchPeopleEmptySection": "Invite people, and you'll see all photos shared by them here",
@@ -1042,7 +1096,7 @@
   "@storageUsageInfo": {
     "description": "Example: 1.2 GB of 2 GB used or 100 GB or 2TB used"
   },
-  "freeStorageSpace": "{freeAmount} {storageUnit} free",
+  "availableStorageSpace": "{freeAmount} {storageUnit} free",
   "appVersion": "Version: {versionValue}",
   "verifyIDLabel": "Verify",
   "fileInfoAddDescHint": "Add a description...",
@@ -1138,6 +1192,7 @@
   "successfullyHid": "Successfully hid",
   "successfullyUnhid": "Successfully unhid",
   "crashReporting": "Crash reporting",
+  "resumableUploads": "Resumable uploads",
   "addToHiddenAlbum": "Add to hidden album",
   "moveToHiddenAlbum": "Move to hidden album",
   "fileTypes": "File types",
@@ -1194,6 +1249,10 @@
   "waitingForVerification": "Waiting for verification...",
   "passkey": "Passkey",
   "passkeyAuthTitle": "Passkey verification",
+  "loginWithTOTP": "Login with TOTP",
+  "passKeyPendingVerification": "Verification is still pending",
+  "loginSessionExpired": "Session expired",
+  "loginSessionExpiredDetails": "Your session has expired. Please login again.",
   "verifyPasskey": "Verify passkey",
   "playOnTv": "Play album on TV",
   "pair": "Pair",
@@ -1202,8 +1261,11 @@
   "deviceCodeHint": "Enter the code",
   "joinDiscord": "Join Discord",
   "locations": "Locations",
-  "descriptions": "Descriptions",
   "addAName": "Add a name",
+  "findThemQuickly": "Find them quickly",
+  "@findThemQuickly": {
+    "description": "Subtitle to indicate that the user can find people quickly by name"
+  },
   "findPeopleByName": "Find people quickly by name",
   "addViewers": "{count, plural, zero {Add viewer} one {Add viewer} other {Add viewers}}",
   "addCollaborators": "{count, plural, zero {Add collaborator} one {Add collaborator} other {Add collaborators}}",
@@ -1218,6 +1280,13 @@
   "createCollaborativeLink": "Create collaborative link",
   "search": "Search",
   "enterPersonName": "Enter person name",
+  "enterName": "Enter name",
+  "savePerson": "Save person",
+  "editPerson": "Edit person",
+  "mergedPhotos": "Merged photos",
+  "orMergeWithExistingPerson": "Or merge with existing",
+  "enterDateOfBirth": "Birthday (optional)",
+  "birthday": "Birthday",
   "removePersonLabel": "Remove person label",
   "autoPairDesc": "Auto pair works only with devices that support Chromecast.",
   "manualPairDesc": "Pair with PIN works with any screen you wish to view your album on.",
@@ -1230,10 +1299,380 @@
   "castIPMismatchTitle": "Failed to cast album",
   "castIPMismatchBody": "Please make sure you are on the same network as the TV.",
   "pairingComplete": "Pairing complete",
+  "savingEdits": "Saving edits...",
   "autoPair": "Auto pair",
   "pairWithPin": "Pair with PIN",
   "faceRecognition": "Face recognition",
   "foundFaces": "Found faces",
   "clusteringProgress": "Clustering progress",
-  "indexingIsPaused": "Indexing is paused. It will automatically resume when device is ready."
+  "indexingIsPaused": "Indexing is paused. It will automatically resume when device is ready.",
+  "trim": "Trim",
+  "crop": "Crop",
+  "rotate": "Rotate",
+  "left": "Left",
+  "right": "Right",
+  "whatsNew": "What's new",
+  "reviewSuggestions": "Review suggestions",
+  "review": "Review",
+  "useAsCover": "Use as cover",
+  "notPersonLabel": "Not {name}?",
+  "@notPersonLabel": {
+    "description": "Label to indicate that the person in the photo is not the person whose name is mentioned",
+    "placeholders": {
+      "name": {
+        "content": "{name}",
+        "type": "String"
+      }
+    }
+  },
+  "enable": "Enable",
+  "enabled": "Enabled",
+  "moreDetails": "More details",
+  "enableMLIndexingDesc": "Ente supports on-device machine learning for face recognition, magic search and other advanced search features",
+  "magicSearchHint": "Magic search allows to search photos by their contents, e.g. 'flower', 'red car', 'identity documents'",
+  "panorama": "Panorama",
+  "reenterPassword": "Re-enter password",
+  "reenterPin": "Re-enter PIN",
+  "deviceLock": "Device lock",
+  "pinLock": "PIN lock",
+  "next": "Next",
+  "setNewPassword": "Set new password",
+  "enterPin": "Enter PIN",
+  "setNewPin": "Set new PIN",
+  "appLock": "App lock",
+  "noSystemLockFound": "No system lock found",
+  "tapToUnlock": "Tap to unlock",
+  "tooManyIncorrectAttempts": "Too many incorrect attempts",
+  "videoInfo": "Video Info",
+  "autoLock": "Auto lock",
+  "immediately": "Immediately",
+  "autoLockFeatureDescription": "Time after which the app locks after being put in the background",
+  "hideContent": "Hide content",
+  "hideContentDescriptionAndroid": "Hides app content in the app switcher and disables screenshots",
+  "hideContentDescriptionIos": "Hides app content in the app switcher",
+  "passwordStrengthInfo": "Password strength is calculated considering the length of the password, used characters, and whether or not the password appears in the top 10,000 most used passwords",
+  "noQuickLinksSelected": "No quick links selected",
+  "pleaseSelectQuickLinksToRemove": "Please select quick links to remove",
+  "removePublicLinks": "Remove public links",
+  "thisWillRemovePublicLinksOfAllSelectedQuickLinks": "This will remove public links of all selected quick links.",
+  "guestView": "Guest view",
+  "guestViewEnablePreSteps": "To enable guest view, please setup device passcode or screen lock in your system settings.",
+  "nameTheAlbum": "Name the album",
+  "collectPhotosDescription": "Create a link where your friends can upload photos in original quality.",
+  "collect": "Collect",
+  "appLockDescriptions": "Choose between your device's default lock screen and a custom lock screen with a PIN or password.",
+  "toEnableAppLockPleaseSetupDevicePasscodeOrScreen": "To enable app lock, please setup device passcode or screen lock in your system settings.",
+  "authToViewPasskey": "Please authenticate to view your passkey",
+  "loopVideoOn": "Loop video on",
+  "loopVideoOff": "Loop video off",
+  "localSyncErrorMessage": "Looks like something went wrong since local photos sync is taking more time than expected. Please reach out to our support team",
+  "showPerson": "Show person",
+  "sort": "Sort",
+  "mostRecent": "Most recent",
+  "mostRelevant": "Most relevant",
+  "loadingYourPhotos": "Loading your photos...",
+  "processingImport": "Processing {folderName}...",
+  "personName": "Person name",
+  "addNewPerson": "Add new person",
+  "addNameOrMerge": "Add name or merge",
+  "mergeWithExisting": "Merge with existing",
+  "newPerson": "New person",
+  "addName": "Add name",
+  "add": "Add",
+  "extraPhotosFoundFor": "Extra photos found for {text}",
+  "@extraPhotosFoundFor": {
+    "placeholders": {
+      "text": {
+        "type": "String"
+      }
+    }
+  },
+  "extraPhotosFound": "Extra photos found",
+  "configuration": "Configuration",
+  "localIndexing": "Local indexing",
+  "processed": "Processed",
+  "resetPerson": "Remove",
+  "areYouSureYouWantToResetThisPerson": "Are you sure you want to reset this person?",
+  "allPersonGroupingWillReset": "All groupings for this person will be reset, and you will lose all suggestions made for this person",
+  "yesResetPerson": "Yes, reset person",
+  "onlyThem": "Only them",
+  "checkingModels": "Checking models...",
+  "enableMachineLearningBanner": "Enable machine learning for magic search and face recognition",
+  "searchDiscoverEmptySection": "Images will be shown here once processing and syncing is complete",
+  "searchPersonsEmptySection": "People will be shown here once processing and syncing is complete",
+  "viewersSuccessfullyAdded": "{count, plural, =0 {Added 0 viewer} =1 {Added 1 viewer} other {Added {count} viewers}}",
+  "@viewersSuccessfullyAdded": {
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "2"
+      }
+    },
+    "description": "Number of viewers that were successfully added to an album."
+  },
+  "collaboratorsSuccessfullyAdded": "{count, plural, =0 {Added 0 collaborator} =1 {Added 1 collaborator} other {Added {count} collaborators}}",
+  "@collaboratorsSuccessfullyAdded": {
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "2"
+      }
+    },
+    "description": "Number of collaborators that were successfully added to an album."
+  },
+  "accountIsAlreadyConfigured": "Account is already configured.",
+  "sessionIdMismatch": "Session ID mismatch",
+  "@sessionIdMismatch": {
+    "description": "In passkey page, deeplink is ignored because of session ID mismatch."
+  },
+  "failedToFetchActiveSessions": "Failed to fetch active sessions",
+  "@failedToFetchActiveSessions": {
+    "description": "In session page, warn user (in toast) that active sessions could not be fetched."
+  },
+  "failedToRefreshStripeSubscription": "Failed to refresh subscription",
+  "failedToPlayVideo": "Failed to play video",
+  "uploadIsIgnoredDueToIgnorereason": "Upload is ignored due to {ignoreReason}",
+  "@uploadIsIgnoredDueToIgnorereason": {
+    "placeholders": {
+      "ignoreReason": {
+        "type": "String",
+        "example": "no network"
+      }
+    }
+  },
+  "typeOfGallerGallerytypeIsNotSupportedForRename": "Type of gallery {galleryType} is not supported for rename",
+  "@typeOfGallerGallerytypeIsNotSupportedForRename": {
+    "placeholders": {
+      "galleryType": {
+        "type": "String",
+        "example": "no network"
+      }
+    }
+  },
+  "tapToUploadIsIgnoredDue": "Tap to upload, upload is currently ignored due to {ignoreReason}",
+  "@tapToUploadIsIgnoredDue": {
+    "description": "Shown in upload icon widet, inside a tooltip.",
+    "placeholders": {
+      "ignoreReason": {
+        "type": "String",
+        "example": "no network"
+      }
+    }
+  },
+  "tapToUpload": "Tap to upload",
+  "@tapToUpload": {
+    "description": "Shown in upload icon widet, inside a tooltip."
+  },
+  "info": "Info",
+  "addFiles": "Add Files",
+  "castAlbum": "Cast album",
+  "imageNotAnalyzed": "Image not analyzed",
+  "noFacesFound": "No faces found",
+  "fileNotUploadedYet": "File not uploaded yet",
+  "noSuggestionsForPerson": "No suggestions for {personName}",
+  "@noSuggestionsForPerson": {
+    "placeholders": {
+      "personName": {
+        "type": "String",
+        "example": "Alice"
+      }
+    }
+  },
+  "month": "month",
+  "yearShort": "yr",
+  "@yearShort": {
+    "description": "Appears in pricing page (/yr)"
+  },
+  "currentlyRunning": "currently running",
+  "ignored": "ignored",
+  "photosCount": "{count, plural, =0 {0 photo} =1 {1 photo} other {{count} photos}}",
+  "@photosCount": {
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "2"
+      }
+    }
+  },
+  "file": "File",
+  "searchSectionsLengthMismatch": "Sections length mismatch: {snapshotLength} != {searchLength}",
+  "@searchSectionsLengthMismatch": {
+    "description": "Appears in search tab page",
+    "placeholders": {
+      "snapshotLength": {
+        "type": "int",
+        "example": "1"
+      },
+      "searchLength": {
+        "type": "int",
+        "example": "2"
+      }
+    }
+  },
+  "selectMailApp": "Select mail app",
+  "selectAllShort": "All",
+  "@selectAllShort": {
+    "description": "Text that appears in bottom right when you start to select multiple photos. When clicked, it selects all photos."
+  },
+  "changeLogMagicSearchImprovementTitle": "Magic Search Improvement",
+  "changeLogMagicSearchImprovementContent": "We have improved magic search to become much faster, so you don\\'t have to wait to find what you\\'re looking for.",
+  "changeLogBackupStatusTitle": "Backup Status",
+  "changeLogBackupStatusContent": "We\\'ve added a log of all the files that have been uploaded to Ente, including failures and queued.",
+  "changeLogDiscoverTitle": "Discover",
+  "changeLogDiscoverContent": "Looking for photos of your id cards, notes, or even memes? Go to the search tab and check out Discover. Based on our semantic search, it\\'s a place to find photos that might be important for you.\\n\\nOnly available if you have enabled Machine Learning.",
+  "selectCoverPhoto": "Select cover photo",
+  "newLocation": "New location",
+  "faceNotClusteredYet": "Face not clustered yet, please come back later",
+  "theLinkYouAreTryingToAccessHasExpired": "The link you are trying to access has expired.",
+  "openFile": "Open file",
+  "backupFile": "Backup file",
+  "openAlbumInBrowser": "Open album in browser",
+  "openAlbumInBrowserTitle": "Please use the web app to add photos to this album",
+  "allow": "Allow",
+  "allowAppToOpenSharedAlbumLinks": "Allow app to open shared album links",
+  "seePublicAlbumLinksInApp": "See public album links in app",
+  "emergencyContacts": "Emergency Contacts",
+  "acceptTrustInvite": "Accept Invite",
+  "declineTrustInvite": "Decline Invite",
+  "removeYourselfAsTrustedContact": "Remove yourself as trusted contact",
+  "legacy": "Legacy",
+  "legacyPageDesc": "Legacy allows trusted contacts to access your account in your absence.",
+  "legacyPageDesc2": "Trusted contacts can initiate account recovery, and if not blocked within 30 days, reset your password and access your account.",
+  "legacyAccounts": "Legacy accounts",
+  "trustedContacts": "Trusted contacts",
+  "addTrustedContact": "Add Trusted Contact",
+  "removeInvite": "Remove invite",
+  "recoveryWarning": "A trusted contact is trying to access your account",
+  "rejectRecovery": "Reject recovery",
+  "recoveryInitiated": "Recovery initiated",
+  "recoveryInitiatedDesc": "You can access the account after {days} days. A notification will be sent to {email}.",
+  "@recoveryInitiatedDesc": {
+    "placeholders": {
+      "days": {
+        "type": "int",
+        "example": "30"
+      },
+      "email": {
+        "type": "String",
+        "example": "me@example.com"
+      }
+    }
+  },
+  "cancelAccountRecovery": "Cancel recovery",
+  "recoveryAccount": "Recover account",
+  "cancelAccountRecoveryBody": "Are you sure you want to cancel recovery?",
+  "startAccountRecoveryTitle": "Start recovery",
+  "whyAddTrustContact": "Trusted contact can help in recovering your data.",
+  "recoveryReady": "You can now recover {email}'s account by setting a new password.",
+  "@recoveryReady": {
+    "placeholders": {
+      "email": {
+        "type": "String",
+        "example": "me@example.com"
+      }
+    }
+  },
+  "recoveryWarningBody": "{email} is trying to recover your account.",
+  "trustedInviteBody": "You have been invited to be a legacy contact by {email}.",
+  "warning": "Warning",
+  "proceed": "Proceed",
+  "confirmAddingTrustedContact": "You are about to add {email} as a trusted contact. They will be able to recover your account if you are absent for {numOfDays} days.",
+  "@confirmAddingTrustedContact": {
+    "placeholders": {
+      "email": {
+        "type": "String",
+        "example": "me@example.com"
+      },
+      "numOfDays": {
+        "type": "int",
+        "example": "30"
+      }
+    }
+  },
+  "legacyInvite": "{email} has invited you to be a trusted contact",
+  "authToManageLegacy": "Please authenticate to manage your trusted contacts",
+  "useDifferentPlayerInfo": "Having trouble playing this video? Long press here to try a different player.",
+  "hideSharedItemsFromHomeGallery": "Hide shared items from home gallery",
+  "gallery": "Gallery",
+  "joinAlbum": "Join album",
+  "joinAlbumSubtext": "to view and add your photos",
+  "joinAlbumSubtextViewer": "to add this to shared albums",
+  "join": "Join",
+  "linkEmail": "Link email",
+  "link": "Link",
+  "noEnteAccountExclamation": "No Ente account!",
+  "orPickFromYourContacts": "or pick from your contacts",
+  "emailDoesNotHaveEnteAccount": "{email} does not have an Ente account.",
+  "@emailDoesNotHaveEnteAccount": {
+    "description": "Shown when email doesn't have an Ente account",
+    "placeholders": {
+      "email": {
+        "type": "String"
+      }
+    }
+  },
+  "accountOwnerPersonAppbarTitle": "{title} (Me)",
+  "@accountOwnerPersonAppbarTitle": {
+    "description": "Title of appbar for account owner person",
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "reassignMe": "Reassign \"Me\"",
+  "me": "Me",
+  "linkEmailToContactBannerCaption" : "for faster sharing",
+  "@linkEmailToContactBannerCaption": {
+    "description": "Caption for the 'Link email' title. It should be a continuation of the 'Link email' title. Just like how 'Link email' + 'for faster sharing' forms a proper sentence in English, the combination of these two strings should also be a proper sentence in other languages."
+  },
+  "selectPersonToLink": "Select person to link",
+  "linkPersonToEmail": "Link person to {email}",
+  "@linkPersonToEmail": {
+    "placeholders": {
+      "email": {
+        "type": "String"  
+      }
+    }
+  },
+  "linkPersonToEmailConfirmation": "This will link {personName} to {email}",
+  "@linkPersonToEmailConfirmation": {
+    "description": "Confirmation message when linking a person to an email",
+    "placeholders": {
+      "personName": {
+        "type": "String"
+      },
+      "email": {
+        "type": "String"
+      }
+    }
+  },
+  "selectYourFace": "Select your face",
+  "reassigningLoading": "Reassigning...",
+  "reassignedToName": "Reassigned you to {name}",
+  "@reassignedToName": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "saveChangesBeforeLeavingQuestion": "Save changes before leaving?",
+  "dontSave": "Don't save",
+  "thisIsMeExclamation": "This is me!",
+  "linkPerson": "Link person",
+  "linkPersonCaption": "for better sharing experience",
+  "@linkPersonCaption": {
+    "description": "Caption for the 'Link person' title. It should be a continuation of the 'Link person' title. Just like how 'Link person' + 'for better sharing experience' forms a proper sentence in English, the combination of these two strings should also be a proper sentence in other languages."
+  },
+  "videoStreaming": "Video streaming",
+  "processingVideos": "Processing videos",
+  "streamDetails": "Stream details",
+  "processing": "Processing",
+  "queued": "Queued",
+  "ineligible": "Ineligible",
+  "failed": "Failed",
+  "playStream": "Play stream",
+  "playOriginal": "Play original",
+  "joinAlbumConfirmationDialogBody" : "Joining an album will make your email visible to its participants."
 }

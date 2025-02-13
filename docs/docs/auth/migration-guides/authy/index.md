@@ -9,9 +9,9 @@ A guide written by Green, an ente.io lover
 
 > [!WARNING]
 >
-> Authy will soon be dropping support for its desktop apps in the near future.
-> If you are looking to switch to Ente Authenticator from Authy, I heavily
-> recommend you export your codes as soon as you can.
+> Authy has dropped all support for its desktop apps. It is no longer possible
+> to export data from Authy using methods 1 and 2. You will either need a rooted
+> android phone or you will need to reconfigure 2FA for each of your accounts.
 
 ---
 
@@ -101,7 +101,7 @@ to Ente Authenticator!
 > the codes yet, ignore this section.
 >
 > If the export itself failed, try using
-> [**method 1**](#method-1-use-neerajs-export-tool) instead.
+> [**method 1**](#method-1-use-neeraj-s-export-tool) instead.
 
 Usually, you should be able to import Bitwarden exports directly into Ente
 Authenticator. In case this didn't work for whatever reason, I've written a
@@ -149,6 +149,59 @@ that countains your TOTP secrets, which can now be imported into Ente
 Authenticator. To import your codes, please follow one of the steps below,
 depending on which method you used to export your codes.
 
+## Method 3
+
+**Who should use this?** Power users who have spare time on their hands and who
+have a rooted android phone running android 6 or newer that passes Play
+Integrity.
+
+This way of exporting your data will require a rooted phone.
+
+### Exporting codes using Android OTP Extractor
+
+This uses the tool
+[Android OTP Extractor](https://github.com/puddly/android-otp-extractor) from
+[puddly](https://github.com/puddly) on GitHub
+
+1. Install python 3 and adb to your computer you can download binaries for it
+   from [Google](https://developer.android.com/tools/releases/platform-tools)
+2. Add adb to your path. 2.1. On windows search for "Edit the system environment
+   variables" 2.2. Click "Environment Variables" 2.3. At the top in "User
+   variables" click the "path" variable and then click "Edit" 2.4. Click "New"
+   and type the path to where you extracted the Platform Tools
+3. Enable USB debugging on the Android Phone 3.1. Open settings 3.2. Open "About
+   phone" (Might say tablet depending on what device you use) (skip steps 3.2
+   and 3.3 if you already have developer options enabled) 3.3. Tap "Build
+   Number" 7 or more times 3.4. Go to the main settings page 3.5. Open "System
+   Settings" 3.6. Open "Developer options" 3.7. Enable "USB Debugging" 3.8. On
+   your computer verify the phone is connected by running `adb devices` (You may
+   need to tap "Allow" on the device to allow the computer to access it)
+4. Install Android OTP Extractor using pip
+    ```
+    pip install git+https://github.com/puddly/android-otp-extractor
+    ```
+5. Install Authy from the playstore and login to your account
+6. Run the command below to export the TOTP to QRCodes and URLS
+    ```
+    python -m android_otp_extractor --prepend-issuer --include authy
+    ```
+
+### Exporting codes using Aegis Authenticator
+
+This uses the tool [Aegis Authenticator](https://getaegis.app/) from
+[beemdevelopment](https://github.com/beemdevelopment).
+
+1. Install Authy and login on your rooted phone.
+2. Install Aegis Authenticator from the
+   [Google Play Store](https://play.google.com/store/apps/details?id=com.beemdevelopment.aegis).
+3. In the app, click the three dots in the top right corner and click "Import &
+   Export".
+4. Click "Import from another app" and choose Authy.
+5. The app will ask for root permissions, then automatically import your codes
+   from Authy.
+6. Then export the codes from Aegis Authenticator to `json` or `txt` using the
+   "Export to file" option in the "Import & Export" menu.
+
 ## Importing to Ente Authenticator (Method 1, method 2.1)
 
 1. Copy the TXT file to one of your devices with Ente Authenticator.
@@ -170,10 +223,15 @@ depending on which method you used to export your codes.
 5. Select the JSON file that was made earlier.
 
 If this didn't work, refer to
-[**method 2.1**](#method-21-if-the-export-worked-but-the-import-didnt).<br><br>
+[**method 2.1**](#method-2-1-if-the-export-worked-but-the-import-didn-t).<br><br>
 
-And that's it! You have now successfully migrated from Authy to Ente
-Authenticator.
+## Importing to Ente Authenticator (Method 3)
+
+1. Open Ente Authenticator on your phone
+2. Log in to your account (if you haven't already), or press "Use without
+   backups".
+3. Click the add button in the bottom right of the app.
+4. Select "Scan a QR code" and scan the code from the browser.
 
 Now that your secrets are safely stored, I recommend you delete the unencrypted
 JSON and TXT files that were made during the migration process for security.

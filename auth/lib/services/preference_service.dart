@@ -2,6 +2,14 @@ import 'package:ente_auth/core/event_bus.dart';
 import 'package:ente_auth/events/icons_changed_event.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+enum CodeSortKey {
+  issuerName,
+  accountName,
+  mostFrequentlyUsed,
+  recentlyUsed,
+  manual,
+}
+
 class PreferenceService {
   PreferenceService._privateConstructor();
   static final PreferenceService instance =
@@ -9,11 +17,13 @@ class PreferenceService {
 
   late final SharedPreferences _prefs;
 
-  static const kHasShownCoachMarkKey = "has_shown_coach_mark";
+  static const kHasShownCoachMarkKey = "has_shown_coach_mark_v2";
   static const kShouldShowLargeIconsKey = "should_show_large_icons";
   static const kShouldHideCodesKey = "should_hide_codes";
   static const kShouldAutoFocusOnSearchBar = "should_auto_focus_on_search_bar";
   static const kShouldMinimizeOnCopy = "should_minimize_on_copy";
+  static const kCompactMode = "vi.compactMode";
+  static const kAppInstallTime = "appInstallTime";
 
   Future<void> init() async {
     _prefs = await SharedPreferences.getInstance();
@@ -25,6 +35,15 @@ class PreferenceService {
     } else {
       return false;
     }
+  }
+
+  CodeSortKey codeSortKey() {
+    return CodeSortKey
+        .values[_prefs.getInt("codeSortKey") ?? CodeSortKey.issuerName.index];
+  }
+
+  Future<void> setCodeSortKey(CodeSortKey key) async {
+    await _prefs.setInt("codeSortKey", key.index);
   }
 
   Future<void> setHasShownCoachMark(bool value) {
@@ -46,6 +65,14 @@ class PreferenceService {
 
   bool shouldHideCodes() {
     return _prefs.getBool(kShouldHideCodesKey) ?? false;
+  }
+
+  bool isCompactMode() {
+    return _prefs.getBool(kCompactMode) ?? false;
+  }
+
+  Future<void> setCompactMode(bool value) async {
+    await _prefs.setBool(kCompactMode, value);
   }
 
   Future<void> setHideCodes(bool value) async {
@@ -76,5 +103,15 @@ class PreferenceService {
 
   Future<void> setShouldMinimizeOnCopy(bool value) async {
     await _prefs.setBool(kShouldMinimizeOnCopy, value);
+  }
+
+  int getAppInstalledTime() {
+    if (_prefs.containsKey(kAppInstallTime)) {
+      return _prefs.getInt(kAppInstallTime)!;
+    } else {
+      int installedTimeinMillis = DateTime.now().millisecondsSinceEpoch;
+      _prefs.setInt(kAppInstallTime, installedTimeinMillis).ignore();
+      return installedTimeinMillis;
+    }
   }
 }

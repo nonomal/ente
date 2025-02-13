@@ -265,13 +265,6 @@ func (repo *UserRepository) SetKeyAttributes(userID int64, keyAttributes ente.Ke
 	return stacktrace.Propagate(err, "")
 }
 
-// UpdateKeys sets the keys of a user
-func (repo *UserRepository) UpdateKeys(userID int64, keys ente.UpdateKeysRequest) error {
-	_, err := repo.DB.Exec(`UPDATE key_attributes SET kek_salt = $1, encrypted_key = $2, key_decryption_nonce = $3, mem_limit = $4, ops_limit = $5 WHERE user_id = $6`,
-		keys.KEKSalt, keys.EncryptedKey, keys.KeyDecryptionNonce, keys.MemLimit, keys.OpsLimit, userID)
-	return stacktrace.Propagate(err, "")
-}
-
 // SetRecoveryKeyAttributes sets the recovery key and related attributes for a user
 func (repo *UserRepository) SetRecoveryKeyAttributes(userID int64, keys ente.SetRecoveryKeyRequest) error {
 	_, err := repo.DB.Exec(`UPDATE key_attributes SET master_key_encrypted_with_recovery_key = $1, master_key_decryption_nonce = $2, recovery_key_encrypted_with_master_key = $3, recovery_key_decryption_nonce = $4 WHERE user_id = $5`,
@@ -395,4 +388,30 @@ func (repo *UserRepository) GetEmailsFromHashes(hashes []string) ([]string, erro
 		emails = append(emails, email)
 	}
 	return emails, nil
+}
+
+// GetActiveUsersForIds  returns a map of users by their IDs, similar to GetUserByID
+func (repo *UserRepository) GetActiveUsersForIds(id []int64) (map[int64]*ente.User, error) {
+	result := make(map[int64]*ente.User)
+	rows, err := repo.DB.Query(`SELECT user_id, encrypted_email, email_decryption_nonce, email_hash, creation_time FROM users WHERE  encrypted_email IS NOT NULL and user_id = ANY($1)`, pq.Array(id))
+	if err != nil {
+		return nil, stacktrace.Propagate(err, "")
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var user ente.User
+		var encryptedEmail, nonce []byte
+		err := rows.Scan(&user.ID, &encryptedEmail, &nonce, &user.Hash, &user.CreationTime)
+		if err != nil {
+			return nil, stacktrace.Propagate(err, "")
+		}
+		email, err := crypto.Decrypt(encryptedEmail, repo.SecretEncryptionKey, nonce)
+		if err != nil {
+			return nil, stacktrace.Propagate(err, "")
+		}
+		user.Email = email
+		result[user.ID] = &user
+	}
+	return result, nil
+
 }

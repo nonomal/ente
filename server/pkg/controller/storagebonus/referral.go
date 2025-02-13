@@ -3,7 +3,9 @@ package storagebonus
 import (
 	"database/sql"
 	"errors"
+	goaway "github.com/TwiN/go-away"
 	"github.com/ente-io/museum/pkg/utils/random"
+	"strings"
 
 	"github.com/ente-io/museum/ente"
 	entity "github.com/ente-io/museum/ente/storagebonus"
@@ -13,7 +15,6 @@ import (
 	"github.com/ente-io/museum/pkg/repo"
 	"github.com/ente-io/museum/pkg/repo/storagebonus"
 	"github.com/ente-io/museum/pkg/utils/auth"
-	enteTime "github.com/ente-io/museum/pkg/utils/time"
 	"github.com/ente-io/stacktrace"
 	"github.com/gin-gonic/gin"
 )
@@ -22,7 +23,6 @@ const (
 	codeLength                 = 6
 	referralAmountInGb         = 10
 	maxClaimableReferralAmount = 2000
-	numOfDaysToClaimReferral   = 32
 	defaultPlanType            = entity.TenGbOnUpgrade
 )
 
@@ -49,7 +49,7 @@ func (c *Controller) GetUserReferralView(ctx *gin.Context) (*entity.GetUserRefer
 		return nil, stacktrace.Propagate(err, "")
 	}
 	isFamilyMember := user.FamilyAdminID != nil && *user.FamilyAdminID != userID
-	enableApplyCode := !appliedReferral && user.CreationTime > enteTime.MicrosecondBeforeDays(numOfDaysToClaimReferral) && !isFamilyMember
+	enableApplyCode := !appliedReferral && !isFamilyMember
 	// Get the referral code for the user or family admin
 	codeUser := userID
 	if isFamilyMember {
@@ -100,9 +100,7 @@ func (c *Controller) ApplyReferralCode(ctx *gin.Context, code string) error {
 		return stacktrace.Propagate(err, "failed to get user")
 	}
 
-	if user.CreationTime < enteTime.MicrosecondBeforeDays(numOfDaysToClaimReferral) {
-		return stacktrace.Propagate(entity.CanNotApplyCodeErr, "account is too old to apply code")
-	} else if user.FamilyAdminID != nil && userID != *user.FamilyAdminID {
+	if user.FamilyAdminID != nil && userID != *user.FamilyAdminID {
 		return stacktrace.Propagate(entity.CanNotApplyCodeErr, "user is member of a family plan")
 	}
 
@@ -130,4 +128,25 @@ func (c *Controller) GetOrCreateReferralCode(ctx *gin.Context, userID int64) (*s
 		referralCode = &code
 	}
 	return referralCode, nil
+}
+
+func (c *Controller) UpdateReferralCode(ctx *gin.Context, userID int64, code string, isAdminEdit bool) error {
+	code = strings.ToUpper(code)
+	if !random.IsAlphanumeric(code) {
+		return stacktrace.Propagate(ente.NewBadRequestWithMessage("code is not alphanumeric"), "")
+	}
+	if len(code) < 4 || len(code) > 20 {
+		return stacktrace.Propagate(ente.NewBadRequestWithMessage("code length should be between 4 and 8"), "")
+	}
+
+	// Check if the code contains any offensive language using the go-away library
+	if goaway.IsProfane(code) {
+		return stacktrace.Propagate(ente.NewBadRequestWithMessage("Referral code contains offensive language and cannot be used"), "")
+	}
+
+	err := c.StorageBonus.AddNewCode(ctx, userID, code, isAdminEdit)
+	if err != nil {
+		return stacktrace.Propagate(err, "failed to update referral code")
+	}
+	return nil
 }

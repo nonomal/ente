@@ -18,17 +18,44 @@ import "package:photos/utils/email_util.dart";
 typedef DialogBuilder = DialogWidget Function(BuildContext context);
 
 ///Will return null if dismissed by tapping outside
-Future<ButtonResult?> showErrorDialog(
-  BuildContext context,
-  String title,
-  String? body, {
+Future<ButtonResult?> showInfoDialog(
+  BuildContext context, {
+  String title = "",
+  String? body,
+  IconData icon = Icons.info_outline_rounded,
   bool isDismissable = true,
 }) async {
   return showDialogWidget(
     context: context,
     title: title,
     body: body,
+    icon: icon,
     isDismissible: isDismissable,
+    buttons: [
+      ButtonWidget(
+        buttonType: ButtonType.secondary,
+        labelText: S.of(context).ok,
+        isInAlert: true,
+        buttonAction: ButtonAction.first,
+      ),
+    ],
+  );
+}
+
+///Will return null if dismissed by tapping outside
+Future<ButtonResult?> showErrorDialog(
+  BuildContext context,
+  String title,
+  String? body, {
+  bool isDismissable = true,
+  bool useRootNavigator = false,
+}) async {
+  return showDialogWidget(
+    context: context,
+    title: title,
+    body: body,
+    isDismissible: isDismissable,
+    useRootNavigator: useRootNavigator,
     buttons: [
       ButtonWidget(
         buttonType: ButtonType.secondary,
@@ -49,7 +76,7 @@ Future<ButtonResult?> showErrorDialogForException({
 }) async {
   String errorMessage =
       message ?? S.of(context).tempErrorContactSupportIfPersists;
-  if (exception is DioError &&
+  if (exception is DioException &&
       exception.response != null &&
       exception.response!.data["code"] != null) {
     errorMessage =
@@ -61,10 +88,10 @@ Future<ButtonResult?> showErrorDialogForException({
     icon: Icons.error_outline_outlined,
     body: errorMessage,
     isDismissible: isDismissible,
-    buttons: const [
+    buttons: [
       ButtonWidget(
         buttonType: ButtonType.secondary,
-        labelText: "OK",
+        labelText: S.of(context).ok,
         isInAlert: true,
       ),
     ],
@@ -80,9 +107,12 @@ String parseErrorForUI(
   if (error == null) {
     return genericError;
   }
-  if (error is DioError) {
-    final DioError dioError = error;
-    if (dioError.type == DioErrorType.other) {
+  if (error is DioException) {
+    final DioException dioError = error;
+    if (dioError.type == DioExceptionType.receiveTimeout ||
+        dioError.type == DioExceptionType.connectionError ||
+        dioError.type == DioExceptionType.sendTimeout ||
+        dioError.type == DioExceptionType.cancel) {
       if (dioError.error.toString().contains('Failed host lookup')) {
         return S.of(context).networkHostLookUpErr;
       } else if (dioError.error.toString().contains('SocketException')) {
@@ -95,15 +125,15 @@ String parseErrorForUI(
     return genericError;
   }
   String errorInfo = "";
-  if (error is DioError) {
-    final DioError dioError = error;
-    if (dioError.type == DioErrorType.response) {
+  if (error is DioException) {
+    final DioException dioError = error;
+    if (dioError.type == DioExceptionType.badResponse) {
       if (dioError.response?.data["code"] != null) {
         errorInfo = "Reason: " + dioError.response!.data["code"];
       } else {
         errorInfo = "Reason: " + dioError.response!.data.toString();
       }
-    } else if (dioError.type == DioErrorType.other) {
+    } else if (dioError.type == DioExceptionType.badCertificate) {
       errorInfo = "Reason: " + dioError.error.toString();
     } else {
       errorInfo = "Reason: " + dioError.type.toString();
@@ -329,10 +359,13 @@ Future<dynamic> showTextInputDialog(
   TextEditingController? textEditingController,
   List<TextInputFormatter>? textInputFormatter,
   TextInputType? textInputType,
+  bool useRootNavigator = false,
+  bool popnavAfterSubmission = true,
 }) {
   return showDialog(
     barrierColor: backdropFaintDark,
     context: context,
+    useRootNavigator: useRootNavigator,
     builder: (context) {
       final bottomInset = MediaQuery.of(context).viewInsets.bottom;
       final isKeyboardUp = bottomInset > 100;
@@ -359,6 +392,7 @@ Future<dynamic> showTextInputDialog(
             textEditingController: textEditingController,
             textInputFormatter: textInputFormatter,
             textInputType: textInputType,
+            popnavAfterSubmission: popnavAfterSubmission,
           ),
         ),
       );

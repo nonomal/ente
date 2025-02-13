@@ -9,6 +9,8 @@ import "package:photos/core/network/network.dart";
 class RemoteAssetsService {
   static final _logger = Logger("RemoteAssetsService");
 
+  bool checkRemovedOldAssets = false;
+
   RemoteAssetsService._privateConstructor();
   final StreamController<(String, int, int)> _progressController =
       StreamController<(String, int, int)>.broadcast();
@@ -18,17 +20,52 @@ class RemoteAssetsService {
   static final RemoteAssetsService instance =
       RemoteAssetsService._privateConstructor();
 
-  Future<File> getAsset(String remotePath) async {
+  Future<File> getAsset(String remotePath, {bool refetch = false}) async {
     final path = await _getLocalPath(remotePath);
     final file = File(path);
-    if (await file.exists()) {
+    if (file.existsSync() && !refetch) {
       _logger.info("Returning cached file for $remotePath");
       return file;
     } else {
       final tempFile = File(path + ".temp");
       await _downloadFile(remotePath, tempFile.path);
-      await tempFile.rename(path);
+      tempFile.renameSync(path);
       return File(path);
+    }
+  }
+
+  Future<String> getAssetPath(String remotePath, {bool refetch = false}) async {
+    await cleanupOldModelsIfNeeded();
+    final file = await getAsset(remotePath, refetch: refetch);
+    return file.path;
+  }
+
+  ///Returns asset if the remote asset is new compared to the local copy of it
+  Future<File?> getAssetIfUpdated(String remotePath) async {
+    try {
+      final path = await _getLocalPath(remotePath);
+      final file = File(path);
+      if (!file.existsSync()) {
+        final tempFile = File(path + ".temp");
+        await _downloadFile(remotePath, tempFile.path);
+        tempFile.renameSync(path);
+        return File(path);
+      } else {
+        final existingFileSize = File(path).lengthSync();
+        final tempFile = File(path + ".temp");
+        await _downloadFile(remotePath, tempFile.path);
+        final newFileSize = tempFile.lengthSync();
+        if (existingFileSize != newFileSize) {
+          tempFile.renameSync(path);
+          return File(path);
+        } else {
+          tempFile.deleteSync();
+          return null;
+        }
+      }
+    } catch (e) {
+      _logger.warning("Error getting asset if updated", e);
+      return null;
     }
   }
 
@@ -60,8 +97,8 @@ class RemoteAssetsService {
   Future<void> _downloadFile(String url, String savePath) async {
     _logger.info("Downloading " + url);
     final existingFile = File(savePath);
-    if (await existingFile.exists()) {
-      await existingFile.delete();
+    if (existingFile.existsSync()) {
+      existingFile.deleteSync();
     }
 
     await NetworkClient.instance.getDio().download(
@@ -77,5 +114,35 @@ class RemoteAssetsService {
     );
 
     _logger.info("Downloaded " + url);
+  }
+
+  Future<void> cleanupOldModelsIfNeeded() async {
+    if (checkRemovedOldAssets) return;
+    const oldModelNames = [
+      "https://models.ente.io/clip-image-vit-32-float32.onnx",
+      "https://models.ente.io/clip-text-vit-32-uint8.onnx",
+      "https://models.ente.io/mobileclip_s2_image_opset18_rgba_sim.onnx",
+      "https://models.ente.io/mobileclip_s2_image_opset18_rgba_opt.onnx",
+      "https://models.ente.io/mobileclip_s2_text_int32.onnx",
+      "https://models.ente.io/yolov5s_face_opset18_rgba_opt.onnx",
+      "https://models.ente.io/yolov5s_face_opset18_rgba_opt_nosplits.onnx",
+    ];
+
+    await cleanupSelectedModels(oldModelNames);
+
+    checkRemovedOldAssets = true;
+    _logger.info("Old ML models cleaned up");
+  }
+
+  Future<void> cleanupSelectedModels(List<String> modelRemotePaths) async {
+    for (final remotePath in modelRemotePaths) {
+      final localPath = await _getLocalPath(remotePath);
+      if (File(localPath).existsSync()) {
+        _logger.info(
+          'Removing unused ML model ${remotePath.split('/').last} at $localPath',
+        );
+        await File(localPath).delete();
+      }
+    }
   }
 }

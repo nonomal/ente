@@ -31,15 +31,38 @@
  * and when changing one of them, remember to see if the other two also need
  * changing:
  *
- * -    [renderer]  web/packages/next/types/electron.ts      contains docs
- * -    [preload]   desktop/src/preload.ts                         ↕︎
- * -    [main]      desktop/src/main/ipc.ts                  contains impl
+ * - [renderer]  web/packages/base/types/ipc.ts      contains docs
+ * - [preload]   desktop/src/preload.ts                    ↕︎
+ * - [main]      desktop/src/main/ipc.ts             contains impl
  */
+
+// This code runs in the (isolated) web layer. Contrary to the impression given
+// by the Electron docs (as of 2024), the window object is actually available to
+// the preload script, and it is necessary for legitimate uses too.
+//
+// > The isolated world is connected to the DOM just the same is the main world,
+// > it is just the JS contexts that are separated.
+// >
+// > https://github.com/electron/electron/issues/27024#issuecomment-745618327
+//
+// Adding this reference here tells TypeScript that DOM typings (in particular,
+// window) should be introduced in the ambient scope.
+//
+// [Note: Node and web stream type mismatch]
+//
+// Unfortunately, adding this reference causes the ReadableStream typings to
+// break since lib.dom.d.ts adds its own incompatible definitions of
+// ReadableStream to the global scope.
+//
+// https://github.com/DefinitelyTyped/DefinitelyTyped/discussions/68407
+
+/// <reference lib="dom" />
 
 import { contextBridge, ipcRenderer, webUtils } from "electron/renderer";
 
 // While we can't import other code, we can import types since they're just
 // needed when compiling and will not be needed or looked around for at runtime.
+import type { IpcRendererEvent } from "electron";
 import type {
     AppUpdate,
     CollectionMapping,
@@ -47,6 +70,19 @@ import type {
     PendingUploads,
     ZipItem,
 } from "./types/ipc";
+
+// - Infrastructure
+
+// We need to wait until the renderer is ready before sending ports via
+// postMessage, and this promise comes handy in such cases. We create the
+// promise at the top level so that it is guaranteed to be registered before the
+// load event is fired.
+//
+// See: https://www.electronjs.org/docs/latest/tutorial/message-ports
+
+const windowLoaded = new Promise((resolve) => {
+    window.onload = resolve;
+});
 
 // - General
 
@@ -62,25 +98,48 @@ const openLogDirectory = () => ipcRenderer.invoke("openLogDirectory");
 
 const selectDirectory = () => ipcRenderer.invoke("selectDirectory");
 
+// The path that we get back from `webUtils.getPathForFile` on Windows uses "\"
+// as the path separator. Convert them to POSIX separators.
+
+const pathForFile =
+    process.platform == "win32"
+        ? (file: File) => webUtils.getPathForFile(file).replace(/\\/g, "/")
+        : (file: File) => webUtils.getPathForFile(file);
+
 const logout = () => {
     watchRemoveListeners();
     return ipcRenderer.invoke("logout");
 };
 
-const encryptionKey = () => ipcRenderer.invoke("encryptionKey");
+const masterKeyB64 = () => ipcRenderer.invoke("masterKeyB64");
 
-const saveEncryptionKey = (encryptionKey: string) =>
-    ipcRenderer.invoke("saveEncryptionKey", encryptionKey);
+const saveMasterKeyB64 = (masterKeyB64: string) =>
+    ipcRenderer.invoke("saveMasterKeyB64", masterKeyB64);
 
-const onMainWindowFocus = (cb?: () => void) => {
+const lastShownChangelogVersion = () =>
+    ipcRenderer.invoke("lastShownChangelogVersion");
+
+const setLastShownChangelogVersion = (version: number) =>
+    ipcRenderer.invoke("setLastShownChangelogVersion", version);
+
+const isAutoLaunchEnabled = () => ipcRenderer.invoke("isAutoLaunchEnabled");
+
+const toggleAutoLaunch = () => ipcRenderer.invoke("toggleAutoLaunch");
+
+const onMainWindowFocus = (cb: (() => void) | undefined) => {
     ipcRenderer.removeAllListeners("mainWindowFocus");
     if (cb) ipcRenderer.on("mainWindowFocus", cb);
+};
+
+const onOpenEnteURL = (cb: ((url: string) => void) | undefined) => {
+    ipcRenderer.removeAllListeners("openEnteURL");
+    if (cb) ipcRenderer.on("openEnteURL", (_, url: string) => cb(url));
 };
 
 // - App update
 
 const onAppUpdateAvailable = (
-    cb?: ((update: AppUpdate) => void) | undefined,
+    cb: ((update: AppUpdate) => void) | undefined,
 ) => {
     ipcRenderer.removeAllListeners("appUpdateAvailable");
     if (cb) {
@@ -152,17 +211,17 @@ const ffmpegExec = (
 
 // - ML
 
-const computeCLIPImageEmbedding = (jpegImageData: Uint8Array) =>
-    ipcRenderer.invoke("computeCLIPImageEmbedding", jpegImageData);
-
-const computeCLIPTextEmbeddingIfAvailable = (text: string) =>
-    ipcRenderer.invoke("computeCLIPTextEmbeddingIfAvailable", text);
-
-const detectFaces = (input: Float32Array) =>
-    ipcRenderer.invoke("detectFaces", input);
-
-const computeFaceEmbeddings = (input: Float32Array) =>
-    ipcRenderer.invoke("computeFaceEmbeddings", input);
+const createMLWorker = () => {
+    const l = (event: IpcRendererEvent) => {
+        void windowLoaded.then(() => {
+            // "*"" is the origin to send to.
+            window.postMessage("createMLWorker/port", "*", event.ports);
+            ipcRenderer.off("createMLWorker/port", l);
+        });
+    };
+    ipcRenderer.on("createMLWorker/port", l);
+    ipcRenderer.send("createMLWorker");
+};
 
 // - Watch
 
@@ -205,8 +264,8 @@ const watchOnRemoveDir = (f: (path: string, watch: FolderWatch) => void) => {
     );
 };
 
-const watchFindFiles = (folderPath: string) =>
-    ipcRenderer.invoke("watchFindFiles", folderPath);
+const fsFindFiles = (folderPath: string) =>
+    ipcRenderer.invoke("fsFindFiles", folderPath);
 
 const watchRemoveListeners = () => {
     ipcRenderer.removeAllListeners("watchAddFile");
@@ -215,26 +274,6 @@ const watchRemoveListeners = () => {
 };
 
 // - Upload
-
-const pathForFile = (file: File) => {
-    const path = webUtils.getPathForFile(file);
-    // The path that we get back from `webUtils.getPathForFile` on Windows uses
-    // "/" as the path separator. Convert them to POSIX separators.
-    //
-    // Note that we do not have access to the path or the os module in the
-    // preload script, thus this hand rolled transformation.
-
-    // However that makes TypeScript fidgety since we it cannot find navigator,
-    // as we haven't included "lib": ["dom"] in our tsconfig to avoid making DOM
-    // APIs available to our main Node.js code. We could create a separate
-    // tsconfig just for the preload script, but for now let's go with a cast.
-    //
-    // @ts-expect-error navigator is not defined.
-    const platform = (navigator as { platform: string }).platform;
-    return platform.toLowerCase().includes("win")
-        ? path.split("\\").join("/")
-        : path;
-};
 
 const listZipItems = (zipPath: string) =>
     ipcRenderer.invoke("listZipItems", zipPath);
@@ -282,8 +321,11 @@ const clearPendingUploads = () => ipcRenderer.invoke("clearPendingUploads");
  * operation when it happens across threads.
  * https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Transferable_objects
  *
- * In our case though, we're not dealing with threads but separate processes. So
- * the ArrayBuffer will be copied:
+ * In our case though, we're not dealing with threads but separate processes.
+ * Electron currently only supports transferring MessagePorts:
+ * https://github.com/electron/electron/issues/34905
+ *
+ * So the ArrayBuffer will be copied:
  *
  * > "parameters, errors and return values are **copied** when they're sent over
  * > the bridge".
@@ -303,10 +345,16 @@ contextBridge.exposeInMainWorld("electron", {
     openDirectory,
     openLogDirectory,
     selectDirectory,
+    pathForFile,
     logout,
-    encryptionKey,
-    saveEncryptionKey,
+    masterKeyB64,
+    saveMasterKeyB64,
+    lastShownChangelogVersion,
+    setLastShownChangelogVersion,
+    isAutoLaunchEnabled,
+    toggleAutoLaunch,
     onMainWindowFocus,
+    onOpenEnteURL,
 
     // - App update
 
@@ -326,6 +374,7 @@ contextBridge.exposeInMainWorld("electron", {
         readTextFile: fsReadTextFile,
         writeFile: fsWriteFile,
         isDir: fsIsDir,
+        findFiles: fsFindFiles,
     },
 
     // - Conversion
@@ -336,10 +385,7 @@ contextBridge.exposeInMainWorld("electron", {
 
     // - ML
 
-    computeCLIPImageEmbedding,
-    computeCLIPTextEmbeddingIfAvailable,
-    detectFaces,
-    computeFaceEmbeddings,
+    createMLWorker,
 
     // - Watch
 
@@ -352,12 +398,10 @@ contextBridge.exposeInMainWorld("electron", {
         onAddFile: watchOnAddFile,
         onRemoveFile: watchOnRemoveFile,
         onRemoveDir: watchOnRemoveDir,
-        findFiles: watchFindFiles,
     },
 
     // - Upload
 
-    pathForFile,
     listZipItems,
     pathOrZipItemSize,
     pendingUploads,

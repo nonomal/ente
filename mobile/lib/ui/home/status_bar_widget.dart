@@ -6,22 +6,28 @@ import "package:logging/logging.dart";
 import 'package:photos/core/event_bus.dart';
 import 'package:photos/ente_theme_data.dart';
 import 'package:photos/events/notification_event.dart';
+import "package:photos/events/preview_updated_event.dart";
 import 'package:photos/events/sync_status_update_event.dart';
 import "package:photos/generated/l10n.dart";
+import "package:photos/models/preview/preview_item_status.dart";
+import "package:photos/service_locator.dart";
+import "package:photos/services/preview_video_store.dart";
 import 'package:photos/services/sync_service.dart';
-import 'package:photos/services/user_remote_flag_service.dart';
+import "package:photos/services/user_remote_flag_service.dart";
 import "package:photos/theme/ente_theme.dart";
 import 'package:photos/theme/text_style.dart';
 import 'package:photos/ui/account/verify_recovery_page.dart';
 import 'package:photos/ui/components/home_header_widget.dart';
 import 'package:photos/ui/components/notification_widget.dart';
 import 'package:photos/ui/home/header_error_widget.dart';
+import "package:photos/ui/settings/backup/backup_status_screen.dart";
+import "package:photos/ui/settings/ml/enable_ml_consent.dart";
 import 'package:photos/utils/navigation_util.dart';
 
 const double kContainerHeight = 36;
 
 class StatusBarWidget extends StatefulWidget {
-  const StatusBarWidget({Key? key}) : super(key: key);
+  const StatusBarWidget({super.key});
 
   @override
   State<StatusBarWidget> createState() => _StatusBarWidgetState();
@@ -29,11 +35,17 @@ class StatusBarWidget extends StatefulWidget {
 
 class _StatusBarWidgetState extends State<StatusBarWidget> {
   static final _logger = Logger("StatusBarWidget");
+  late int previewCount = 0;
 
   late StreamSubscription<SyncStatusUpdate> _subscription;
   late StreamSubscription<NotificationEvent> _notificationSubscription;
+  late StreamSubscription<PreviewUpdatedEvent> _previewSubscription;
+
   bool _showStatus = false;
   bool _showErrorBanner = false;
+  bool _showMlBanner = !userRemoteFlagService
+          .getCachedBoolValue(UserRemoteFlagService.mlEnabled) &&
+      !localSettings.hasSeenMLEnablingBanner;
   Error? _syncError;
 
   @override
@@ -69,8 +81,31 @@ class _StatusBarWidgetState extends State<StatusBarWidget> {
     _notificationSubscription =
         Bus.instance.on<NotificationEvent>().listen((event) {
       if (mounted) {
+        _showMlBanner = !userRemoteFlagService
+                .getCachedBoolValue(UserRemoteFlagService.mlEnabled) &&
+            !localSettings.hasSeenMLEnablingBanner;
         setState(() {});
       }
+    });
+
+    previewCount = PreviewVideoStore.instance.previews.values
+        .where(
+          (element) =>
+              element.status != PreviewItemStatus.uploaded &&
+              element.status != PreviewItemStatus.failed,
+        )
+        .length;
+
+    _previewSubscription =
+        Bus.instance.on<PreviewUpdatedEvent>().listen((event) {
+      previewCount = event.items.values
+          .where(
+            (element) =>
+                element.status != PreviewItemStatus.uploaded &&
+                element.status != PreviewItemStatus.failed,
+          )
+          .length;
+      setState(() {});
     });
     super.initState();
   }
@@ -79,6 +114,8 @@ class _StatusBarWidgetState extends State<StatusBarWidget> {
   void dispose() {
     _subscription.cancel();
     _notificationSubscription.cancel();
+    _previewSubscription.cancel();
+
     super.dispose();
   }
 
@@ -87,11 +124,31 @@ class _StatusBarWidgetState extends State<StatusBarWidget> {
     return Column(
       children: [
         HomeHeaderWidget(
-          centerWidget: _showStatus
-              ? _showErrorBanner
-                  ? const Text("ente", style: brandStyleMedium)
-                  : const SyncStatusWidget()
-              : const Text("ente", style: brandStyleMedium),
+          centerWidget: _showStatus && !_showErrorBanner
+              ? GestureDetector(
+                  onTap: () {
+                    routeToPage(
+                      context,
+                      const BackupStatusScreen(),
+                      forceCustomPageRoute: true,
+                    ).ignore();
+                  },
+                  child: const SyncStatusWidget(),
+                )
+              : previewCount > 0
+                  ? GestureDetector(
+                      onTap: () {
+                        routeToPage(
+                          context,
+                          const BackupStatusScreen(),
+                          forceCustomPageRoute: true,
+                        ).ignore();
+                      },
+                      child: RefreshIndicatorWidget(
+                        S.of(context).processingVideos,
+                      ),
+                    )
+                  : const Text("ente", style: brandStyleMedium),
         ),
         _showErrorBanner
             ? Divider(
@@ -102,8 +159,29 @@ class _StatusBarWidgetState extends State<StatusBarWidget> {
         _showErrorBanner
             ? HeaderErrorWidget(error: _syncError)
             : const SizedBox.shrink(),
-        UserRemoteFlagService.instance.shouldShowRecoveryVerification() &&
-                !_showErrorBanner
+        _showMlBanner && !_showErrorBanner
+            ? Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 2.0, vertical: 12),
+                child: NotificationWidget(
+                  startIcon: Icons.offline_bolt,
+                  actionIcon: Icons.arrow_forward,
+                  text: S.of(context).enableMachineLearningBanner,
+                  type: NotificationType.greenBanner,
+                  mainTextStyle: darkTextTheme.smallMuted,
+                  onTap: () async => {
+                    await routeToPage(
+                      context,
+                      const EnableMachineLearningConsent(),
+                      forceCustomPageRoute: true,
+                    ),
+                  },
+                ),
+              )
+            : const SizedBox.shrink(),
+        userRemoteFlagService.shouldShowRecoveryVerification() &&
+                !_showErrorBanner &&
+                !_showMlBanner
             ? Padding(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12),
@@ -128,7 +206,7 @@ class _StatusBarWidgetState extends State<StatusBarWidget> {
 }
 
 class SyncStatusWidget extends StatefulWidget {
-  const SyncStatusWidget({Key? key}) : super(key: key);
+  const SyncStatusWidget({super.key});
 
   @override
   State<SyncStatusWidget> createState() => _SyncStatusWidgetState();
@@ -173,7 +251,50 @@ class _SyncStatusWidgetState extends State<SyncStatusWidget> {
     if (_event!.status == SyncStatus.completedBackup) {
       return const SyncStatusCompletedWidget();
     }
-    return RefreshIndicatorWidget(_event);
+    return RefreshIndicatorWidget(_getRefreshingText(context));
+  }
+
+  String _getRefreshingText(BuildContext context) {
+    if (_event == null) {
+      return S.of(context).loadingGallery;
+    }
+    if (_event!.status == SyncStatus.startedFirstGalleryImport ||
+        _event!.status == SyncStatus.completedFirstGalleryImport) {
+      return S.of(context).loadingGallery;
+    }
+    if (_event!.status == SyncStatus.applyingRemoteDiff) {
+      return S.of(context).syncing;
+    }
+    if (_event!.status == SyncStatus.preparingForUpload) {
+      if (_event!.total == null || _event!.total! <= 0) {
+        return S.of(context).encryptingBackup;
+      } else if (_event!.total == 1) {
+        return S.of(context).uploadingSingleMemory;
+      } else {
+        return S
+            .of(context)
+            .uploadingMultipleMemories(NumberFormat().format(_event!.total!));
+      }
+    }
+    if (_event!.status == SyncStatus.inProgress) {
+      final format = NumberFormat();
+      return S.of(context).syncProgress(
+            format.format(_event!.completed!),
+            format.format(_event!.total!),
+          );
+    }
+    if (_event!.status == SyncStatus.paused) {
+      return _event!.reason;
+    }
+    if (_event!.status == SyncStatus.error) {
+      return _event!.reason;
+    }
+    if (_event!.status == SyncStatus.completedBackup) {
+      if (_event!.wasStopped) {
+        return S.of(context).syncStopped;
+      }
+    }
+    return S.of(context).allMemoriesPreserved;
   }
 }
 
@@ -183,9 +304,9 @@ class RefreshIndicatorWidget extends StatelessWidget {
     valueColor: AlwaysStoppedAnimation<Color>(Color.fromRGBO(45, 194, 98, 1.0)),
   );
 
-  final SyncStatusUpdate? event;
+  final String text;
 
-  const RefreshIndicatorWidget(this.event, {Key? key}) : super(key: key);
+  const RefreshIndicatorWidget(this.text, {super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -210,7 +331,7 @@ class RefreshIndicatorWidget extends StatelessWidget {
                 ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(12, 4, 0, 0),
-                  child: Text(_getRefreshingText(context)),
+                  child: Text(text),
                 ),
               ],
             ),
@@ -219,42 +340,10 @@ class RefreshIndicatorWidget extends StatelessWidget {
       ),
     );
   }
-
-  String _getRefreshingText(BuildContext context) {
-    if (event!.status == SyncStatus.startedFirstGalleryImport ||
-        event!.status == SyncStatus.completedFirstGalleryImport) {
-      return S.of(context).loadingGallery;
-    }
-    if (event!.status == SyncStatus.applyingRemoteDiff) {
-      return S.of(context).syncing;
-    }
-    if (event!.status == SyncStatus.preparingForUpload) {
-      return S.of(context).encryptingBackup;
-    }
-    if (event!.status == SyncStatus.inProgress) {
-      final format = NumberFormat();
-      return S.of(context).syncProgress(
-            format.format(event!.completed!),
-            format.format(event!.total!),
-          );
-    }
-    if (event!.status == SyncStatus.paused) {
-      return event!.reason;
-    }
-    if (event!.status == SyncStatus.error) {
-      return event!.reason;
-    }
-    if (event!.status == SyncStatus.completedBackup) {
-      if (event!.wasStopped) {
-        return S.of(context).syncStopped;
-      }
-    }
-    return S.of(context).allMemoriesPreserved;
-  }
 }
 
 class SyncStatusCompletedWidget extends StatelessWidget {
-  const SyncStatusCompletedWidget({Key? key}) : super(key: key);
+  const SyncStatusCompletedWidget({super.key});
 
   @override
   Widget build(BuildContext context) {

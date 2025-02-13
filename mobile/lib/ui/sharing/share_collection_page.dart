@@ -2,6 +2,7 @@ import 'package:collection/collection.dart';
 import 'package:fast_base58/fast_base58.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import "package:photos/extensions/user_extension.dart";
 import "package:photos/generated/l10n.dart";
 import "package:photos/models/api/collection/user.dart";
 import 'package:photos/models/collection/collection.dart';
@@ -26,7 +27,7 @@ import 'package:photos/utils/toast_util.dart';
 class ShareCollectionPage extends StatefulWidget {
   final Collection collection;
 
-  const ShareCollectionPage(this.collection, {Key? key}) : super(key: key);
+  const ShareCollectionPage(this.collection, {super.key});
 
   @override
   State<ShareCollectionPage> createState() => _ShareCollectionPageState();
@@ -36,6 +37,7 @@ class _ShareCollectionPageState extends State<ShareCollectionPage> {
   late List<User?> _sharees;
   final CollectionActions collectionActions =
       CollectionActions(CollectionsService.instance);
+  final GlobalKey sendLinkButtonKey = GlobalKey();
 
   Future<void> _navigateToManageUser() async {
     if (_sharees.length == 1) {
@@ -59,7 +61,7 @@ class _ShareCollectionPageState extends State<ShareCollectionPage> {
 
   @override
   Widget build(BuildContext context) {
-    _sharees = widget.collection.sharees ?? [];
+    _sharees = widget.collection.sharees;
     final bool hasUrl = widget.collection.hasLink;
     final children = <Widget>[];
     children.add(
@@ -134,7 +136,7 @@ class _ShareCollectionPageState extends State<ShareCollectionPage> {
     }
 
     final bool hasExpired =
-        widget.collection.publicURLs?.firstOrNull?.isExpired ?? false;
+        widget.collection.publicURLs.firstOrNull?.isExpired ?? false;
     children.addAll([
       const SizedBox(
         height: 24,
@@ -164,7 +166,7 @@ class _ShareCollectionPageState extends State<ShareCollectionPage> {
           CollectionsService.instance.getCollectionKey(widget.collection.id),
         );
         final String url =
-            "${widget.collection.publicURLs!.first!.url}#$collectionKey";
+            "${widget.collection.publicURLs.first.url}#$collectionKey";
         children.addAll(
           [
             MenuItemWidget(
@@ -186,6 +188,7 @@ class _ShareCollectionPageState extends State<ShareCollectionPage> {
               bgColor: getEnteColorScheme(context).fillFaint,
             ),
             MenuItemWidget(
+              key: sendLinkButtonKey,
               captionedTextWidget: CaptionedTextWidget(
                 title: S.of(context).sendLink,
                 makeTextBold: true,
@@ -194,7 +197,12 @@ class _ShareCollectionPageState extends State<ShareCollectionPage> {
               menuItemColor: getEnteColorScheme(context).fillFaint,
               onTap: () async {
                 // ignore: unawaited_futures
-                shareText(url);
+                await shareAlbumLinkWithPlaceholder(
+                  context,
+                  widget.collection,
+                  url,
+                  sendLinkButtonKey,
+                );
               },
               isTopBorderRadiusRemoved: true,
               isBottomBorderRadiusRemoved: true,
@@ -325,20 +333,21 @@ class EmailItemWidget extends StatelessWidget {
   const EmailItemWidget(
     this.collection, {
     this.onTap,
-    Key? key,
-  }) : super(key: key);
+    super.key,
+  });
 
   @override
   Widget build(BuildContext context) {
     if (collection.getSharees().isEmpty) {
       return const SizedBox.shrink();
     } else if (collection.getSharees().length == 1) {
+      final User? user = collection.getSharees().firstOrNull;
       return Column(
         mainAxisAlignment: MainAxisAlignment.start,
         children: [
           MenuItemWidget(
             captionedTextWidget: CaptionedTextWidget(
-              title: collection.getSharees().firstOrNull?.email ?? '',
+              title: user?.displayName ?? user?.email ?? '',
             ),
             leadingIconWidget: UserAvatarWidget(
               collection.getSharees().first,

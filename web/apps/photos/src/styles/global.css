@@ -1,42 +1,3 @@
-/* inter-regular - latin */
-@font-face {
-    font-family: "Inter";
-    font-style: normal;
-    font-weight: 400;
-    src:
-        local(""),
-        url("/fonts/inter-v11-latin-500.woff2") format("woff2"),
-        /* Chrome 26+, Opera 23+, Firefox 39+ */
-            url("/fonts/inter-v11-latin-500.woff") format("woff"); /* Chrome 6+, Firefox 3.6+, IE 9+, Safari 5.1+ */
-    font-display: swap; /*https://web.dev/font-display/?utm_source=lighthouse&utm_medium=devtools#how-to-avoid-showing-invisible-text*/
-}
-
-/* inter-600 - latin */
-@font-face {
-    font-family: "Inter";
-    font-style: normal;
-    font-weight: 700;
-    src:
-        local(""),
-        url("/fonts/inter-v11-latin-600.woff2") format("woff2"),
-        /* Chrome 26+, Opera 23+, Firefox 39+ */
-            url("/fonts/inter-v11-latin-600.woff") format("woff"); /* Chrome 6+, Firefox 3.6+, IE 9+, Safari 5.1+ */
-    font-display: swap;
-}
-
-/* inter-800 - latin */
-@font-face {
-    font-family: "Inter";
-    font-style: normal;
-    font-weight: 900;
-    src:
-        local(""),
-        url("/fonts/inter-v11-latin-800.woff2") format("woff2"),
-        /* Chrome 26+, Opera 23+, Firefox 39+ */
-            url("/fonts/inter-v11-latin-800.woff") format("woff"); /* Chrome 6+, Firefox 3.6+, IE 9+, Safari 5.1+ */
-    font-display: swap;
-}
-
 html,
 body {
     height: 100%;
@@ -49,6 +10,7 @@ body {
     flex: 1;
     display: flex;
     flex-direction: column;
+    height: 100%;
 }
 
 .pswp__button--custom {
@@ -56,7 +18,7 @@ body {
     height: 48px;
     background: none !important;
     background-image: none !important;
-    color: #fff;
+    color: white;
 }
 
 .pswp__item video {
@@ -71,6 +33,25 @@ body {
     align-items: center;
     justify-content: center;
     object-fit: contain;
+}
+
+/* Need this in CSS instead of as an inline style to increase specificity. */
+.pswp__top-bar.pswp__top-bar {
+    top: var(--ente-pswp-top-bar-top, 0px);
+}
+
+/* Shift the top bar by --ente-pswp-top-bar-top, and add a before pseudo element
+   with the same color to fill in the custom app title bar.
+
+   See: [Note: Customize the desktop title bar] */
+.pswp__top-bar::before {
+    content: "";
+    position: absolute;
+    top: calc(-1 * var(--ente-pswp-top-bar-top, 0px));
+    left: 0;
+    height: var(--ente-pswp-top-bar-top, 0px);
+    width: 100%;
+    background-color: rgba(0 0 0 / 0.3);
 }
 
 .pswp-item-container > * {
@@ -88,32 +69,23 @@ body {
     opacity: 0;
 }
 
-.pswp-item-container > div.download-banner {
-    width: 100%;
-    height: 16vh;
-    padding: 2vh 0;
-    background-color: #151414;
-    color: #ddd;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: space-around;
-    opacity: 0.8;
-    font-size: 20px;
-}
-
-.download-banner > a {
-    width: 130px;
-}
-
 .pswp__img {
     object-fit: contain;
+    /* For reasons I don't understand, Chrome shows black grid lines on images
+       when we zoom into them, unless we set a background color.
+       https://github.com/ente-io/ente/issues/4067
+
+       Even after setting the background color, the black lines are visible for
+       a split second when an image is zoomed on to for the first time (this can
+       be used as a test to see when this workaround is no longer required).
+     */
+    background-color: black;
 }
 
 .pswp__button--arrow--left,
 .pswp__button--arrow--right {
-    color: #fff;
-    background-color: #333333 !important;
+    color: white;
+    background-color: rgba(37 37 37 / 0.65) !important;
     border-radius: 50%;
     width: 56px;
     height: 56px;
@@ -141,57 +113,4 @@ body {
 
 .pswp__caption--empty {
     display: none;
-}
-
-.bg-upload-progress-bar {
-    background-color: #51cd7c;
-}
-
-.carousel-inner {
-    padding-bottom: 50px !important;
-}
-
-.carousel-indicators li {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    margin-right: 12px;
-}
-
-.carousel-indicators .active {
-    background-color: #51cd7c;
-}
-
-div.otp-input input {
-    width: 36px !important;
-    height: 36px;
-    margin: 0 10px;
-}
-
-div.otp-input input::placeholder {
-    opacity: 0;
-}
-
-div.otp-input input:not(:placeholder-shown),
-div.otp-input input:focus {
-    border: 2px solid #51cd7c;
-    border-radius: 1px;
-    -webkit-transition: 0.5s;
-    transition: 0.5s;
-    outline: none;
-}
-
-.flash-message {
-    padding: 16px;
-    display: flex;
-    align-items: center;
-}
-
-@-webkit-keyframes rotation {
-    from {
-        -webkit-transform: rotate(0deg);
-    }
-    to {
-        -webkit-transform: rotate(359deg);
-    }
 }

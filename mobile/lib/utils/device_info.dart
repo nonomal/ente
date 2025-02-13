@@ -42,19 +42,29 @@ Future<bool> isLowSpecDevice() async {
   return false;
 }
 
-Future<bool> isGrapheneOS() async {
-  if (Platform.isAndroid) {
-    final androidInfo = await deviceInfoPlugin.androidInfo;
-    return androidInfo.host.toLowerCase() == "grapheneos";
-  }
-  return false;
-}
-
 Future<bool> isAndroidSDKVersionLowerThan(int inputSDK) async {
   if (Platform.isAndroid) {
     final AndroidDeviceInfo androidInfo = await deviceInfoPlugin.androidInfo;
     return androidInfo.version.sdkInt < inputSDK;
   } else {
     return false;
+  }
+}
+
+Future<String?> getDeviceName() async {
+  try {
+    if (Platform.isIOS) {
+      final IosDeviceInfo iosInfo = await deviceInfoPlugin.iosInfo;
+      return iosInfo.utsname.machine;
+    } else if (Platform.isAndroid) {
+      final AndroidDeviceInfo androidInfo = await deviceInfoPlugin.androidInfo;
+
+      return "${androidInfo.brand} ${androidInfo.model}";
+    } else {
+      return "Not iOS or Android";
+    }
+  } catch (e) {
+    Logger("device_info").severe("deviceSpec check failed", e);
+    return null;
   }
 }

@@ -5,7 +5,7 @@ import 'package:logging/logging.dart';
 import 'package:photos/core/configuration.dart';
 import "package:photos/core/errors.dart";
 import 'package:photos/db/files_db.dart';
-import 'package:photos/ente_theme_data.dart';
+import "package:photos/extensions/user_extension.dart";
 import "package:photos/generated/l10n.dart";
 import 'package:photos/models/api/collection/create_request.dart';
 import "package:photos/models/api/collection/user.dart";
@@ -20,6 +20,7 @@ import 'package:photos/services/user_service.dart';
 import 'package:photos/theme/colors.dart';
 import 'package:photos/theme/ente_theme.dart';
 import 'package:photos/ui/common/progress_dialog.dart';
+import "package:photos/ui/common/user_dialogs.dart";
 import 'package:photos/ui/components/action_sheet_widget.dart';
 import 'package:photos/ui/components/buttons/button_widget.dart';
 import 'package:photos/ui/components/dialog_widget.dart';
@@ -51,7 +52,7 @@ class CollectionActions {
       return true;
     } catch (e) {
       if (e is SharingNotPermittedForFreeAccountsError) {
-        _showUnSupportedAlert(context);
+        await _showUnSupportedAlert(context);
       } else {
         logger.severe("Failed to update shareUrl collection", e);
         await showGenericErrorDialog(context: context, error: e);
@@ -110,12 +111,7 @@ class CollectionActions {
     BuildContext context,
     List<EnteFile> files,
   ) async {
-    final dialog = createProgressDialog(
-      context,
-      S.of(context).creatingLink,
-      isDismissible: true,
-    );
-    await dialog.show();
+    late final Collection newCollection;
     try {
       // create album with emptyName, use collectionCreationTime on UI to
       // show name
@@ -139,16 +135,29 @@ class CollectionActions {
       final collection = await collectionsService.createAndCacheCollection(
         req,
       );
+      newCollection = collection;
       logger.finest("adding files to share to new album");
       await collectionsService.addOrCopyToCollection(collection.id, files);
       logger.finest("creating public link for the newly created album");
-      await CollectionsService.instance.createShareUrl(collection);
-      await dialog.hide();
+      try {
+        await CollectionsService.instance.createShareUrl(collection);
+      } catch (e) {
+        if (e is SharingNotPermittedForFreeAccountsError) {
+          if (newCollection.isQuickLinkCollection() &&
+              !newCollection.hasSharees) {
+            await trashCollectionKeepingPhotos(newCollection, context);
+          }
+          rethrow;
+        }
+      }
       return collection;
     } catch (e, s) {
-      await dialog.hide();
-      await showGenericErrorDialog(context: context, error: e);
-      logger.severe("Failing to create link for selected files", e, s);
+      if (e is SharingNotPermittedForFreeAccountsError) {
+        await _showUnSupportedAlert(context);
+      } else {
+        logger.severe("Failing to create link for selected files", e, s);
+        await showGenericErrorDialog(context: context, error: e);
+      }
     }
     return null;
   }
@@ -184,7 +193,7 @@ class CollectionActions {
         ),
       ],
       title: S.of(context).removeWithQuestionMark,
-      body: S.of(context).removeParticipantBody(user.email),
+      body: S.of(context).removeParticipantBody(user.displayName ?? user.email),
     );
     if (actionResult?.action != null) {
       if (actionResult!.action == ButtonAction.error) {
@@ -226,28 +235,7 @@ class CollectionActions {
     if (publicKey == null || publicKey == '') {
       // todo: neeraj replace this as per the design where a new screen
       // is used for error. Do this change along with handling of network errors
-      await showDialogWidget(
-        context: context,
-        title: S.of(context).inviteToEnte,
-        icon: Icons.info_outline,
-        body: S.of(context).emailNoEnteAccount(email),
-        isDismissible: true,
-        buttons: [
-          ButtonWidget(
-            buttonType: ButtonType.neutral,
-            icon: Icons.adaptive.share,
-            labelText: S.of(context).sendInvite,
-            isInAlert: true,
-            onTap: () async {
-              unawaited(
-                shareText(
-                  S.of(context).shareTextRecommendUsingEnte,
-                ),
-              );
-            },
-          ),
-        ],
-      );
+      await showInviteDialog(context, email);
       return false;
     } else {
       return true;
@@ -335,7 +323,7 @@ class CollectionActions {
       } catch (e) {
         await dialog?.hide();
         if (e is SharingNotPermittedForFreeAccountsError) {
-          _showUnSupportedAlert(context);
+          await _showUnSupportedAlert(context);
         } else {
           logger.severe("failed to share collection", e);
           await showGenericErrorDialog(context: context, error: e);
@@ -352,7 +340,7 @@ class CollectionActions {
   ) async {
     final textTheme = getEnteTextTheme(bContext);
     final currentUserID = Configuration.instance.getUserID()!;
-    if (collection.owner!.id != currentUserID) {
+    if (collection.owner.id != currentUserID) {
       throw AssertionError("Can not delete album owned by others");
     }
     if (collection.hasSharees) {
@@ -507,7 +495,7 @@ class CollectionActions {
     bool isHidden = false,
   }) async {
     final int currentUserID = Configuration.instance.getUserID()!;
-    final isCollectionOwner = collection.owner!.id == currentUserID;
+    final isCollectionOwner = collection.owner.id == currentUserID;
     final FilesSplit split = FilesSplit.split(
       files,
       Configuration.instance.getUserID()!,
@@ -643,56 +631,57 @@ class CollectionActions {
     if (targetCollection == null ||
         (CollectionType.uncategorized == targetCollection.type ||
             targetCollection.type == CollectionType.favorites) ||
-        targetCollection.owner!.id != userID) {
+        targetCollection.owner.id != userID) {
       return false;
     }
     return true;
   }
 
-  void _showUnSupportedAlert(BuildContext context) {
+  Future<void> _showUnSupportedAlert(BuildContext context) async {
     final AlertDialog alert = AlertDialog(
       title: Text(S.of(context).sorry),
       content: Text(
         S.of(context).subscribeToEnableSharing,
       ),
       actions: [
-        TextButton(
-          child: Text(
-            S.of(context).subscribe,
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.greenAlternative,
-            ),
-          ),
-          onPressed: () {
-            Navigator.of(context, rootNavigator: true).pop();
-            Navigator.of(context).pushReplacement(
+        ButtonWidget(
+          buttonType: ButtonType.primary,
+          isInAlert: true,
+          shouldStickToDarkTheme: false,
+          buttonAction: ButtonAction.first,
+          shouldSurfaceExecutionStates: true,
+          labelText: S.of(context).subscribe,
+          onTap: () async {
+            // for quickLink collection, we need to trash the collection
+            Navigator.of(context).push(
               MaterialPageRoute(
                 builder: (BuildContext context) {
                   return getSubscriptionPage();
                 },
               ),
-            );
+            ).ignore();
           },
         ),
-        TextButton(
-          child: Text(
-            S.of(context).ok,
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurface,
-            ),
+        Padding(
+          padding: const EdgeInsets.only(top: 8.0),
+          child: ButtonWidget(
+            buttonType: ButtonType.secondary,
+            buttonAction: ButtonAction.cancel,
+            isInAlert: true,
+            shouldStickToDarkTheme: false,
+            labelText: S.of(context).ok,
           ),
-          onPressed: () {
-            Navigator.of(context, rootNavigator: true).pop();
-          },
         ),
       ],
     );
 
-    showDialog(
+    return showDialog(
+      useRootNavigator: false,
       context: context,
       builder: (BuildContext context) {
         return alert;
       },
+      barrierDismissible: true,
     );
   }
 }

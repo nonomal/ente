@@ -1,6 +1,7 @@
+import "dart:async";
+import "dart:collection";
 import 'dart:io';
 
-import "package:computer/computer.dart";
 import 'package:dio/dio.dart';
 import "package:flutter/foundation.dart";
 import 'package:logging/logging.dart';
@@ -14,24 +15,104 @@ import "package:photos/events/local_photos_updated_event.dart";
 import 'package:photos/models/file/file.dart';
 import "package:photos/models/file/file_type.dart";
 import "package:photos/models/ignored_file.dart";
-import 'package:photos/services/collections_service.dart';
+import "package:photos/services/collections_service.dart";
 import "package:photos/services/ignored_files_service.dart";
 import "package:photos/services/local_sync_service.dart";
 import 'package:photos/utils/crypto_util.dart';
 import "package:photos/utils/data_util.dart";
 import "package:photos/utils/fake_progress.dart";
+import "package:photos/utils/file_key.dart";
 import "package:photos/utils/file_util.dart";
 
 final _logger = Logger("file_download_util");
+
+Future<File?> downloadAndDecryptPublicFile(
+  EnteFile file,
+  String authToken, {
+  ProgressCallback? progressCallback,
+}) async {
+  final String logPrefix = 'Public File-${file.uploadedFileID}:';
+  _logger
+      .info('$logPrefix starting download ${formatBytes(file.fileSize ?? 0)}');
+
+  final String tempDir = Configuration.instance.getTempDirectory();
+  final String encryptedFilePath = "$tempDir${file.uploadedFileID}.encrypted";
+  final String decryptedFilePath = "$tempDir${file.uploadedFileID}.decrypted";
+
+  try {
+    final authJWTToken = await CollectionsService.instance
+        .getSharedPublicAlbumTokenJWT(file.collectionID!);
+
+    final headers = {
+      "X-Auth-Access-Token": authToken,
+      if (authJWTToken != null) "X-Auth-Access-Token-JWT": authJWTToken,
+    };
+    final response = (await NetworkClient.instance.getDio().download(
+      file.publicDownloadUrl,
+      encryptedFilePath,
+      options: Options(
+        headers: headers,
+        responseType: ResponseType.bytes,
+      ),
+      onReceiveProgress: (a, b) {
+        progressCallback?.call(a, b);
+      },
+    ));
+
+    if (response.statusCode != 200) {
+      _logger.warning('$logPrefix download failed ${response.toString()}');
+      return null;
+    }
+
+    final int sizeInBytes = file.fileSize!;
+    final FakePeriodicProgress? fakeProgress = file.fileType == FileType.video
+        ? FakePeriodicProgress(
+            callback: (count) {
+              progressCallback?.call(sizeInBytes, sizeInBytes);
+            },
+            duration: const Duration(milliseconds: 5000),
+          )
+        : null;
+    try {
+      fakeProgress?.start();
+      await CryptoUtil.decryptFile(
+        encryptedFilePath,
+        decryptedFilePath,
+        CryptoUtil.base642bin(file.fileDecryptionHeader!),
+        getFileKey(file),
+      );
+      fakeProgress?.stop();
+      _logger.info('$logPrefix file saved at $decryptedFilePath');
+    } catch (e, s) {
+      fakeProgress?.stop();
+      _logger.severe("Critical: $logPrefix failed to decrypt", e, s);
+      return null;
+    }
+    return File(decryptedFilePath);
+  } catch (e, s) {
+    _logger.severe("$logPrefix failed to download", e, s);
+    return null;
+  }
+}
 
 Future<File?> downloadAndDecrypt(
   EnteFile file, {
   ProgressCallback? progressCallback,
 }) async {
+  if (CollectionsService.instance.isSharedPublicLink(file.collectionID!)) {
+    final authToken = await CollectionsService.instance
+        .getSharedPublicAlbumToken(file.collectionID!);
+
+    return await downloadAndDecryptPublicFile(
+      file,
+      authToken!,
+      progressCallback: progressCallback,
+    );
+  }
+
   final String logPrefix = 'File-${file.uploadedFileID}:';
   _logger
       .info('$logPrefix starting download ${formatBytes(file.fileSize ?? 0)}');
-
   final String tempDir = Configuration.instance.getTempDirectory();
   final String encryptedFilePath = "$tempDir${file.generatedID}.encrypted";
   final encryptedFile = File(encryptedFilePath);
@@ -104,27 +185,6 @@ Future<File?> downloadAndDecrypt(
   }
 }
 
-Uint8List getFileKey(EnteFile file) {
-  final encryptedKey = CryptoUtil.base642bin(file.encryptedKey!);
-  final nonce = CryptoUtil.base642bin(file.keyDecryptionNonce!);
-  final collectionKey =
-      CollectionsService.instance.getCollectionKey(file.collectionID!);
-  return CryptoUtil.decryptSync(encryptedKey, collectionKey, nonce);
-}
-
-Future<Uint8List> getFileKeyUsingBgWorker(EnteFile file) async {
-  final collectionKey =
-      CollectionsService.instance.getCollectionKey(file.collectionID!);
-  return await Computer.shared().compute(
-    _decryptFileKey,
-    param: <String, dynamic>{
-      "encryptedKey": file.encryptedKey,
-      "keyDecryptionNonce": file.keyDecryptionNonce,
-      "collectionKey": collectionKey,
-    },
-  );
-}
-
 Future<void> downloadToGallery(EnteFile file) async {
   try {
     final FileType type = file.fileType;
@@ -132,44 +192,49 @@ Future<void> downloadToGallery(EnteFile file) async {
         type == FileType.livePhoto && Platform.isAndroid;
     AssetEntity? savedAsset;
     final File? fileToSave = await getFile(file);
-    //Disabling notifications for assets changing to insert the file into
-    //files db before triggering a sync.
-    await PhotoManager.stopChangeNotify();
-    if (type == FileType.image) {
-      savedAsset = await PhotoManager.editor
-          .saveImageWithPath(fileToSave!.path, title: file.title!);
-    } else if (type == FileType.video) {
-      savedAsset =
-          await PhotoManager.editor.saveVideo(fileToSave!, title: file.title!);
-    } else if (type == FileType.livePhoto) {
-      final File? liveVideoFile =
-          await getFileFromServer(file, liveVideo: true);
-      if (liveVideoFile == null) {
-        throw AssertionError("Live video can not be null");
+    // We use a lock to prevent synchronisation to occur while it is downloading
+    // as this introduces wrong entry in FilesDB due to race condition
+    // This is a fix for https://github.com/ente-io/ente/issues/4296
+    await LocalSyncService.instance.getLock().synchronized(() async {
+      //Disabling notifications for assets changing to insert the file into
+      //files db before triggering a sync.
+      await PhotoManager.stopChangeNotify();
+      if (type == FileType.image) {
+        savedAsset = await PhotoManager.editor
+            .saveImageWithPath(fileToSave!.path, title: file.title!);
+      } else if (type == FileType.video) {
+        savedAsset = await PhotoManager.editor
+            .saveVideo(fileToSave!, title: file.title!);
+      } else if (type == FileType.livePhoto) {
+        final File? liveVideoFile =
+            await getFileFromServer(file, liveVideo: true);
+        if (liveVideoFile == null) {
+          throw AssertionError("Live video can not be null");
+        }
+        if (downloadLivePhotoOnDroid) {
+          await _saveLivePhotoOnDroid(fileToSave!, liveVideoFile, file);
+        } else {
+          savedAsset = await PhotoManager.editor.darwin.saveLivePhoto(
+            imageFile: fileToSave!,
+            videoFile: liveVideoFile,
+            title: file.title!,
+          );
+        }
       }
-      if (downloadLivePhotoOnDroid) {
-        await _saveLivePhotoOnDroid(fileToSave!, liveVideoFile, file);
-      } else {
-        savedAsset = await PhotoManager.editor.darwin.saveLivePhoto(
-          imageFile: fileToSave!,
-          videoFile: liveVideoFile,
-          title: file.title!,
-        );
-      }
-    }
 
-    if (savedAsset != null) {
-      file.localID = savedAsset.id;
-      await FilesDB.instance.insert(file);
-      Bus.instance.fire(
-        LocalPhotosUpdatedEvent(
-          [file],
-          source: "download",
-        ),
-      );
-    } else if (!downloadLivePhotoOnDroid && savedAsset == null) {
-      _logger.severe('Failed to save assert of type $type');
-    }
+      if (savedAsset != null) {
+        file.localID = savedAsset!.id;
+        await FilesDB.instance.insert(file);
+        Bus.instance.fire(
+          LocalPhotosUpdatedEvent(
+            [file],
+            source: "download",
+          ),
+        );
+      } else if (!downloadLivePhotoOnDroid && savedAsset == null) {
+        _logger.severe('Failed to save assert of type $type');
+      }
+    });
   } catch (e) {
     _logger.severe("Failed to save file", e);
     rethrow;
@@ -186,10 +251,10 @@ Future<void> _saveLivePhotoOnDroid(
 ) async {
   debugPrint("Downloading LivePhoto on Droid");
   AssetEntity? savedAsset = await (PhotoManager.editor
-      .saveImageWithPath(image.path, title: enteFile.title!));
-  if (savedAsset == null) {
+          .saveImageWithPath(image.path, title: enteFile.title!))
+      .catchError((err) {
     throw Exception("Failed to save image of live photo");
-  }
+  });
   IgnoredFile ignoreVideoFile = IgnoredFile(
     savedAsset.id,
     savedAsset.title ?? '',
@@ -202,10 +267,7 @@ Future<void> _saveLivePhotoOnDroid(
   savedAsset = (await (PhotoManager.editor.saveVideo(
     video,
     title: videoTitle,
-  )));
-  if (savedAsset == null) {
-    throw Exception("Failed to save video of live photo");
-  }
+  )).catchError((_) => throw Exception("Failed to save video of live photo")));
 
   ignoreVideoFile = IgnoredFile(
     savedAsset.id,
@@ -216,12 +278,36 @@ Future<void> _saveLivePhotoOnDroid(
   await IgnoredFilesService.instance.cacheAndInsert([ignoreVideoFile]);
 }
 
-Uint8List _decryptFileKey(Map<String, dynamic> args) {
-  final encryptedKey = CryptoUtil.base642bin(args["encryptedKey"]);
-  final nonce = CryptoUtil.base642bin(args["keyDecryptionNonce"]);
-  return CryptoUtil.decryptSync(
-    encryptedKey,
-    args["collectionKey"],
-    nonce,
-  );
+class DownloadQueue {
+  final int maxConcurrent;
+  final Queue<Future<void> Function()> _queue = Queue();
+  int _runningTasks = 0;
+
+  DownloadQueue({this.maxConcurrent = 5});
+
+  Future<void> add(Future<void> Function() task) async {
+    final completer = Completer<void>();
+    _queue.add(() async {
+      try {
+        await task();
+        completer.complete();
+      } catch (e) {
+        completer.completeError(e);
+      } finally {
+        _runningTasks--;
+        _processQueue();
+      }
+      return completer.future;
+    });
+    _processQueue();
+    return completer.future;
+  }
+
+  void _processQueue() {
+    while (_runningTasks < maxConcurrent && _queue.isNotEmpty) {
+      final task = _queue.removeFirst();
+      _runningTasks++;
+      task();
+    }
+  }
 }

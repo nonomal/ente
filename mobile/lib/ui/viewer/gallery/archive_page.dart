@@ -15,6 +15,8 @@ import 'package:photos/ui/viewer/actions/file_selection_overlay_bar.dart';
 import "package:photos/ui/viewer/gallery/empty_state.dart";
 import 'package:photos/ui/viewer/gallery/gallery.dart';
 import 'package:photos/ui/viewer/gallery/gallery_app_bar_widget.dart';
+import "package:photos/ui/viewer/gallery/state/gallery_files_inherited_widget.dart";
+import "package:photos/ui/viewer/gallery/state/selection_state.dart";
 
 class ArchivePage extends StatelessWidget {
   final String tagPrefix;
@@ -26,8 +28,8 @@ class ArchivePage extends StatelessWidget {
     this.tagPrefix = "archived_page",
     this.appBarType = GalleryType.archive,
     this.overlayType = GalleryType.archive,
-    Key? key,
-  }) : super(key: key);
+    super.key,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -77,24 +79,29 @@ class ArchivePage extends StatelessWidget {
         CollectionsService.instance.getArchivedCollection,
       ),
     );
-    return Scaffold(
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(50.0),
-        child: GalleryAppBarWidget(
-          appBarType,
-          S.of(context).archive,
-          _selectedFiles,
-        ),
-      ),
-      body: Stack(
-        alignment: Alignment.bottomCenter,
-        children: [
-          gallery,
-          FileSelectionOverlayBar(
-            overlayType,
+    return GalleryFilesState(
+      child: Scaffold(
+        appBar: PreferredSize(
+          preferredSize: const Size.fromHeight(50.0),
+          child: GalleryAppBarWidget(
+            appBarType,
+            S.of(context).archive,
             _selectedFiles,
           ),
-        ],
+        ),
+        body: SelectionState(
+          selectedFiles: _selectedFiles,
+          child: Stack(
+            alignment: Alignment.bottomCenter,
+            children: [
+              gallery,
+              FileSelectionOverlayBar(
+                overlayType,
+                _selectedFiles,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

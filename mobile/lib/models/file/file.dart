@@ -13,6 +13,7 @@ import "package:photos/service_locator.dart";
 import 'package:photos/utils/date_time_util.dart';
 import 'package:photos/utils/exif_util.dart';
 import 'package:photos/utils/file_uploader_util.dart';
+import "package:photos/utils/panorama_util.dart";
 
 //Todo: files with no location data have lat and long set to 0.0. This should ideally be null.
 class EnteFile {
@@ -159,6 +160,7 @@ class EnteFile {
 
   Future<Map<String, dynamic>> getMetadataForUpload(
     MediaUploadData mediaUploadData,
+    ParsedExifDateTime? exifTime,
   ) async {
     final asset = await getAsset;
     // asset can be null for files shared to app
@@ -169,26 +171,24 @@ class EnteFile {
       }
     }
     bool hasExifTime = false;
-    if ((fileType == FileType.image || fileType == FileType.video) &&
-        mediaUploadData.sourceFile != null) {
-      final exifData = await getExifFromSourceFile(mediaUploadData.sourceFile!);
-      if (exifData != null) {
-        if (fileType == FileType.image) {
-          final exifTime = await getCreationTimeFromEXIF(null, exifData);
-          if (exifTime != null) {
-            hasExifTime = true;
-            creationTime = exifTime.microsecondsSinceEpoch;
-          }
-        }
-        if (Platform.isAndroid) {
-          //Fix for missing location data in lower android versions.
-          final Location? exifLocation = locationFromExif(exifData);
-          if (Location.isValidLocation(exifLocation)) {
-            location = exifLocation;
-          }
-        }
-      }
+    if (exifTime != null && exifTime.time != null) {
+      hasExifTime = true;
+      creationTime = exifTime.time!.microsecondsSinceEpoch;
     }
+    if (mediaUploadData.exifData != null) {
+      mediaUploadData.isPanorama =
+          checkPanoramaFromEXIF(null, mediaUploadData.exifData);
+    }
+    if (mediaUploadData.isPanorama != true &&
+        fileType == FileType.image &&
+        mediaUploadData.sourceFile != null) {
+      try {
+        final xmpData = await getXmp(mediaUploadData.sourceFile!);
+        mediaUploadData.isPanorama = checkPanoramaFromXMP(xmpData);
+      } catch (_) {}
+      mediaUploadData.isPanorama ??= false;
+    }
+
     // Try to get the timestamp from fileName. In case of iOS, file names are
     // generic IMG_XXXX, so only parse it on Android devices
     if (!hasExifTime && Platform.isAndroid && title != null) {
@@ -254,9 +254,41 @@ class EnteFile {
     }
   }
 
+  String get publicDownloadUrl {
+    if (localFileServer.isNotEmpty) {
+      return "$localFileServer/$uploadedFileID";
+    }
+    final endpoint = Configuration.instance.getHttpEndpoint();
+    if (endpoint != kDefaultProductionEndpoint || flagService.disableCFWorker) {
+      return endpoint +
+          "/public-collection/files/download/" +
+          uploadedFileID.toString();
+    } else {
+      return "https://public-albums.ente.io/download/?fileID=" +
+          uploadedFileID.toString();
+    }
+  }
+
+  String get pubPreviewUrl {
+    if (localFileServer.isNotEmpty) {
+      return "$localFileServer/thumb/$uploadedFileID";
+    }
+    final endpoint = Configuration.instance.getHttpEndpoint();
+    if (endpoint != kDefaultProductionEndpoint || flagService.disableCFWorker) {
+      return endpoint +
+          "/public-collection/files/preview/" +
+          uploadedFileID.toString();
+    } else {
+      return "https://public-albums.ente.io/preview/?fileID=" +
+          uploadedFileID.toString();
+    }
+  }
+
   String? get caption {
     return pubMagicMetadata?.caption;
   }
+
+  String? debugCaption;
 
   String get thumbnailUrl {
     if (localFileServer.isNotEmpty) {

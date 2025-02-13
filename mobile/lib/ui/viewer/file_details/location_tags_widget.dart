@@ -5,12 +5,11 @@ import "package:flutter/material.dart";
 import "package:flutter_animate/flutter_animate.dart";
 import "package:flutter_map/flutter_map.dart";
 import "package:latlong2/latlong.dart";
-
 import "package:photos/core/event_bus.dart";
 import "package:photos/events/location_tag_updated_event.dart";
 import "package:photos/generated/l10n.dart";
 import "package:photos/models/file/file.dart";
-import "package:photos/services/location_service.dart";
+import "package:photos/service_locator.dart";
 import "package:photos/services/search_service.dart";
 import "package:photos/services/user_remote_flag_service.dart";
 import "package:photos/states/location_screen_state.dart";
@@ -22,13 +21,13 @@ import "package:photos/ui/map/image_marker.dart";
 import "package:photos/ui/map/map_screen.dart";
 import "package:photos/ui/map/map_view.dart";
 import "package:photos/ui/map/tile/layers.dart";
-
 import 'package:photos/ui/viewer/location/add_location_sheet.dart';
 import "package:photos/ui/viewer/location/location_screen.dart";
 import "package:photos/utils/navigation_util.dart";
 
 class LocationTagsWidget extends StatefulWidget {
   final EnteFile file;
+
   const LocationTagsWidget(this.file, {super.key});
 
   @override
@@ -106,8 +105,8 @@ class _LocationTagsWidgetState extends State<LocationTagsWidget> {
 
   Future<List<Widget>> _getLocationTags() async {
     // await Future.delayed(const Duration(seconds: 1));
-    final locationTags = await LocationService.instance
-        .enclosingLocationTags(widget.file.location!);
+    final locationTags =
+        await locationService.enclosingLocationTags(widget.file.location!);
     if (locationTags.isEmpty) {
       if (mounted) {
         setState(() {
@@ -184,7 +183,7 @@ class _InfoMapState extends State<InfoMap> {
   @override
   void initState() {
     super.initState();
-    _hasEnabledMap = UserRemoteFlagService.instance
+    _hasEnabledMap = userRemoteFlagService
         .getCachedBoolValue(UserRemoteFlagService.mapEnabled);
     _fileLat = widget.file.location!.latitude!;
     _fileLng = widget.file.location!.longitude!;
@@ -348,7 +347,7 @@ class _InfoMapState extends State<InfoMap> {
           .push(
         MaterialPageRoute(
           builder: (context) => MapScreen(
-            filesFutureFn: SearchService.instance.getAllFiles,
+            filesFutureFn: SearchService.instance.getAllFilesForSearch,
             center: LatLng(
               _fileLat,
               _fileLng,

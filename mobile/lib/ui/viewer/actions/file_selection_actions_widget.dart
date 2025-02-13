@@ -4,12 +4,13 @@ import 'package:fast_base58/fast_base58.dart';
 import "package:flutter/cupertino.dart";
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import "package:local_auth/local_auth.dart";
 import "package:logging/logging.dart";
 import "package:modal_bottom_sheet/modal_bottom_sheet.dart";
 import 'package:photos/core/configuration.dart';
 import "package:photos/core/event_bus.dart";
+import "package:photos/events/guest_view_event.dart";
 import "package:photos/events/people_changed_event.dart";
-import "package:photos/face/model/person.dart";
 import "package:photos/generated/l10n.dart";
 import 'package:photos/models/collection/collection.dart';
 import 'package:photos/models/device_collection.dart';
@@ -18,7 +19,9 @@ import 'package:photos/models/file/file_type.dart';
 import 'package:photos/models/files_split.dart';
 import 'package:photos/models/gallery_type.dart';
 import "package:photos/models/metadata/common_keys.dart";
+import "package:photos/models/ml/face/person.dart";
 import 'package:photos/models/selected_files.dart';
+import "package:photos/service_locator.dart";
 import 'package:photos/services/collections_service.dart';
 import 'package:photos/services/hidden_service.dart';
 import 'package:photos/services/machine_learning/face_ml/feedback/cluster_feedback.dart';
@@ -32,8 +35,9 @@ import 'package:photos/ui/components/action_sheet_widget.dart';
 import "package:photos/ui/components/bottom_action_bar/selection_action_button_widget.dart";
 import 'package:photos/ui/components/buttons/button_widget.dart';
 import 'package:photos/ui/components/models/button_type.dart';
-import 'package:photos/ui/sharing/manage_links_widget.dart';
+import "package:photos/ui/sharing/show_images_prevew.dart";
 import "package:photos/ui/tools/collage/collage_creator_page.dart";
+import "package:photos/ui/viewer/file/detail_page.dart";
 import "package:photos/ui/viewer/location/update_location_data_widget.dart";
 import 'package:photos/utils/delete_file_util.dart';
 import "package:photos/utils/dialog_util.dart";
@@ -42,6 +46,7 @@ import 'package:photos/utils/magic_util.dart';
 import 'package:photos/utils/navigation_util.dart';
 import "package:photos/utils/share_util.dart";
 import 'package:photos/utils/toast_util.dart';
+import "package:screenshot/screenshot.dart";
 
 class FileSelectionActionsWidget extends StatefulWidget {
   final GalleryType type;
@@ -49,17 +54,17 @@ class FileSelectionActionsWidget extends StatefulWidget {
   final DeviceCollection? deviceCollection;
   final SelectedFiles selectedFiles;
   final PersonEntity? person;
-  final int? clusterID;
+  final String? clusterID;
 
   const FileSelectionActionsWidget(
     this.type,
     this.selectedFiles, {
-    Key? key,
+    super.key,
     this.collection,
     this.person,
     this.clusterID,
     this.deviceCollection,
-  }) : super(key: key);
+  });
 
   @override
   State<FileSelectionActionsWidget> createState() =>
@@ -73,16 +78,19 @@ class _FileSelectionActionsWidgetState
   late FilesSplit split;
   late CollectionActions collectionActions;
   late bool isCollectionOwner;
-
+  final ScreenshotController screenshotController = ScreenshotController();
+  late Uint8List placeholderBytes;
   // _cachedCollectionForSharedLink is primarily used to avoid creating duplicate
   // links if user keeps on creating Create link button after selecting
   // few files. This link is reset on any selection changed;
   Collection? _cachedCollectionForSharedLink;
   final GlobalKey shareButtonKey = GlobalKey();
+  final GlobalKey sendLinkButtonKey = GlobalKey();
 
   @override
   void initState() {
-    currentUserID = Configuration.instance.getUserID()!;
+    //User ID will be null if the user is not logged in (links-in-app)
+    currentUserID = Configuration.instance.getUserID() ?? -1;
 
     split = FilesSplit.split(<EnteFile>[], currentUserID);
     widget.selectedFiles.addListener(_selectFileChangeListener);
@@ -110,6 +118,9 @@ class _FileSelectionActionsWidgetState
 
   @override
   Widget build(BuildContext context) {
+    if (widget.selectedFiles.files.isEmpty) {
+      return const SizedBox();
+    }
     final ownedFilesCount = split.ownedByCurrentUser.length;
     final ownedAndPendingUploadFilesCount =
         ownedFilesCount + split.pendingUploads.length;
@@ -133,11 +144,33 @@ class _FileSelectionActionsWidgetState
     //and set [shouldShow] to false for items that should not be shown and true
     //for items that should be shown.
     final List<SelectionActionButton> items = [];
+
+    if (widget.type.showCreateLink()) {
+      if (_cachedCollectionForSharedLink != null && anyUploadedFiles) {
+        items.add(
+          SelectionActionButton(
+            icon: Icons.copy_outlined,
+            labelText: S.of(context).copyLink,
+            onTap: anyUploadedFiles ? _sendLink : null,
+          ),
+        );
+      } else {
+        items.add(
+          SelectionActionButton(
+            icon: Icons.navigation_rounded,
+            labelText: S.of(context).sendLink,
+            onTap: anyUploadedFiles ? _onSendLinkTapped : null,
+            shouldShow: ownedFilesCount > 0,
+            key: sendLinkButtonKey,
+          ),
+        );
+      }
+    }
     if (widget.type == GalleryType.peopleTag && widget.person != null) {
       items.add(
         SelectionActionButton(
           icon: Icons.remove_circle_outline,
-          labelText: 'Not ${widget.person!.data.name}?',
+          labelText: S.of(context).notPersonLabel(widget.person!.data.name),
           onTap: anyUploadedFiles ? _onNotpersonClicked : null,
         ),
       );
@@ -145,31 +178,21 @@ class _FileSelectionActionsWidgetState
         items.add(
           SelectionActionButton(
             icon: Icons.image_outlined,
-            labelText: 'Use as cover',
+            labelText: S.of(context).useAsCover,
             onTap: anyUploadedFiles ? _setPersonCover : null,
           ),
         );
       }
     }
-    if (widget.type.showCreateLink()) {
-      if (_cachedCollectionForSharedLink != null && anyUploadedFiles) {
-        items.add(
-          SelectionActionButton(
-            icon: Icons.copy_outlined,
-            labelText: S.of(context).copyLink,
-            onTap: anyUploadedFiles ? _copyLink : null,
-          ),
-        );
-      } else {
-        items.add(
-          SelectionActionButton(
-            icon: Icons.link_outlined,
-            labelText: S.of(context).shareLink,
-            onTap: anyUploadedFiles ? _onCreatedSharedLinkClicked : null,
-            shouldShow: ownedFilesCount > 0,
-          ),
-        );
-      }
+
+    if (widget.type == GalleryType.cluster && widget.clusterID != null) {
+      items.add(
+        SelectionActionButton(
+          labelText: S.of(context).remove,
+          icon: CupertinoIcons.minus,
+          onTap: anyUploadedFiles ? _onRemoveFromClusterClicked : null,
+        ),
+      );
     }
 
     final showUploadIcon = widget.type == GalleryType.localFolder &&
@@ -225,6 +248,17 @@ class _FileSelectionActionsWidgetState
       );
     }
 
+    if (widget.type.showDeleteOption()) {
+      items.add(
+        SelectionActionButton(
+          icon: Icons.delete_outline,
+          labelText: S.of(context).delete,
+          onTap: anyOwnedFiles ? _onDeleteClick : null,
+          shouldShow: ownedAndPendingUploadFilesCount > 0,
+        ),
+      );
+    }
+
     if (widget.type.showRemoveFromAlbum()) {
       items.add(
         SelectionActionButton(
@@ -265,23 +299,20 @@ class _FileSelectionActionsWidgetState
         ),
       );
     }
-
     items.add(
       SelectionActionButton(
-        icon: Icons.grid_view_outlined,
-        labelText: S.of(context).createCollage,
-        onTap: _onCreateCollageClicked,
-        shouldShow: showCollageOption,
+        svgAssetPath: "assets/icons/guest_view_icon.svg",
+        labelText: S.of(context).guestView,
+        onTap: _onGuestViewClick,
       ),
     );
-
-    if (widget.type.showDeleteOption()) {
+    if (widget.type != GalleryType.sharedPublicCollection) {
       items.add(
         SelectionActionButton(
-          icon: Icons.delete_outline,
-          labelText: S.of(context).delete,
-          onTap: anyOwnedFiles ? _onDeleteClick : null,
-          shouldShow: ownedAndPendingUploadFilesCount > 0,
+          icon: Icons.grid_view_outlined,
+          labelText: S.of(context).createCollage,
+          onTap: _onCreateCollageClicked,
+          shouldShow: showCollageOption,
         ),
       );
     }
@@ -404,26 +435,17 @@ class _FileSelectionActionsWidgetState
         ),
       );
     }
-
-    items.add(
-      SelectionActionButton(
-        labelText: S.of(context).share,
-        icon: Icons.adaptive.share_outlined,
-        onTap: () => shareSelected(
-          context,
-          shareButtonKey,
-          widget.selectedFiles.files.toList(),
-        ),
-      ),
-    );
-
-    // if (widget.type == GalleryType.cluster && widget.clusterID != null) {
-    if (widget.type == GalleryType.cluster && widget.clusterID != null) {
+    if (widget.type != GalleryType.sharedPublicCollection) {
       items.add(
         SelectionActionButton(
-          labelText: 'Remove',
-          icon: CupertinoIcons.minus,
-          onTap: anyUploadedFiles ? _onRemoveFromClusterClicked : null,
+          labelText: S.of(context).share,
+          icon: Icons.adaptive.share_outlined,
+          key: shareButtonKey,
+          onTap: () => shareSelected(
+            context,
+            shareButtonKey,
+            widget.selectedFiles.files.toList(),
+          ),
         ),
       );
     }
@@ -552,6 +574,31 @@ class _FileSelectionActionsWidgetState
     }
   }
 
+  Future<void> _onGuestViewClick() async {
+    final List<EnteFile> selectedFiles = widget.selectedFiles.files.toList();
+    if (await LocalAuthentication().isDeviceSupported()) {
+      final page = DetailPage(
+        DetailPageConfiguration(
+          selectedFiles,
+          0,
+          "guest_view",
+        ),
+      );
+      await localSettings.setOnGuestView(true);
+      routeToPage(context, page, forceCustomPageRoute: true).ignore();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        Bus.instance.fire(GuestViewEvent(true, false));
+      });
+    } else {
+      await showErrorDialog(
+        context,
+        S.of(context).noSystemLockFound,
+        S.of(context).guestViewEnablePreSteps,
+      );
+    }
+    widget.selectedFiles.clearAll();
+  }
+
   Future<void> _onArchiveClick() async {
     await changeVisibility(
       context,
@@ -602,7 +649,23 @@ class _FileSelectionActionsWidgetState
     }
   }
 
-  Future<void> _onCreatedSharedLinkClicked() async {
+  Future<Uint8List> _createPlaceholder(
+    List<EnteFile> ownedSelectedFiles,
+  ) async {
+    final Widget imageWidget = LinkPlaceholder(
+      files: ownedSelectedFiles,
+    );
+    final double pixelRatio = MediaQuery.devicePixelRatioOf(context);
+    final bytesOfImageToWidget = await screenshotController.captureFromWidget(
+      imageWidget,
+      pixelRatio: pixelRatio,
+      targetSize: MediaQuery.sizeOf(context),
+      delay: const Duration(milliseconds: 300),
+    );
+    return bytesOfImageToWidget;
+  }
+
+  Future<void> _onSendLinkTapped() async {
     if (split.ownedByCurrentUser.isEmpty) {
       showShortToast(
         context,
@@ -610,51 +673,23 @@ class _FileSelectionActionsWidgetState
       );
       return;
     }
+    final dialog = createProgressDialog(
+      context,
+      S.of(context).creatingLink,
+      isDismissible: true,
+    );
+    await dialog.show();
     _cachedCollectionForSharedLink ??= await collectionActions
         .createSharedCollectionLink(context, split.ownedByCurrentUser);
-    final actionResult = await showActionSheet(
-      context: context,
-      buttons: [
-        ButtonWidget(
-          labelText: S.of(context).copyLink,
-          buttonType: ButtonType.neutral,
-          buttonSize: ButtonSize.large,
-          shouldStickToDarkTheme: true,
-          buttonAction: ButtonAction.first,
-          isInAlert: true,
-        ),
-        ButtonWidget(
-          labelText: S.of(context).manageLink,
-          buttonType: ButtonType.secondary,
-          buttonSize: ButtonSize.large,
-          buttonAction: ButtonAction.second,
-          shouldStickToDarkTheme: true,
-          isInAlert: true,
-        ),
-        ButtonWidget(
-          labelText: S.of(context).done,
-          buttonType: ButtonType.secondary,
-          buttonSize: ButtonSize.large,
-          buttonAction: ButtonAction.third,
-          shouldStickToDarkTheme: true,
-          isInAlert: true,
-        ),
-      ],
-      title: S.of(context).publicLinkCreated,
-      body: S.of(context).youCanManageYourLinksInTheShareTab,
-      actionSheetType: ActionSheetType.defaultActionSheet,
-    );
-    if (actionResult?.action != null) {
-      if (actionResult!.action == ButtonAction.first) {
-        await _copyLink();
-      }
-      if (actionResult.action == ButtonAction.second) {
-        await routeToPage(
-          context,
-          ManageSharedLinkWidget(collection: _cachedCollectionForSharedLink),
-        );
-      }
+
+    if (_cachedCollectionForSharedLink == null) {
+      await dialog.hide();
+      return;
     }
+    final List<EnteFile> ownedSelectedFiles = split.ownedByCurrentUser;
+    placeholderBytes = await _createPlaceholder(ownedSelectedFiles);
+    await dialog.hide();
+    await _sendLink();
     widget.selectedFiles.clearAll();
     if (mounted) {
       setState(() => {});
@@ -663,53 +698,60 @@ class _FileSelectionActionsWidgetState
 
   Future<void> _setPersonCover() async {
     final EnteFile file = widget.selectedFiles.files.first;
-    await PersonService.instance.updateAttributes(
-      widget.person!.remoteID,
-      avatarFaceId: file.uploadedFileID.toString(),
-    );
+    final updatedPerson =
+        await PersonService.instance.updateAvatar(widget.person!, file);
     widget.selectedFiles.clearAll();
     if (mounted) {
       setState(() => {});
     }
-    Bus.instance.fire(PeopleChangedEvent());
+    Bus.instance.fire(
+      PeopleChangedEvent(
+        type: PeopleEventType.saveOrEditPerson,
+        source: "setPersonCover",
+        person: updatedPerson,
+      ),
+    );
   }
 
   Future<void> _onNotpersonClicked() async {
-    final actionResult = await showActionSheet(
-      context: context,
-      buttons: [
-        ButtonWidget(
-          labelText: S.of(context).yesRemove,
-          buttonType: ButtonType.neutral,
-          buttonSize: ButtonSize.large,
-          shouldStickToDarkTheme: true,
-          buttonAction: ButtonAction.first,
-          isInAlert: true,
-        ),
-        ButtonWidget(
-          labelText: S.of(context).cancel,
-          buttonType: ButtonType.secondary,
-          buttonSize: ButtonSize.large,
-          buttonAction: ButtonAction.second,
-          shouldStickToDarkTheme: true,
-          isInAlert: true,
-        ),
-      ],
-      title: "Remove these photos for ${widget.person!.data.name}?",
-      actionSheetType: ActionSheetType.defaultActionSheet,
-    );
-    if (actionResult?.action != null) {
-      if (actionResult!.action == ButtonAction.first) {
-        await ClusterFeedbackService.instance.removeFilesFromPerson(
-          widget.selectedFiles.files.toList(),
-          widget.person!,
-        );
+    try {
+      final actionResult = await showActionSheet(
+        context: context,
+        buttons: [
+          ButtonWidget(
+            labelText: S.of(context).yesRemove,
+            buttonType: ButtonType.neutral,
+            buttonSize: ButtonSize.large,
+            shouldStickToDarkTheme: true,
+            buttonAction: ButtonAction.first,
+            isInAlert: true,
+          ),
+          ButtonWidget(
+            labelText: S.of(context).cancel,
+            buttonType: ButtonType.secondary,
+            buttonSize: ButtonSize.large,
+            buttonAction: ButtonAction.second,
+            shouldStickToDarkTheme: true,
+            isInAlert: true,
+          ),
+        ],
+        title: "Remove these photos for ${widget.person!.data.name}?",
+        actionSheetType: ActionSheetType.defaultActionSheet,
+      );
+      if (actionResult?.action != null) {
+        if (actionResult!.action == ButtonAction.first) {
+          await ClusterFeedbackService.instance.removeFilesFromPerson(
+            widget.selectedFiles.files.toList(),
+            widget.person!,
+          );
+        }
       }
-      Bus.instance.fire(PeopleChangedEvent());
-    }
-    widget.selectedFiles.clearAll();
-    if (mounted) {
-      setState(() => {});
+      widget.selectedFiles.clearAll();
+      if (mounted) {
+        setState(() => {});
+      }
+    } catch (e, s) {
+      _logger.severe("Failed to initiate `notPersonLabel`", e, s);
     }
   }
 
@@ -748,7 +790,6 @@ class _FileSelectionActionsWidgetState
           widget.clusterID!,
         );
       }
-      Bus.instance.fire(PeopleChangedEvent());
     }
     widget.selectedFiles.clearAll();
     if (mounted) {
@@ -756,16 +797,21 @@ class _FileSelectionActionsWidgetState
     }
   }
 
-  Future<void> _copyLink() async {
+  Future<void> _sendLink() async {
     if (_cachedCollectionForSharedLink != null) {
       final String collectionKey = Base58Encode(
         CollectionsService.instance
             .getCollectionKey(_cachedCollectionForSharedLink!.id),
       );
       final String url =
-          "${_cachedCollectionForSharedLink!.publicURLs?.first?.url}#$collectionKey";
-      await Clipboard.setData(ClipboardData(text: url));
-      showShortToast(context, S.of(context).linkCopiedToClipboard);
+          "${_cachedCollectionForSharedLink!.publicURLs.first.url}#$collectionKey";
+      unawaited(Clipboard.setData(ClipboardData(text: url)));
+      await shareImageAndUrl(
+        placeholderBytes,
+        url,
+        context: context,
+        key: sendLinkButtonKey,
+      );
     }
   }
 
@@ -787,17 +833,30 @@ class _FileSelectionActionsWidgetState
   }
 
   Future<void> _download(List<EnteFile> files) async {
+    final totalFiles = files.length;
+    int downloadedFiles = 0;
+
     final dialog = createProgressDialog(
       context,
-      S.of(context).downloading,
+      S.of(context).downloading + " ($downloadedFiles/$totalFiles)",
       isDismissible: true,
     );
     await dialog.show();
     try {
+      final downloadQueue = DownloadQueue(maxConcurrent: 5);
       final futures = <Future>[];
       for (final file in files) {
         if (file.localID == null) {
-          futures.add(downloadToGallery(file));
+          futures.add(
+            downloadQueue.add(() async {
+              await downloadToGallery(file);
+              downloadedFiles++;
+              dialog.update(
+                message: S.of(context).downloading +
+                    " ($downloadedFiles/$totalFiles)",
+              );
+            }),
+          );
         }
       }
       await Future.wait(futures);

@@ -9,6 +9,7 @@
  */
 
 import type { FSWatcher } from "chokidar";
+import type { BrowserWindow } from "electron";
 import { ipcMain } from "electron/main";
 import type {
     CollectionMapping,
@@ -23,6 +24,7 @@ import {
     updateAndRestart,
     updateOnNextRestart,
 } from "./services/app-update";
+import autoLauncher from "./services/auto-launcher";
 import {
     openDirectory,
     openLogDirectory,
@@ -31,6 +33,7 @@ import {
 import { ffmpegExec } from "./services/ffmpeg";
 import {
     fsExists,
+    fsFindFiles,
     fsIsDir,
     fsMkdirIfNeeded,
     fsReadTextFile,
@@ -41,12 +44,13 @@ import {
 } from "./services/fs";
 import { convertToJPEG, generateImageThumbnail } from "./services/image";
 import { logout } from "./services/logout";
+import { createMLWorker } from "./services/ml";
 import {
-    computeCLIPImageEmbedding,
-    computeCLIPTextEmbeddingIfAvailable,
-} from "./services/ml-clip";
-import { computeFaceEmbeddings, detectFaces } from "./services/ml-face";
-import { encryptionKey, saveEncryptionKey } from "./services/store";
+    lastShownChangelogVersion,
+    masterKeyB64,
+    saveMasterKeyB64,
+    setLastShownChangelogVersion,
+} from "./services/store";
 import {
     clearPendingUploads,
     listZipItems,
@@ -58,7 +62,6 @@ import {
 } from "./services/upload";
 import {
     watchAdd,
-    watchFindFiles,
     watchGet,
     watchRemove,
     watchUpdateIgnoredFiles,
@@ -101,11 +104,23 @@ export const attachIPCHandlers = () => {
 
     ipcMain.handle("selectDirectory", () => selectDirectory());
 
-    ipcMain.handle("saveEncryptionKey", (_, encryptionKey: string) =>
-        saveEncryptionKey(encryptionKey),
+    ipcMain.handle("masterKeyB64", () => masterKeyB64());
+
+    ipcMain.handle("saveMasterKeyB64", (_, masterKeyB64: string) =>
+        saveMasterKeyB64(masterKeyB64),
     );
 
-    ipcMain.handle("encryptionKey", () => encryptionKey());
+    ipcMain.handle("lastShownChangelogVersion", () =>
+        lastShownChangelogVersion(),
+    );
+
+    ipcMain.handle("setLastShownChangelogVersion", (_, version: number) =>
+        setLastShownChangelogVersion(version),
+    );
+
+    ipcMain.handle("isAutoLaunchEnabled", () => autoLauncher.isEnabled());
+
+    ipcMain.handle("toggleAutoLaunch", () => autoLauncher.toggleAutoLaunch());
 
     // - App update
 
@@ -141,6 +156,10 @@ export const attachIPCHandlers = () => {
 
     ipcMain.handle("fsIsDir", (_, dirPath: string) => fsIsDir(dirPath));
 
+    ipcMain.handle("fsFindFiles", (_, folderPath: string) =>
+        fsFindFiles(folderPath),
+    );
+
     // - Conversion
 
     ipcMain.handle("convertToJPEG", (_, imageData: Uint8Array) =>
@@ -165,26 +184,6 @@ export const attachIPCHandlers = () => {
             dataOrPathOrZipItem: Uint8Array | string | ZipItem,
             outputFileExtension: string,
         ) => ffmpegExec(command, dataOrPathOrZipItem, outputFileExtension),
-    );
-
-    // - ML
-
-    ipcMain.handle(
-        "computeCLIPImageEmbedding",
-        (_, jpegImageData: Uint8Array) =>
-            computeCLIPImageEmbedding(jpegImageData),
-    );
-
-    ipcMain.handle("computeCLIPTextEmbeddingIfAvailable", (_, text: string) =>
-        computeCLIPTextEmbeddingIfAvailable(text),
-    );
-
-    ipcMain.handle("detectFaces", (_, input: Float32Array) =>
-        detectFaces(input),
-    );
-
-    ipcMain.handle("computeFaceEmbeddings", (_, input: Float32Array) =>
-        computeFaceEmbeddings(input),
     );
 
     // - Upload
@@ -214,6 +213,16 @@ export const attachIPCHandlers = () => {
     );
 
     ipcMain.handle("clearPendingUploads", () => clearPendingUploads());
+};
+
+/**
+ * A subset of {@link attachIPCHandlers} for functions that need a reference to
+ * the main window to do their thing.
+ */
+export const attachMainWindowIPCHandlers = (mainWindow: BrowserWindow) => {
+    // - ML
+
+    ipcMain.on("createMLWorker", () => createMLWorker(mainWindow));
 };
 
 /**
@@ -248,10 +257,6 @@ export const attachFSWatchIPCHandlers = (watcher: FSWatcher) => {
         "watchUpdateIgnoredFiles",
         (_, ignoredFiles: FolderWatch["ignoredFiles"], folderPath: string) =>
             watchUpdateIgnoredFiles(ignoredFiles, folderPath),
-    );
-
-    ipcMain.handle("watchFindFiles", (_, folderPath: string) =>
-        watchFindFiles(folderPath),
     );
 };
 

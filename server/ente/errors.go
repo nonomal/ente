@@ -105,12 +105,22 @@ var ErrNotImplemented = errors.New("not implemented")
 
 var ErrInvalidApp = errors.New("invalid app")
 
-var ErrInvalidName = errors.New("invalid name")
-
 var ErrSubscriptionAlreadyClaimed = ApiError{
 	Code:           SubscriptionAlreadyClaimed,
 	HttpStatusCode: http.StatusConflict,
 	Message:        "Subscription is already associted with different account",
+}
+
+var ErrUserAlreadyRegistered = &ApiError{
+	Code:           "USER_ALREADY_REGISTERED",
+	HttpStatusCode: http.StatusConflict,
+	Message:        "User is already registered",
+}
+
+var ErrUserNotRegistered = &ApiError{
+	Code:           "USER_NOT_REGISTERED",
+	HttpStatusCode: http.StatusNotFound,
+	Message:        "User is not registered",
 }
 
 var ErrCollectionNotEmpty = ApiError{
@@ -125,6 +135,12 @@ var ErrFileNotFoundInAlbum = ApiError{
 	Message:        "File is either deleted or moved to different collection",
 }
 
+var ErrSessionAlreadyClaimed = ApiError{
+	Code:           "SESSION_ALREADY_CLAIMED",
+	Message:        "Session is already claimed",
+	HttpStatusCode: http.StatusConflict,
+}
+
 var ErrPublicCollectDisabled = ApiError{
 	Code:           PublicCollectDisabled,
 	Message:        "User has not enabled public collect for this url",
@@ -134,6 +150,12 @@ var ErrPublicCollectDisabled = ApiError{
 var ErrNotFoundError = ApiError{
 	Code:           NotFoundError,
 	Message:        "",
+	HttpStatusCode: http.StatusNotFound,
+}
+
+var ErrUserNotFound = &ApiError{
+	Code:           "USER_NOT_FOUND",
+	Message:        "User is either deleted or not found",
 	HttpStatusCode: http.StatusNotFound,
 }
 
@@ -174,6 +196,8 @@ const (
 
 	FileNotFoundInAlbum ErrorCode = "FILE_NOT_FOUND_IN_ALBUM"
 
+	AuthKeyNotCreated ErrorCode = "AUTH_KEY_NOT_CREATED"
+
 	// PublicCollectDisabled error code indicates that the user has not enabled public collect
 	PublicCollectDisabled ErrorCode = "PUBLIC_COLLECT_DISABLED"
 
@@ -183,6 +207,8 @@ const (
 
 	// MaxPasskeysReached is thrown when user attempts to create more than max allowed passkeys
 	MaxPasskeysReached ErrorCode = "MAX_PASSKEYS_REACHED"
+
+	SessionExpired ErrorCode = "SESSION_EXPIRED"
 )
 
 type ApiError struct {

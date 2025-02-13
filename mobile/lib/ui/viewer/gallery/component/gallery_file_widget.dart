@@ -6,11 +6,13 @@ import "package:photos/core/constants.dart";
 import 'package:photos/models/file/file.dart';
 import "package:photos/models/selected_files.dart";
 import "package:photos/services/app_lifecycle_service.dart";
+import "package:photos/services/collections_service.dart";
 import "package:photos/theme/ente_theme.dart";
 import "package:photos/ui/viewer/file/detail_page.dart";
 import "package:photos/ui/viewer/file/thumbnail_widget.dart";
 import "package:photos/ui/viewer/gallery/gallery.dart";
 import "package:photos/ui/viewer/gallery/state/gallery_context_state.dart";
+import "package:photos/ui/viewer/gallery/state/gallery_files_inherited_widget.dart";
 import "package:photos/utils/file_util.dart";
 import "package:photos/utils/navigation_util.dart";
 
@@ -21,7 +23,6 @@ class GalleryFileWidget extends StatelessWidget {
   final String tag;
   final int photoGridSize;
   final int? currentUserID;
-  final List<EnteFile> filesInGroup;
   final GalleryLoader asyncLoader;
   const GalleryFileWidget({
     required this.file,
@@ -30,7 +31,6 @@ class GalleryFileWidget extends StatelessWidget {
     required this.tag,
     required this.photoGridSize,
     required this.currentUserID,
-    required this.filesInGroup,
     required this.asyncLoader,
     super.key,
   });
@@ -38,8 +38,16 @@ class GalleryFileWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isFileSelected = selectedFiles?.isFileSelected(file) ?? false;
+    bool fileIsFromSharedPublicLink = false;
+    if (file.collectionID != null) {
+      fileIsFromSharedPublicLink =
+          CollectionsService.instance.isSharedPublicLink(file.collectionID!);
+    }
     Color selectionColor = Colors.white;
-    if (isFileSelected && file.isUploaded && file.ownerID != currentUserID) {
+    if (isFileSelected &&
+        file.isUploaded &&
+        file.ownerID != currentUserID &&
+        !fileIsFromSharedPublicLink) {
       final avatarColors = getEnteColorScheme(context).avatarColors;
       selectionColor =
           avatarColors[(file.ownerID!).remainder(avatarColors.length)];
@@ -54,7 +62,8 @@ class GalleryFileWidget extends StatelessWidget {
       thumbnailSize: photoGridSize < photoGridSizeDefault
           ? thumbnailLargeSize
           : thumbnailSmallSize,
-      shouldShowOwnerAvatar: !isFileSelected,
+      shouldShowOwnerAvatar: !(isFileSelected || fileIsFromSharedPublicLink),
+      shouldShowVideoDuration: true,
     );
     return GestureDetector(
       onTap: () {
@@ -143,8 +152,7 @@ class GalleryFileWidget extends StatelessWidget {
   void _onLongPressNoSelectionLimit(BuildContext context, EnteFile file) {
     if (selectedFiles!.files.isNotEmpty) {
       _routeToDetailPage(file, context);
-    } else if (AppLifecycleService.instance.mediaExtensionAction.action ==
-        IntentAction.main) {
+    } else {
       HapticFeedback.lightImpact();
       _toggleFileSelection(file);
     }
@@ -164,13 +172,12 @@ class GalleryFileWidget extends StatelessWidget {
   }
 
   void _routeToDetailPage(EnteFile file, BuildContext context) {
+    final galleryFiles = GalleryFilesState.of(context).galleryFiles;
     final page = DetailPage(
       DetailPageConfiguration(
-        List.unmodifiable(filesInGroup),
-        asyncLoader,
-        filesInGroup.indexOf(file),
+        galleryFiles,
+        galleryFiles.indexOf(file),
         tag,
-        sortOrderAsc: GalleryContextState.of(context)!.sortOrderAsc,
       ),
     );
     routeToPage(context, page, forceCustomPageRoute: true);

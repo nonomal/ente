@@ -75,13 +75,17 @@ class UserService {
     bool isChangeEmail = false,
     bool isCreateAccountScreen = false,
     bool isResetPasswordScreen = false,
+    String? purpose,
   }) async {
     final dialog = createProgressDialog(context, context.l10n.pleaseWait);
     await dialog.show();
     try {
       final response = await _dio.post(
         "${_config.getHttpEndpoint()}/users/ott",
-        data: {"email": email, "purpose": isChangeEmail ? "change" : ""},
+        data: {
+          "email": email,
+          "purpose": isChangeEmail ? "change" : purpose ?? "",
+        },
       );
       await dialog.hide();
       if (response.statusCode == 200) {
@@ -101,11 +105,28 @@ class UserService {
         );
         return;
       }
-      unawaited(showGenericErrorDialog(context: context));
+      unawaited(showGenericErrorDialog(context: context, error: null));
     } on DioException catch (e) {
       await dialog.hide();
       _logger.info(e);
-      if (e.response != null && e.response!.statusCode == 403) {
+      final String? enteErrCode = e.response?.data["code"];
+      if (enteErrCode != null && enteErrCode == "USER_ALREADY_REGISTERED") {
+        unawaited(
+          showErrorDialog(
+            context,
+            context.l10n.oops,
+            context.l10n.emailAlreadyRegistered,
+          ),
+        );
+      } else if (enteErrCode != null && enteErrCode == "USER_NOT_REGISTERED") {
+        unawaited(
+          showErrorDialog(
+            context,
+            context.l10n.oops,
+            context.l10n.emailNotRegistered,
+          ),
+        );
+      } else if (e.response != null && e.response!.statusCode == 403) {
         unawaited(
           showErrorDialog(
             context,
@@ -114,12 +135,12 @@ class UserService {
           ),
         );
       } else {
-        unawaited(showGenericErrorDialog(context: context));
+        unawaited(showGenericErrorDialog(context: context, error: e));
       }
     } catch (e) {
       await dialog.hide();
       _logger.severe(e);
-      unawaited(showGenericErrorDialog(context: context));
+      unawaited(showGenericErrorDialog(context: context, error: e));
     }
   }
 
@@ -165,7 +186,11 @@ class UserService {
       return userDetails;
     } catch (e) {
       _logger.warning("Failed to fetch", e);
-      rethrow;
+      if (e is DioException && e.response?.statusCode == 401) {
+        throw UnauthorizedError();
+      } else {
+        rethrow;
+      }
     }
   }
 
@@ -213,11 +238,17 @@ class UserService {
       }
     } catch (e) {
       _logger.severe(e);
+      // check if token is already invalid
+      if (e is DioException && e.response?.statusCode == 401) {
+        await Configuration.instance.logout();
+        Navigator.of(context).popUntil((route) => route.isFirst);
+        return;
+      }
       //This future is for waiting for the dialog from which logout() is called
       //to close and only then to show the error dialog.
       Future.delayed(
         const Duration(milliseconds: 150),
-        () => showGenericErrorDialog(context: context),
+        () => showGenericErrorDialog(context: context, error: e),
       );
       rethrow;
     }
@@ -238,7 +269,10 @@ class UserService {
       }
     } catch (e) {
       _logger.severe(e);
-      await showGenericErrorDialog(context: context);
+      await showGenericErrorDialog(
+        context: context,
+        error: e,
+      );
       return null;
     }
   }
@@ -266,32 +300,77 @@ class UserService {
     }
   }
 
-  Future<void> onPassKeyVerified(BuildContext context, Map response) async {
-    final userPassword = Configuration.instance.getVolatilePassword();
-    if (userPassword == null) throw Exception("volatile password is null");
-
-    await _saveConfiguration(response);
-
-    Widget page;
-    if (Configuration.instance.getEncryptedToken() != null) {
-      await Configuration.instance.decryptSecretsAndGetKeyEncKey(
-        userPassword,
-        Configuration.instance.getKeyAttributes()!,
-      );
-      page = const HomePage();
-    } else {
-      throw Exception("unexpected response during passkey verification");
-    }
-
-    // ignore: unawaited_futures
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(
-        builder: (BuildContext context) {
-          return page;
+  Future<dynamic> getTokenForPasskeySession(String sessionID) async {
+    try {
+      final response = await _dio.get(
+        "${_config.getHttpEndpoint()}/users/two-factor/passkeys/get-token",
+        queryParameters: {
+          "sessionID": sessionID,
         },
-      ),
-      (route) => route.isFirst,
-    );
+      );
+      return response.data;
+    } on DioException catch (e) {
+      if (e.response != null) {
+        if (e.response!.statusCode == 404 || e.response!.statusCode == 410) {
+          throw PassKeySessionExpiredError();
+        }
+        if (e.response!.statusCode == 400) {
+          throw PassKeySessionNotVerifiedError();
+        }
+      }
+      rethrow;
+    } catch (e, s) {
+      _logger.severe("unexpected error", e, s);
+      rethrow;
+    }
+  }
+
+  Future<void> onPassKeyVerified(BuildContext context, Map response) async {
+    final ProgressDialog dialog =
+        createProgressDialog(context, context.l10n.pleaseWait);
+    await dialog.show();
+    try {
+      final userPassword = _config.getVolatilePassword();
+      await _saveConfiguration(response);
+      if (userPassword == null) {
+        await dialog.hide();
+        // ignore: unawaited_futures
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(
+            builder: (BuildContext context) {
+              return const PasswordReentryPage();
+            },
+          ),
+          (route) => route.isFirst,
+        );
+      } else {
+        Widget page;
+        if (_config.getEncryptedToken() != null) {
+          await _config.decryptSecretsAndGetKeyEncKey(
+            userPassword,
+            _config.getKeyAttributes()!,
+          );
+          page = const HomePage();
+        } else {
+          throw Exception("unexpected response during passkey verification");
+        }
+        await dialog.hide();
+
+        // ignore: unawaited_futures
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(
+            builder: (BuildContext context) {
+              return page;
+            },
+          ),
+          (route) => route.isFirst,
+        );
+      }
+    } catch (e) {
+      _logger.severe(e);
+      await dialog.hide();
+      rethrow;
+    }
   }
 
   Future<void> verifyEmail(
@@ -316,8 +395,20 @@ class UserService {
       await dialog.hide();
       if (response.statusCode == 200) {
         Widget page;
-        final String twoFASessionID = response.data["twoFactorSessionID"];
-        if (twoFASessionID.isNotEmpty) {
+        final String passkeySessionID = response.data["passkeySessionID"];
+        final String accountsUrl = response.data["accountsUrl"] ?? kAccountsUrl;
+        String twoFASessionID = response.data["twoFactorSessionID"];
+        if (twoFASessionID.isEmpty &&
+            response.data["twoFactorSessionIDV2"] != null) {
+          twoFASessionID = response.data["twoFactorSessionIDV2"];
+        }
+        if (passkeySessionID.isNotEmpty) {
+          page = PasskeyPage(
+            passkeySessionID,
+            totp2FASessionID: twoFASessionID,
+            accountsUrl: accountsUrl,
+          );
+        } else if (twoFASessionID.isNotEmpty) {
           page = TwoFactorAuthenticationPage(twoFASessionID);
         } else {
           await _saveConfiguration(response);
@@ -520,13 +611,12 @@ class UserService {
             SetupSRPResponse.fromJson(response.data);
         final serverB =
             SRP6Util.decodeBigInt(base64Decode(setupSRPResponse.srpB));
-        // ignore: need to calculate secret to get M1, unused_local_variable
+        // ignore: unused_local_variable
         final clientS = client.calculateSecret(serverB);
         final clientM = client.calculateClientEvidenceMessage();
 
-        late Response _;
         if (setKeysRequest == null) {
-          _ = await _enteDio.post(
+          await _enteDio.post(
             "/users/srp/complete",
             data: {
               'setupID': setupSRPResponse.setupID,
@@ -534,7 +624,7 @@ class UserService {
             },
           );
         } else {
-          _ = await _enteDio.post(
+          await _enteDio.post(
             "/users/srp/update",
             data: {
               'setupID': setupSRPResponse.setupID,
@@ -599,14 +689,15 @@ class UserService {
       "${_config.getHttpEndpoint()}/users/srp/create-session",
       data: {
         "srpUserID": srpAttributes.srpUserID,
-        "srpA": base64Encode(SRP6Util.encodeBigInt(A!)),
+        "srpA": base64Encode(SRP6Util.getPadded(A!, 512)),
       },
     );
     final String sessionID = createSessionResponse.data["sessionID"];
     final String srpB = createSessionResponse.data["srpB"];
 
     final serverB = SRP6Util.decodeBigInt(base64Decode(srpB));
-    // ignore: need to calculate secret to get M1, unused_local_variable
+
+    // ignore: unused_local_variable
     final clientS = client.calculateSecret(serverB);
     final clientM = client.calculateClientEvidenceMessage();
     final response = await _dio.post(
@@ -614,19 +705,27 @@ class UserService {
       data: {
         "sessionID": sessionID,
         "srpUserID": srpAttributes.srpUserID,
-        "srpM1": base64Encode(SRP6Util.encodeBigInt(clientM!)),
+        "srpM1": base64Encode(SRP6Util.getPadded(clientM!, 32)),
       },
     );
     if (response.statusCode == 200) {
       Widget? page;
       final String passkeySessionID = response.data["passkeySessionID"];
-      final String twoFASessionID = response.data["twoFactorSessionID"];
+      final String accountsUrl = response.data["accountsUrl"] ?? kAccountsUrl;
+      String twoFASessionID = response.data["twoFactorSessionID"];
+      if (twoFASessionID.isEmpty &&
+          response.data["twoFactorSessionIDV2"] != null) {
+        twoFASessionID = response.data["twoFactorSessionIDV2"];
+      }
       Configuration.instance.setVolatilePassword(userPassword);
-
-      if (twoFASessionID.isNotEmpty) {
+      if (passkeySessionID.isNotEmpty) {
+        page = PasskeyPage(
+          passkeySessionID,
+          totp2FASessionID: twoFASessionID,
+          accountsUrl: accountsUrl,
+        );
+      } else if (twoFASessionID.isNotEmpty) {
         page = TwoFactorAuthenticationPage(twoFASessionID);
-      } else if (passkeySessionID.isNotEmpty) {
-        page = PasskeyPage(passkeySessionID);
       } else {
         await _saveConfiguration(response);
         if (Configuration.instance.getEncryptedToken() != null) {
@@ -778,6 +877,7 @@ class UserService {
           "twoFactorType": twoFactorTypeToString(type),
         },
       );
+      await dialog.hide();
       if (response.statusCode == 200) {
         // ignore: unawaited_futures
         Navigator.of(context).pushAndRemoveUntil(
@@ -875,6 +975,7 @@ class UserService {
           "twoFactorType": twoFactorTypeToString(type),
         },
       );
+      await dialog.hide();
       if (response.statusCode == 200) {
         showShortToast(
           context,

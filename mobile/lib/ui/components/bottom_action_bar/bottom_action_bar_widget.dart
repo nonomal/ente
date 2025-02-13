@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:photos/core/constants.dart';
-import "package:photos/face/model/person.dart";
 import 'package:photos/models/collection/collection.dart';
 import "package:photos/models/gallery_type.dart";
+import "package:photos/models/ml/face/person.dart";
 import 'package:photos/models/selected_files.dart';
 import 'package:photos/theme/ente_theme.dart';
 import 'package:photos/ui/components/bottom_action_bar/action_bar_widget.dart';
@@ -13,7 +13,7 @@ class BottomActionBarWidget extends StatelessWidget {
   final GalleryType galleryType;
   final Collection? collection;
   final PersonEntity? person;
-  final int? clusterID;
+  final String? clusterID;
   final SelectedFiles selectedFiles;
   final VoidCallback? onCancel;
   final Color? backgroundColor;
@@ -31,7 +31,7 @@ class BottomActionBarWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bottomPadding = MediaQuery.of(context).padding.bottom;
+    final bottomPadding = MediaQuery.paddingOf(context).bottom;
     final widthOfScreen = MediaQuery.of(context).size.width;
     final colorScheme = getEnteColorScheme(context);
     final double leftRightPadding = widthOfScreen > restrictedMaxWidth

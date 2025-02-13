@@ -20,57 +20,14 @@ typedef String MessageIfAbsent(String messageStr, List<dynamic> args);
 class MessageLookup extends MessageLookupByLibrary {
   String get localeName => 'cs';
 
-  static String m0(count) =>
-      "${Intl.plural(count, zero: 'Add collaborator', one: 'Add collaborator', other: 'Add collaborators')}";
-
-  static String m1(count) =>
-      "${Intl.plural(count, zero: 'Add viewer', one: 'Add viewer', other: 'Add viewers')}";
-
   final messages = _notInlinedMessages(_notInlinedMessages);
   static Map<String, Function> _notInlinedMessages(_) => <String, Function>{
-        "addCollaborators": m0,
-        "addToHiddenAlbum":
-            MessageLookupByLibrary.simpleMessage("Add to hidden album"),
-        "addViewers": m1,
-        "changeLocationOfSelectedItems": MessageLookupByLibrary.simpleMessage(
-            "Change location of selected items?"),
-        "clusteringProgress":
-            MessageLookupByLibrary.simpleMessage("Clustering progress"),
-        "contacts": MessageLookupByLibrary.simpleMessage("Contacts"),
-        "createCollaborativeLink":
-            MessageLookupByLibrary.simpleMessage("Create collaborative link"),
-        "deleteConfirmDialogBody": MessageLookupByLibrary.simpleMessage(
-            "This account is linked to other ente apps, if you use any.\\n\\nYour uploaded data, across all ente apps, will be scheduled for deletion, and your account will be permanently deleted."),
-        "descriptions": MessageLookupByLibrary.simpleMessage("Descriptions"),
-        "editLocation": MessageLookupByLibrary.simpleMessage("Edit location"),
-        "editsToLocationWillOnlyBeSeenWithinEnte":
-            MessageLookupByLibrary.simpleMessage(
-                "Edits to location will only be seen within Ente"),
-        "enterPersonName":
-            MessageLookupByLibrary.simpleMessage("Enter person name"),
-        "faceRecognition":
-            MessageLookupByLibrary.simpleMessage("Face recognition"),
-        "fileTypes": MessageLookupByLibrary.simpleMessage("File types"),
-        "foundFaces": MessageLookupByLibrary.simpleMessage("Found faces"),
-        "indexingIsPaused": MessageLookupByLibrary.simpleMessage(
-            "Indexing is paused, will automatically resume when device is ready"),
-        "joinDiscord": MessageLookupByLibrary.simpleMessage("Join Discord"),
-        "locations": MessageLookupByLibrary.simpleMessage("Locations"),
-        "longPressAnEmailToVerifyEndToEndEncryption":
-            MessageLookupByLibrary.simpleMessage(
-                "Long press an email to verify end to end encryption."),
-        "modifyYourQueryOrTrySearchingFor":
-            MessageLookupByLibrary.simpleMessage(
-                "Modify your query, or try searching for"),
-        "moveToHiddenAlbum":
-            MessageLookupByLibrary.simpleMessage("Move to hidden album"),
-        "removePersonLabel":
-            MessageLookupByLibrary.simpleMessage("Remove person label"),
-        "search": MessageLookupByLibrary.simpleMessage("Search"),
-        "selectALocation":
-            MessageLookupByLibrary.simpleMessage("Select a location"),
-        "selectALocationFirst":
-            MessageLookupByLibrary.simpleMessage("Select a location first"),
-        "yourMap": MessageLookupByLibrary.simpleMessage("Your map")
+        "askDeleteReason": MessageLookupByLibrary.simpleMessage(
+            "Jaký je váš hlavní důvod, proč mažete svůj účet?"),
+        "checkInboxAndSpamFolder": MessageLookupByLibrary.simpleMessage(
+            "Zkontrolujte prosím svou doručenou poštu (a spam) pro dokončení ověření"),
+        "incorrectRecoveryKeyBody": MessageLookupByLibrary.simpleMessage(""),
+        "orPickFromYourContacts":
+            MessageLookupByLibrary.simpleMessage("or pick from your contacts")
       };
 }

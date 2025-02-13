@@ -28,7 +28,7 @@ import 'package:photos/utils/toast_util.dart';
 class ManageSharedLinkWidget extends StatefulWidget {
   final Collection? collection;
 
-  const ManageSharedLinkWidget({Key? key, this.collection}) : super(key: key);
+  const ManageSharedLinkWidget({super.key, this.collection});
 
   @override
   State<ManageSharedLinkWidget> createState() => _ManageSharedLinkWidgetState();
@@ -37,6 +37,7 @@ class ManageSharedLinkWidget extends StatefulWidget {
 class _ManageSharedLinkWidgetState extends State<ManageSharedLinkWidget> {
   final CollectionActions sharingActions =
       CollectionActions(CollectionsService.instance);
+  final GlobalKey sendLinkButtonKey = GlobalKey();
 
   @override
   void initState() {
@@ -46,13 +47,13 @@ class _ManageSharedLinkWidgetState extends State<ManageSharedLinkWidget> {
   @override
   Widget build(BuildContext context) {
     final isCollectEnabled =
-        widget.collection!.publicURLs?.firstOrNull?.enableCollect ?? false;
+        widget.collection!.publicURLs.firstOrNull?.enableCollect ?? false;
     final isDownloadEnabled =
-        widget.collection!.publicURLs?.firstOrNull?.enableDownload ?? true;
+        widget.collection!.publicURLs.firstOrNull?.enableDownload ?? true;
     final isPasswordEnabled =
-        widget.collection!.publicURLs?.firstOrNull?.passwordEnabled ?? false;
+        widget.collection!.publicURLs.firstOrNull?.passwordEnabled ?? false;
     final enteColorScheme = getEnteColorScheme(context);
-    final PublicURL url = widget.collection!.publicURLs!.firstOrNull!;
+    final PublicURL url = widget.collection!.publicURLs.firstOrNull!;
     final String collectionKey = Base58Encode(
       CollectionsService.instance.getCollectionKey(widget.collection!.id),
     );
@@ -174,7 +175,7 @@ class _ManageSharedLinkWidgetState extends State<ManageSharedLinkWidget> {
                           context,
                           {'enableDownload': !isDownloadEnabled},
                         );
-                        if (!isDownloadEnabled) {
+                        if (isDownloadEnabled) {
                           // ignore: unawaited_futures
                           showErrorDialog(
                             context,
@@ -271,6 +272,7 @@ class _ManageSharedLinkWidgetState extends State<ManageSharedLinkWidget> {
                     ),
                   if (!url.isExpired)
                     MenuItemWidget(
+                      key: sendLinkButtonKey,
                       captionedTextWidget: CaptionedTextWidget(
                         title: S.of(context).sendLink,
                         makeTextBold: true,
@@ -279,7 +281,12 @@ class _ManageSharedLinkWidgetState extends State<ManageSharedLinkWidget> {
                       menuItemColor: getEnteColorScheme(context).fillFaint,
                       onTap: () async {
                         // ignore: unawaited_futures
-                        shareText(urlValue);
+                        await shareAlbumLinkWithPlaceholder(
+                          context,
+                          widget.collection!,
+                          urlValue,
+                          sendLinkButtonKey,
+                        );
                       },
                       isTopBorderRadiusRemoved: true,
                     ),

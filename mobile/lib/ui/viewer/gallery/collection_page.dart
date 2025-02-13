@@ -9,25 +9,35 @@ import 'package:photos/models/collection/collection_items.dart';
 import 'package:photos/models/file/file.dart';
 import 'package:photos/models/file_load_result.dart';
 import 'package:photos/models/gallery_type.dart';
+import "package:photos/models/search/hierarchical/album_filter.dart";
+import "package:photos/models/search/hierarchical/hierarchical_search_filter.dart";
 import 'package:photos/models/selected_files.dart';
 import 'package:photos/services/ignored_files_service.dart';
 import 'package:photos/ui/viewer/actions/file_selection_overlay_bar.dart';
+import "package:photos/ui/viewer/gallery/collect_photos_bottom_buttons.dart";
 import "package:photos/ui/viewer/gallery/empty_album_state.dart";
 import 'package:photos/ui/viewer/gallery/empty_state.dart';
 import 'package:photos/ui/viewer/gallery/gallery.dart';
-import 'package:photos/ui/viewer/gallery/gallery_app_bar_widget.dart';
+import "package:photos/ui/viewer/gallery/gallery_app_bar_widget.dart";
+import "package:photos/ui/viewer/gallery/hierarchical_search_gallery.dart";
+import "package:photos/ui/viewer/gallery/state/gallery_files_inherited_widget.dart";
+import "package:photos/ui/viewer/gallery/state/inherited_search_filter_data.dart";
+import "package:photos/ui/viewer/gallery/state/search_filter_data_provider.dart";
+import "package:photos/ui/viewer/gallery/state/selection_state.dart";
 
 class CollectionPage extends StatelessWidget {
   final CollectionWithThumbnail c;
   final String tagPrefix;
   final bool? hasVerifiedLock;
+  final bool isFromCollectPhotos;
 
   CollectionPage(
     this.c, {
     this.tagPrefix = "collection",
     this.hasVerifiedLock = false,
-    Key? key,
-  }) : super(key: key);
+    this.isFromCollectPhotos = false,
+    super.key,
+  });
 
   final _selectedFiles = SelectedFiles();
 
@@ -85,29 +95,73 @@ class CollectionPage extends StatelessWidget {
       sortAsyncFn: () => c.collection.pubMagicMetadata.asc ?? false,
       showSelectAllByDefault: galleryType != GalleryType.sharedCollection,
       emptyState: galleryType == GalleryType.ownedCollection
-          ? EmptyAlbumState(c.collection)
+          ? EmptyAlbumState(
+              c.collection,
+              isFromCollectPhotos: isFromCollectPhotos,
+            )
           : const EmptyState(),
+      footer: isFromCollectPhotos
+          ? const SizedBox(height: 20)
+          : const SizedBox(height: 212),
     );
-    return Scaffold(
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(50.0),
-        child: GalleryAppBarWidget(
-          galleryType,
-          c.collection.displayName,
-          _selectedFiles,
-          collection: c.collection,
-        ),
-      ),
-      body: Stack(
-        alignment: Alignment.bottomCenter,
-        children: [
-          gallery,
-          FileSelectionOverlayBar(
-            galleryType,
-            _selectedFiles,
-            collection: c.collection,
+
+    return GalleryFilesState(
+      child: InheritedSearchFilterDataWrapper(
+        searchFilterDataProvider: SearchFilterDataProvider(
+          initialGalleryFilter: AlbumFilter(
+            collectionID: c.collection.id,
+            albumName: c.collection.displayName,
+            occurrence: kMostRelevantFilter,
           ),
-        ],
+        ),
+        child: Scaffold(
+          appBar: PreferredSize(
+            preferredSize: const Size.fromHeight(90.0),
+            child: GalleryAppBarWidget(
+              galleryType,
+              c.collection.displayName,
+              _selectedFiles,
+              collection: c.collection,
+              isFromCollectPhotos: isFromCollectPhotos,
+            ),
+          ),
+          bottomNavigationBar: isFromCollectPhotos
+              ? CollectPhotosBottomButtons(
+                  c.collection,
+                  selectedFiles: _selectedFiles,
+                )
+              : null,
+          body: SelectionState(
+            selectedFiles: _selectedFiles,
+            child: Stack(
+              alignment: Alignment.bottomCenter,
+              children: [
+                Builder(
+                  builder: (context) {
+                    return ValueListenableBuilder(
+                      valueListenable: InheritedSearchFilterData.of(context)
+                          .searchFilterDataProvider!
+                          .isSearchingNotifier,
+                      builder: (context, value, _) {
+                        return value
+                            ? HierarchicalSearchGallery(
+                                tagPrefix: tagPrefix,
+                                selectedFiles: _selectedFiles,
+                              )
+                            : gallery;
+                      },
+                    );
+                  },
+                ),
+                FileSelectionOverlayBar(
+                  galleryType,
+                  _selectedFiles,
+                  collection: c.collection,
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

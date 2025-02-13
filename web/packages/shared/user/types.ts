@@ -1,3 +1,6 @@
+/**
+ * A structure containing the key related attributes for a user.
+ */
 export interface KeyAttributes {
     kekSalt: string;
     encryptedKey: string;
@@ -7,10 +10,12 @@ export interface KeyAttributes {
     publicKey: string;
     encryptedSecretKey: string;
     secretKeyDecryptionNonce: string;
-    masterKeyEncryptedWithRecoveryKey: string;
-    masterKeyDecryptionNonce: string;
-    recoveryKeyEncryptedWithMasterKey: string;
-    recoveryKeyDecryptionNonce: string;
+    /** Doesn't change after being initially created. */
+    masterKeyEncryptedWithRecoveryKey?: string;
+    masterKeyDecryptionNonce?: string;
+    /** Doesn't change after being initially created. */
+    recoveryKeyEncryptedWithMasterKey?: string;
+    recoveryKeyDecryptionNonce?: string;
 }
 
 export interface User {

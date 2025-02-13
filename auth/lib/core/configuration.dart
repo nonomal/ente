@@ -13,10 +13,11 @@ import 'package:ente_auth/models/key_attributes.dart';
 import 'package:ente_auth/models/key_gen_result.dart';
 import 'package:ente_auth/models/private_key_attributes.dart';
 import 'package:ente_auth/store/authenticator_db.dart';
+import 'package:ente_auth/utils/directory_utils.dart';
+import 'package:ente_auth/utils/lock_screen_settings.dart';
 import 'package:ente_crypto_dart/ente_crypto_dart.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:logging/logging.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:tuple/tuple.dart';
@@ -55,7 +56,6 @@ class Configuration {
   static final _logger = Logger("Configuration");
 
   String? _cachedToken;
-  late String _documentsDirectory;
   late SharedPreferences _preferences;
   String? _key;
   String? _secretKey;
@@ -74,8 +74,7 @@ class Configuration {
     _preferences = await SharedPreferences.getInstance();
     sqfliteFfiInit();
     _secureStorage = const FlutterSecureStorage();
-    _documentsDirectory = (await getApplicationDocumentsDirectory()).path;
-    _tempDirectory = "$_documentsDirectory/temp/";
+    _tempDirectory = (await DirectoryUtils.getDirectoryForInit()).path;
     final tempDirectory = io.Directory(_tempDirectory);
     try {
       final currentTime = DateTime.now().microsecondsSinceEpoch;
@@ -140,6 +139,7 @@ class Configuration {
         iOptions: _secureStorageOptionsIOS,
       );
     }
+    await LockScreenSettings.instance.removePinAndPassword();
     await AuthenticatorDB.instance.clearTable();
     _key = null;
     _cachedToken = null;
@@ -283,9 +283,20 @@ class Configuration {
   Future<void> recover(String recoveryKey) async {
     // check if user has entered mnemonic code
     if (recoveryKey.contains(' ')) {
-      if (recoveryKey.split(' ').length != mnemonicKeyWordCount) {
+      final split = recoveryKey.split(' ');
+      if (split.length != mnemonicKeyWordCount) {
+        String wordThatIsFollowedByEmptySpaceInSplit = '';
+        for (int i = 0; i < split.length; i++) {
+          String word = split[i];
+          if (word.isEmpty) {
+            wordThatIsFollowedByEmptySpaceInSplit =
+                '\n\nExtra space after word at position $i';
+            break;
+          }
+        }
         throw AssertionError(
-          'recovery code should have $mnemonicKeyWordCount words',
+          '\nRecovery code should have $mnemonicKeyWordCount words, '
+          'found ${split.length} words instead.$wordThatIsFollowedByEmptySpaceInSplit',
         );
       }
       recoveryKey = bip39.mnemonicToEntropy(recoveryKey);
@@ -469,7 +480,13 @@ class Configuration {
     await _preferences.setBool(hasOptedForOfflineModeKey, true);
   }
 
-  bool shouldShowLockScreen() {
+  Future<bool> shouldShowLockScreen() async {
+    final bool isPin = await LockScreenSettings.instance.isPinSet();
+    final bool isPass = await LockScreenSettings.instance.isPasswordSet();
+    return isPin || isPass || shouldShowSystemLockScreen();
+  }
+
+  bool shouldShowSystemLockScreen() {
     if (_preferences.containsKey(keyShouldShowLockScreen)) {
       return _preferences.getBool(keyShouldShowLockScreen)!;
     } else {
@@ -477,7 +494,7 @@ class Configuration {
     }
   }
 
-  Future<void> setShouldShowLockScreen(bool value) {
+  Future<void> setSystemLockScreen(bool value) {
     return _preferences.setBool(keyShouldShowLockScreen, value);
   }
 

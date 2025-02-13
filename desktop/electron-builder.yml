@@ -6,6 +6,10 @@ files:
 extraFiles:
     - from: build
       to: resources
+beforeBuild: scripts/beforeBuild.js
+protocols:
+    - name: Ente
+      schemes: ["ente"]
 win:
     target:
         - target: nsis
@@ -23,9 +27,11 @@ linux:
         - target: pacman
           arch: [x64, arm64]
     category: Photography
+    icon: ./build/icon.icns
 mac:
     target:
         target: default
         arch: [universal]
     category: public.app-category.photography
     hardenedRuntime: true
+    mergeASARs: false

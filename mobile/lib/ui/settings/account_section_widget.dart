@@ -1,6 +1,8 @@
 import 'dart:async';
 
+import "package:flutter/foundation.dart";
 import 'package:flutter/material.dart';
+import "package:photos/emergency/emergency_page.dart";
 import "package:photos/generated/l10n.dart";
 import 'package:photos/services/local_authentication_service.dart';
 import 'package:photos/services/user_service.dart';
@@ -64,6 +66,7 @@ class AccountSectionWidget extends StatelessWidget {
             if (hasAuthenticated) {
               // ignore: unawaited_futures
               showDialog(
+                useRootNavigator: false,
                 context: context,
                 builder: (BuildContext context) {
                   return const ChangeEmailDialog();
@@ -137,6 +140,33 @@ class AccountSectionWidget extends StatelessWidget {
                   ),
                 ),
               );
+            }
+          },
+        ),
+        sectionOptionSpacing,
+        MenuItemWidget(
+          captionedTextWidget: CaptionedTextWidget(
+            title: S.of(context).legacy,
+          ),
+          pressedColor: getEnteColorScheme(context).fillFaint,
+          trailingIcon: Icons.chevron_right_outlined,
+          trailingIconIsMuted: true,
+          showOnlyLoadingState: true,
+          onTap: () async {
+            final hasAuthenticated = kDebugMode ||
+                await LocalAuthenticationService.instance
+                    .requestLocalAuthentication(
+                  context,
+                  S.of(context).authToManageLegacy,
+                );
+            if (hasAuthenticated) {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (BuildContext context) {
+                    return const EmergencyPage();
+                  },
+                ),
+              ).ignore();
             }
           },
         ),

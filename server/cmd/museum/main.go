@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	b64 "encoding/base64"
 	"fmt"
-	"github.com/ente-io/museum/pkg/controller/file_copy"
 	"net/http"
 	"os"
 	"os/signal"
@@ -14,6 +13,12 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/ente-io/museum/ente/base"
+	"github.com/ente-io/museum/pkg/controller/emergency"
+	"github.com/ente-io/museum/pkg/controller/file_copy"
+	"github.com/ente-io/museum/pkg/controller/filedata"
+	emergencyRepo "github.com/ente-io/museum/pkg/repo/emergency"
 
 	"github.com/ente-io/museum/pkg/repo/two_factor_recovery"
 
@@ -49,6 +54,7 @@ import (
 	castRepo "github.com/ente-io/museum/pkg/repo/cast"
 	"github.com/ente-io/museum/pkg/repo/datacleanup"
 	"github.com/ente-io/museum/pkg/repo/embedding"
+	fileDataRepo "github.com/ente-io/museum/pkg/repo/filedata"
 	"github.com/ente-io/museum/pkg/repo/kex"
 	"github.com/ente-io/museum/pkg/repo/passkey"
 	"github.com/ente-io/museum/pkg/repo/remotestore"
@@ -87,6 +93,11 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+
+	viper.SetDefault("apps.public-albums", "https://albums.ente.io")
+	viper.SetDefault("apps.accounts", "https://accounts.ente.io")
+	viper.SetDefault("apps.cast", "https://cast.ente.io")
+	viper.SetDefault("apps.family", "https://family.ente.io")
 
 	setupLogger(environment)
 	log.Infof("Booting up %s server with commit #%s", environment, os.Getenv("GIT_COMMIT"))
@@ -134,7 +145,6 @@ func main() {
 	}, []string{"method"})
 
 	s3Config := s3config.NewS3Config()
-
 	passkeysRepo, err := passkey.NewRepository(db)
 	if err != nil {
 		panic(err)
@@ -162,6 +172,7 @@ func main() {
 	fileRepo := &repo.FileRepository{DB: db, S3Config: s3Config, QueueRepo: queueRepo,
 		ObjectRepo: objectRepo, ObjectCleanupRepo: objectCleanupRepo,
 		ObjectCopiesRepo: objectCopiesRepo, UsageRepo: usageRepo}
+	fileDataRepo := &fileDataRepo.Repository{DB: db, ObjectCleanupRepo: objectCleanupRepo}
 	familyRepo := &repo.FamilyRepository{DB: db}
 	trashRepo := &repo.TrashRepository{DB: db, ObjectRepo: objectRepo, FileRepo: fileRepo, QueueRepo: queueRepo}
 	publicCollectionRepo := repo.NewPublicCollectionRepository(db, viper.GetString("apps.public-albums"))
@@ -186,12 +197,14 @@ func main() {
 	}
 
 	userCache := cache2.NewUserCache()
-	userCacheCtrl := &usercache.Controller{UserCache: userCache, FileRepo: fileRepo, StoreBonusRepo: storagBonusRepo}
+	userCacheCtrl := &usercache.Controller{UserCache: userCache, FileRepo: fileRepo,
+		UsageRepo: usageRepo, TrashRepo: trashRepo,
+		StoreBonusRepo: storagBonusRepo}
 	offerController := offer.NewOfferController(*userRepo, discordController, storagBonusRepo, userCacheCtrl)
 	plans := billing.GetPlans()
 	defaultPlan := billing.GetDefaultPlans(plans)
 	stripeClients := billing.GetStripeClients()
-	commonBillController := commonbilling.NewController(storagBonusRepo, userRepo, usageRepo)
+	commonBillController := commonbilling.NewController(emailNotificationCtrl, storagBonusRepo, userRepo, usageRepo, billingRepo)
 	appStoreController := controller.NewAppStoreController(defaultPlan,
 		billingRepo, fileRepo, userRepo, commonBillController)
 	remoteStoreController := &remoteStoreCtrl.Controller{Repo: remoteStoreRepository}
@@ -238,6 +251,9 @@ func main() {
 		FileRepo:         fileRepo,
 	}
 
+	accessCtrl := access.NewAccessController(collectionRepo, fileRepo)
+	fileDataCtrl := filedata.New(fileDataRepo, accessCtrl, objectCleanupController, s3Config, fileRepo, collectionRepo)
+
 	fileController := &controller.FileController{
 		FileRepo:              fileRepo,
 		ObjectRepo:            objectRepo,
@@ -247,6 +263,7 @@ func main() {
 		UsageCtrl:             usageController,
 		CollectionRepo:        collectionRepo,
 		TaskLockingRepo:       taskLockingRepo,
+		DiscordController:     discordController,
 		QueueRepo:             queueRepo,
 		ObjectCleanupCtrl:     objectCleanupController,
 		LockController:        lockController,
@@ -276,6 +293,7 @@ func main() {
 		BillingCtrl:   billingController,
 		UserRepo:      userRepo,
 		UserCacheCtrl: userCacheCtrl,
+		UsageRepo:     usageRepo,
 	}
 
 	publicCollectionCtrl := &controller.PublicCollectionController{
@@ -287,10 +305,9 @@ func main() {
 		JwtSecret:             jwtSecretBytes,
 	}
 
-	accessCtrl := access.NewAccessController(collectionRepo, fileRepo)
-
 	collectionController := &controller.CollectionController{
 		CollectionRepo:       collectionRepo,
+		EmailCtrl:            emailNotificationCtrl,
 		AccessCtrl:           accessCtrl,
 		PublicCollectionCtrl: publicCollectionCtrl,
 		UserRepo:             userRepo,
@@ -353,10 +370,18 @@ func main() {
 
 	p := ginprometheus.NewPrometheus("museum")
 	p.ReqCntURLLabelMappingFn = urlSanitizer
-	p.Use(server)
+	server.Use(p.HandlerFunc())
 
 	// note: the recover middleware must be in the last
-	server.Use(requestid.New(), middleware.Logger(urlSanitizer), cors(), gzip.Gzip(gzip.DefaultCompression), middleware.PanicRecover())
+
+	server.Use(requestid.New(
+		requestid.Config{
+			Generator: func() string {
+				return base.ServerReqID()
+			},
+		}),
+		middleware.Logger(urlSanitizer), cors(), cacheHeaders(),
+		gzip.Gzip(gzip.DefaultCompression), middleware.PanicRecover())
 
 	publicAPI := server.Group("/")
 	publicAPI.Use(rateLimiter.GlobalRateLimiter(), rateLimiter.APIRateLimitMiddleware(urlSanitizer))
@@ -401,6 +426,7 @@ func main() {
 	fileHandler := &api.FileHandler{
 		Controller:   fileController,
 		FileCopyCtrl: fileCopyCtrl,
+		FileDataCtrl: fileDataCtrl,
 	}
 	privateAPI.GET("/files/upload-urls", fileHandler.GetUploadURLs)
 	privateAPI.GET("/files/multipart-upload-urls", fileHandler.GetMultipartUploadURLs)
@@ -408,6 +434,15 @@ func main() {
 	privateAPI.GET("/files/download/v2/:fileID", fileHandler.Get)
 	privateAPI.GET("/files/preview/:fileID", fileHandler.GetThumbnail)
 	privateAPI.GET("/files/preview/v2/:fileID", fileHandler.GetThumbnail)
+
+	privateAPI.PUT("/files/data", fileHandler.PutFileData)
+	privateAPI.PUT("/files/video-data", fileHandler.PutVideoData)
+	privateAPI.POST("/files/data/status-diff", fileHandler.FileDataStatusDiff)
+	privateAPI.POST("/files/data/fetch", fileHandler.GetFilesData)
+	privateAPI.GET("/files/data/fetch", fileHandler.GetFileData)
+	privateAPI.GET("/files/data/preview-upload-url", fileHandler.GetPreviewUploadURL)
+	privateAPI.GET("/files/data/preview", fileHandler.GetPreviewURL)
+
 	privateAPI.POST("/files", fileHandler.CreateOrUpdate)
 	privateAPI.POST("/files/copy", fileHandler.CopyFiles)
 	privateAPI.PUT("/files/update", fileHandler.Update)
@@ -435,8 +470,16 @@ func main() {
 	privateAPI.POST("/trash/delete", trashHandler.Delete)
 	privateAPI.POST("/trash/empty", trashHandler.Empty)
 
+	emergencyCtrl := &emergency.Controller{
+		Repo:              &emergencyRepo.Repository{DB: db},
+		UserRepo:          userRepo,
+		UserCtrl:          userController,
+		PasskeyController: passkeyCtrl,
+		LockCtrl:          lockController,
+	}
 	userHandler := &api.UserHandler{
-		UserController: userController,
+		UserController:      userController,
+		EmergencyController: emergencyCtrl,
 	}
 	publicAPI.POST("/users/ott", userHandler.SendOTT)
 	publicAPI.POST("/users/verify-email", userHandler.VerifyEmail)
@@ -445,6 +488,7 @@ func main() {
 	publicAPI.POST("/users/two-factor/remove", userHandler.RemoveTwoFactor)
 	publicAPI.POST("/users/two-factor/passkeys/begin", userHandler.BeginPasskeyAuthenticationCeremony)
 	publicAPI.POST("/users/two-factor/passkeys/finish", userHandler.FinishPasskeyAuthenticationCeremony)
+	publicAPI.GET("/users/two-factor/passkeys/get-token", userHandler.GetTokenForPasskeySession)
 	privateAPI.GET("/users/two-factor/recovery-status", userHandler.GetTwoFactorRecoveryStatus)
 	privateAPI.POST("/users/two-factor/passkeys/configure-recovery", userHandler.ConfigurePasskeyRecovery)
 	privateAPI.GET("/users/two-factor/status", userHandler.GetTwoFactorStatus)
@@ -453,7 +497,6 @@ func main() {
 	privateAPI.POST("/users/two-factor/disable", userHandler.DisableTwoFactor)
 	privateAPI.PUT("/users/attributes", userHandler.SetAttributes)
 	privateAPI.PUT("/users/email-mfa", userHandler.UpdateEmailMFA)
-	privateAPI.PUT("/users/keys", userHandler.UpdateKeys)
 	privateAPI.POST("/users/srp/setup", userHandler.SetupSRP)
 	privateAPI.POST("/users/srp/complete", userHandler.CompleteSRPSetup)
 	privateAPI.POST("/users/srp/update", userHandler.UpdateSrpAndKeyAttributes)
@@ -462,16 +505,12 @@ func main() {
 	publicAPI.POST("/users/srp/create-session", userHandler.CreateSRPSession)
 	privateAPI.PUT("/users/recovery-key", userHandler.SetRecoveryKey)
 	privateAPI.GET("/users/public-key", userHandler.GetPublicKey)
-	privateAPI.GET("/users/feedback", userHandler.GetRoadmapURL)
-	privateAPI.GET("/users/roadmap", userHandler.GetRoadmapURL)
-	privateAPI.GET("/users/roadmap/v2", userHandler.GetRoadmapURLV2)
 	privateAPI.GET("/users/session-validity/v2", userHandler.GetSessionValidityV2)
 	privateAPI.POST("/users/event", userHandler.ReportEvent)
 	privateAPI.POST("/users/logout", userHandler.Logout)
 	privateAPI.GET("/users/payment-token", userHandler.GetPaymentToken)
 	privateAPI.GET("/users/families-token", userHandler.GetFamiliesToken)
 	privateAPI.GET("/users/accounts-token", userHandler.GetAccountsToken)
-	privateAPI.GET("/users/details", userHandler.GetDetails)
 	privateAPI.GET("/users/details/v2", userHandler.GetDetailsV2)
 	privateAPI.POST("/users/change-email", userHandler.ChangeEmail)
 	privateAPI.GET("/users/sessions", userHandler.GetActiveSessions)
@@ -487,7 +526,7 @@ func main() {
 	accountsJwtAuthAPI.GET("/passkeys", passkeysHandler.GetPasskeys)
 	accountsJwtAuthAPI.PATCH("/passkeys/:passkeyID", passkeysHandler.RenamePasskey)
 	accountsJwtAuthAPI.DELETE("/passkeys/:passkeyID", passkeysHandler.DeletePasskey)
-	accountsJwtAuthAPI.GET("/passkeys/registration/begin", passkeysHandler.BeginRegistration)
+	accountsJwtAuthAPI.POST("/passkeys/registration/begin", passkeysHandler.BeginRegistration)
 	accountsJwtAuthAPI.POST("/passkeys/registration/finish", passkeysHandler.FinishRegistration)
 
 	collectionHandler := &api.CollectionHandler{
@@ -499,6 +538,7 @@ func main() {
 	privateAPI.GET("/collections", collectionHandler.Get)
 	privateAPI.GET("/collections/v2", collectionHandler.GetV2)
 	privateAPI.POST("/collections/share", collectionHandler.Share)
+	privateAPI.POST("/collections/join-link", collectionHandler.JoinLink)
 	privateAPI.POST("/collections/share-url", collectionHandler.ShareURL)
 	privateAPI.PUT("/collections/share-url", collectionHandler.UpdateShareURL)
 	privateAPI.DELETE("/collections/share-url/:collectionID", collectionHandler.UnShareURL)
@@ -547,10 +587,21 @@ func main() {
 		Ctrl:           castCtrl,
 	}
 
+	publicAPI.POST("/cast/device-info", castHandler.RegisterDevice)
+	// Deprecated Nov 2024. Remove in a few months.
+	//
+	// This (and below) are deprecated copy of endpoints with a trailing slash.
+	// Kept around because existing desktop clients will not follow the 307
+	// redirect because of CORS headers missing on the 307. Can be safely
+	// removed in a few months after the desktop apps have updated.
 	publicAPI.POST("/cast/device-info/", castHandler.RegisterDevice)
 	privateAPI.GET("/cast/device-info/:deviceCode", castHandler.GetDeviceInfo)
 	publicAPI.GET("/cast/cast-data/:deviceCode", castHandler.GetCastData)
+	privateAPI.POST("/cast/cast-data", castHandler.InsertCastData)
+	// Deprecated Nov 2024. Remove in a few months.
 	privateAPI.POST("/cast/cast-data/", castHandler.InsertCastData)
+	privateAPI.DELETE("/cast/revoke-all-tokens", castHandler.RevokeAllToken)
+	// Deprecated Nov 2024. Remove in a few months.
 	privateAPI.DELETE("/cast/revoke-all-tokens/", castHandler.RevokeAllToken)
 
 	castAPI.GET("/files/preview/:fileID", castHandler.GetThumbnail)
@@ -571,7 +622,22 @@ func main() {
 	familiesJwtAuthAPI.GET("/family/members", familyHandler.FetchMembers)
 	familiesJwtAuthAPI.DELETE("/family/remove-member/:id", familyHandler.RemoveMember)
 	familiesJwtAuthAPI.DELETE("/family/revoke-invite/:id", familyHandler.RevokeInvite)
+	familiesJwtAuthAPI.POST("/family/modify-storage", familyHandler.ModifyStorageLimit)
 
+	emergencyHandler := &api.EmergencyHandler{
+		Controller: emergencyCtrl,
+	}
+
+	privateAPI.POST("/emergency-contacts/add", emergencyHandler.AddContact)
+	privateAPI.GET("/emergency-contacts/info", emergencyHandler.GetInfo)
+	privateAPI.POST("/emergency-contacts/update", emergencyHandler.UpdateContact)
+	privateAPI.POST("/emergency-contacts/start-recovery", emergencyHandler.StartRecovery)
+	privateAPI.POST("/emergency-contacts/stop-recovery", emergencyHandler.StopRecovery)
+	privateAPI.POST("/emergency-contacts/reject-recovery", emergencyHandler.RejectRecovery)
+	privateAPI.POST("/emergency-contacts/approve-recovery", emergencyHandler.ApproveRecovery)
+	privateAPI.GET("/emergency-contacts/recovery-info/:id", emergencyHandler.GetRecoveryInfo)
+	privateAPI.POST("/emergency-contacts/init-change-password", emergencyHandler.InitChangePassword)
+	privateAPI.POST("/emergency-contacts/change-password", emergencyHandler.ChangePassword)
 	billingHandler := &api.BillingHandler{
 		Controller:          billingController,
 		AppStoreController:  appStoreController,
@@ -600,6 +666,7 @@ func main() {
 	}
 
 	privateAPI.GET("/storage-bonus/details", storageBonusHandler.GetStorageBonusDetails)
+	privateAPI.POST("/storage-bonus/change-code", storageBonusHandler.UpdateReferralCode)
 	privateAPI.GET("/storage-bonus/referral-view", storageBonusHandler.GetReferralView)
 	privateAPI.POST("/storage-bonus/referral-claim", storageBonusHandler.ClaimReferral)
 
@@ -607,9 +674,11 @@ func main() {
 		QueueRepo:               queueRepo,
 		UserRepo:                userRepo,
 		CollectionRepo:          collectionRepo,
+		AuthenticatorRepo:       authRepo,
 		UserAuthRepo:            userAuthRepo,
 		UserController:          userController,
 		FamilyController:        familyController,
+		EmergencyController:     emergencyCtrl,
 		RemoteStoreController:   remoteStoreController,
 		FileRepo:                fileRepo,
 		StorageBonusRepo:        storagBonusRepo,
@@ -620,6 +689,7 @@ func main() {
 		DiscordController:       discordController,
 		HashingKey:              hashingKeyBytes,
 		PasskeyController:       passkeyCtrl,
+		StorageBonusCtl:         storageBonusCtrl,
 	}
 	adminAPI.POST("/mail", adminHandler.SendMail)
 	adminAPI.POST("/mail/subscribe", adminHandler.SubscribeMail)
@@ -627,7 +697,11 @@ func main() {
 	adminAPI.GET("/users", adminHandler.GetUsers)
 	adminAPI.GET("/user", adminHandler.GetUser)
 	adminAPI.POST("/user/disable-2fa", adminHandler.DisableTwoFactor)
+	adminAPI.POST("/user/update-referral", adminHandler.UpdateReferral)
 	adminAPI.POST("/user/disable-passkeys", adminHandler.RemovePasskeys)
+	adminAPI.POST("/user/update-email-mfa", adminHandler.UpdateEmailMFA)
+	adminAPI.POST("/user/add-ott", adminHandler.AddOtt)
+	adminAPI.POST("/user/terminate-session", adminHandler.TerminateSession)
 	adminAPI.POST("/user/close-family", adminHandler.CloseFamily)
 	adminAPI.PUT("/user/change-email", adminHandler.ChangeEmail)
 	adminAPI.DELETE("/user/delete", adminHandler.DeleteUser)
@@ -637,7 +711,7 @@ func main() {
 	adminAPI.POST("/emails-from-hashes", adminHandler.GetEmailsFromHashes)
 	adminAPI.PUT("/user/subscription", adminHandler.UpdateSubscription)
 	adminAPI.POST("/queue/re-queue", adminHandler.ReQueueItem)
-	adminAPI.POST("/user/bf-2013", adminHandler.UpdateBFDeal)
+	adminAPI.POST("/user/bonus", adminHandler.UpdateBonus)
 	adminAPI.POST("/job/clear-orphan-objects", adminHandler.ClearOrphanObjects)
 
 	userEntityController := &userEntityCtrl.Controller{Repo: userEntityRepo}
@@ -683,6 +757,7 @@ func main() {
 
 	privateAPI.PUT("/embeddings", embeddingHandler.InsertOrUpdate)
 	privateAPI.GET("/embeddings/diff", embeddingHandler.GetDiff)
+	privateAPI.GET("/embeddings/indexed-files", embeddingHandler.GetIndexedFiles)
 	privateAPI.POST("/embeddings/files", embeddingHandler.GetFilesEmbedding)
 	privateAPI.DELETE("/embeddings", embeddingHandler.DeleteAll)
 
@@ -690,10 +765,10 @@ func main() {
 	publicAPI.GET("/offers/black-friday", offerHandler.GetBlackFridayOffers)
 
 	setKnownAPIs(server.Routes())
-	setupAndStartBackgroundJobs(objectCleanupController, replicationController3)
+	setupAndStartBackgroundJobs(objectCleanupController, replicationController3, fileDataCtrl)
 	setupAndStartCrons(
 		userAuthRepo, publicCollectionRepo, twoFactorRepo, passkeysRepo, fileController, taskLockingRepo, emailNotificationCtrl,
-		trashController, pushController, objectController, dataCleanupController, storageBonusCtrl,
+		trashController, pushController, objectController, dataCleanupController, storageBonusCtrl, emergencyCtrl,
 		embeddingController, healthCheckHandler, kexCtrl, castDb)
 
 	// Create a new collector, the name will be used as a label on the metrics
@@ -800,6 +875,7 @@ func setupDatabase() *sql.DB {
 func setupAndStartBackgroundJobs(
 	objectCleanupController *controller.ObjectCleanupController,
 	replicationController3 *controller.ReplicationController3,
+	fileDataCtrl *filedata.Controller,
 ) {
 	isReplicationEnabled := viper.GetBool("replication.enabled")
 	if isReplicationEnabled {
@@ -807,10 +883,15 @@ func setupAndStartBackgroundJobs(
 		if err != nil {
 			log.Warnf("Could not start replication v3: %s", err)
 		}
+		err = fileDataCtrl.StartReplication()
+		if err != nil {
+			log.Warnf("Could not start fileData replication: %s", err)
+		}
 	} else {
 		log.Info("Skipping Replication as replication is disabled")
 	}
 
+	fileDataCtrl.StartDataDeletion() // Start data deletion for file data;
 	objectCleanupController.StartRemovingUnreportedObjects()
 	objectCleanupController.StartClearingOrphanObjects()
 }
@@ -822,6 +903,7 @@ func setupAndStartCrons(userAuthRepo *repo.UserAuthRepository, publicCollectionR
 	objectController *controller.ObjectController,
 	dataCleanupCtrl *dataCleanupCtrl.DeleteUserCleanupController,
 	storageBonusCtrl *storagebonus.Controller,
+	emergencyCtrl *emergency.Controller,
 	embeddingCtrl *embeddingCtrl.Controller,
 	healthCheckHandler *api.HealthCheckHandler,
 	kexCtrl *kexCtrl.Controller,
@@ -863,14 +945,14 @@ func setupAndStartCrons(userAuthRepo *repo.UserAuthRepository, publicCollectionR
 		}
 	})
 
-	schedule(c, "@every 2m", func() {
+	schedule(c, "@every 8m", func() {
 		fileController.CleanupDeletedFiles()
 	})
 	schedule(c, "@every 101s", func() {
 		embeddingCtrl.CleanupDeletedEmbeddings()
 	})
 
-	schedule(c, "@every 10m", func() {
+	schedule(c, "@every 17m", func() {
 		trashController.DropFileMetadataCron()
 	})
 
@@ -896,7 +978,7 @@ func setupAndStartCrons(userAuthRepo *repo.UserAuthRepository, publicCollectionR
 		trashController.ProcessEmptyTrashRequests()
 	})
 
-	schedule(c, "@every 30m", func() {
+	schedule(c, "@every 45m", func() {
 		// delete unclaimed codes older than 60 minutes
 		_ = castDb.DeleteUnclaimedCodes(context.Background(), timeUtil.MicrosecondsBeforeMinutes(60))
 		dataCleanupCtrl.DeleteDataCron()
@@ -915,6 +997,7 @@ func setupAndStartCrons(userAuthRepo *repo.UserAuthRepository, publicCollectionR
 	})
 
 	scheduleAndRun(c, "@every 60m", func() {
+		emergencyCtrl.SendRecoveryReminder()
 		kexCtrl.DeleteOldKeys()
 	})
 
@@ -931,9 +1014,32 @@ func cors() gin.HandlerFunc {
 		c.Writer.Header().Set("Access-Control-Max-Age", "1728000")
 
 		if c.Request.Method == http.MethodOptions {
-			c.AbortWithStatus(http.StatusNoContent)
+			// While 204 No Content is more appropriate, Safari intermittently
+			// (intermittently!) fails CORS if we return 204 instead of 200 OK.
+			c.Status(http.StatusOK)
 			return
 		}
+		c.Next()
+	}
+}
+
+func cacheHeaders() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Add "Cache-Control: no-store" to HTTP GET API responses.
+		if c.Request.Method == http.MethodGet {
+			reqPath := urlSanitizer(c)
+			if strings.HasPrefix(reqPath, "/files/preview/") ||
+				strings.HasPrefix(reqPath, "/files/download/") ||
+				strings.HasPrefix(reqPath, "/public-collection/files/preview/") ||
+				strings.HasPrefix(reqPath, "/public-collection/files/download/") ||
+				strings.HasPrefix(reqPath, "/cast/files/preview/") ||
+				strings.HasPrefix(reqPath, "/cast/files/download/") {
+				// Exclude those that redirect to S3 for file downloads.
+			} else {
+				c.Writer.Header().Set("Cache-Control", "no-store")
+			}
+		}
+
 		c.Next()
 	}
 }

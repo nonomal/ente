@@ -74,6 +74,7 @@ class _DeviceFolderVerticalGridViewBodyState
 
   @override
   void initState() {
+    super.initState();
     _backupFoldersUpdatedEvent =
         Bus.instance.on<BackupFoldersUpdatedEvent>().listen((event) {
       _loadReason = event.reason;
@@ -90,7 +91,6 @@ class _DeviceFolderVerticalGridViewBodyState
         }
       });
     });
-    super.initState();
   }
 
   @override
@@ -158,7 +158,7 @@ class _DeviceFolderVerticalGridViewBodyState
   void dispose() {
     _backupFoldersUpdatedEvent?.cancel();
     _localFilesSubscription?.cancel();
-    _debouncer.cancelDebounce();
+    _debouncer.cancelDebounceTimer();
     super.dispose();
   }
 }

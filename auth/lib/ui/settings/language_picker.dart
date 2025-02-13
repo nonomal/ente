@@ -124,8 +124,18 @@ class _ItemsWidgetState extends State<ItemsWidget> {
 
   String _getLanguageName(Locale locale) {
     switch (locale.languageCode) {
+      case 'ar':
+        return 'العربية';
+      case 'ca':
+        return 'Català';
+      case 'cs':
+        return 'Čeština';
       case 'en':
         return 'English';
+      case 'bg':
+        return 'Български';
+      case 'el':
+        return 'Ελληνικά';
       case 'es':
         switch (locale.countryCode) {
           case 'ES':
@@ -137,8 +147,14 @@ class _ItemsWidgetState extends State<ItemsWidget> {
         return 'Français';
       case 'de':
         return 'Deutsch';
+      case 'hu':
+        return 'Magyar';
+      case 'id':
+        return 'Bahasa Indonesia';
       case 'it':
         return 'Italiano';
+      case 'lt':
+        return 'Lietuvių';
       case 'nl':
         return 'Nederlands';
       case 'pl':
@@ -152,8 +168,16 @@ class _ItemsWidgetState extends State<ItemsWidget> {
         }
       case 'ru':
         return 'Русский';
+      case 'sl':
+        return 'Slovenščina';
+      case 'sk':
+        return 'Slovenčina';
       case 'tr':
         return 'Türkçe';
+      case 'uk':
+        return 'Українська';
+      case 'vi':
+        return 'Tiếng Việt';
       case 'fi':
         return 'Suomi';
       case 'zh':
@@ -169,8 +193,6 @@ class _ItemsWidgetState extends State<ItemsWidget> {
         return '日本語';
       case 'ko':
         return '한국어';
-      case 'ar':
-        return 'العربية';
       case 'fa':
         return 'فارسی';
       default:

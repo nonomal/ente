@@ -1,130 +1,164 @@
 import "package:flutter/material.dart";
 import "package:photos/generated/l10n.dart";
 import 'package:photos/models/collection/collection.dart';
-import 'package:photos/models/collection/collection_items.dart';
 import 'package:photos/models/file/file.dart';
 import "package:photos/services/collections_service.dart";
-import "package:photos/theme/colors.dart";
 import "package:photos/theme/ente_theme.dart";
 import "package:photos/ui/common/loading_widget.dart";
+import "package:photos/ui/components/buttons/icon_button_widget.dart";
 import "package:photos/ui/viewer/file/no_thumbnail_widget.dart";
 import "package:photos/ui/viewer/file/thumbnail_widget.dart";
-import "package:photos/ui/viewer/gallery/collection_page.dart";
-import "package:photos/utils/navigation_util.dart";
 
 class QuickLinkAlbumItem extends StatelessWidget {
   final Collection c;
   static const heroTagPrefix = "outgoing_collection";
+  final List<Collection> selectedQuickLinks;
 
-  const QuickLinkAlbumItem({super.key, required this.c});
+  const QuickLinkAlbumItem({
+    super.key,
+    required this.c,
+    this.selectedQuickLinks = const [],
+  });
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        child: Row(
-          children: <Widget>[
-            ClipRRect(
-              borderRadius: BorderRadius.circular(1),
-              child: SizedBox(
-                height: 60,
-                width: 60,
-                child: FutureBuilder<EnteFile?>(
-                  future: CollectionsService.instance.getCover(c),
-                  builder: (context, snapshot) {
-                    if (snapshot.hasData) {
-                      final String heroTag = heroTagPrefix + snapshot.data!.tag;
-                      return Hero(
-                        tag: heroTag,
-                        child: ThumbnailWidget(
-                          snapshot.data!,
-                          key: ValueKey(heroTag),
-                        ),
-                      );
-                    } else {
-                      return const NoThumbnailWidget();
-                    }
-                  },
-                ),
-              ),
-            ),
-            const Padding(padding: EdgeInsets.all(8)),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    c.displayName,
-                    style: getEnteTextTheme(context).body,
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(0, 4, 0, 0),
-                    child: FutureBuilder<int>(
-                      future: CollectionsService.instance.getFileCount(c),
-                      builder: (context, snapshot) {
-                        if (!snapshot.hasError) {
-                          // final String textCount = NumberFormat().format(snapshot.data);
-                          return Row(
-                            children: [
-                              (!snapshot.hasData)
-                                  ? const Padding(
-                                      padding: EdgeInsets.symmetric(
-                                        horizontal: 16.0,
-                                      ),
-                                      child: EnteLoadingWidget(size: 10),
-                                    )
-                                  : Padding(
-                                      padding:
-                                          const EdgeInsets.only(right: 8.0),
-                                      child: Text(
-                                        S.of(context).itemCount(snapshot.data!),
-                                        style: getEnteTextTheme(context)
-                                            .smallMuted,
-                                      ),
-                                    ),
-                              const SizedBox(width: 6),
-                              c.hasLink
-                                  ? (c.publicURLs!.first!.isExpired
-                                      ? const Icon(
-                                          Icons.link_outlined,
-                                          color: warning500,
-                                        )
-                                      : Icon(
-                                          Icons.link_outlined,
-                                          color: getEnteColorScheme(context)
-                                              .strokeMuted,
-                                        ))
-                                  : const SizedBox.shrink(),
-                            ],
-                          );
-                        } else if (snapshot.hasError) {
-                          return Text(S.of(context).somethingWentWrong);
-                        } else {
-                          return const EnteLoadingWidget(size: 10);
-                        }
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+    final bool isSelected = selectedQuickLinks.contains(c);
+    final colorScheme = getEnteColorScheme(context);
+    final textTheme = getEnteTextTheme(context);
+
+    return AnimatedContainer(
+      curve: Curves.easeOut,
+      duration: const Duration(milliseconds: 200),
+      decoration: BoxDecoration(
+        border: Border.all(
+          color:
+              isSelected ? colorScheme.strokeMuted : colorScheme.strokeFainter,
+        ),
+        borderRadius: const BorderRadius.all(
+          Radius.circular(2),
         ),
       ),
-      onTap: () async {
-        final thumbnail = await CollectionsService.instance.getCover(c);
-        final page = CollectionPage(
-          CollectionWithThumbnail(
-            c,
-            thumbnail,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Flexible(
+            flex: 6,
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 60,
+                  height: 60,
+                  child: FutureBuilder<EnteFile?>(
+                    future: CollectionsService.instance.getCover(c),
+                    builder: (context, snapshot) {
+                      if (snapshot.hasData) {
+                        final String heroTag =
+                            heroTagPrefix + snapshot.data!.tag;
+                        return Hero(
+                          tag: heroTag,
+                          child: ClipRRect(
+                            borderRadius: const BorderRadius.horizontal(
+                              left: Radius.circular(2),
+                            ),
+                            child: ThumbnailWidget(
+                              snapshot.data!,
+                              key: ValueKey(heroTag),
+                            ),
+                          ),
+                        );
+                      } else {
+                        return const NoThumbnailWidget();
+                      }
+                    },
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Flexible(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          c.displayName,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(
+                          height: 2,
+                        ),
+                        FutureBuilder<int>(
+                          future: CollectionsService.instance.getFileCount(c),
+                          builder: (context, snapshot) {
+                            if (!snapshot.hasError) {
+                              if (!snapshot.hasData) {
+                                return Row(
+                                  children: [
+                                    EnteLoadingWidget(
+                                      size: 10,
+                                      color: colorScheme.strokeMuted,
+                                    ),
+                                  ],
+                                );
+                              }
+                              final noOfMemories = snapshot.data;
+
+                              return Row(
+                                children: [
+                                  Text(
+                                    noOfMemories.toString() + "  \u2022  ",
+                                    style: textTheme.smallMuted,
+                                  ),
+                                  c.hasLink
+                                      ? (c.publicURLs.first.isExpired
+                                          ? Icon(
+                                              Icons.link_outlined,
+                                              color: colorScheme.warning500,
+                                              size: 22,
+                                            )
+                                          : Icon(
+                                              Icons.link_outlined,
+                                              color: colorScheme.strokeMuted,
+                                              size: 22,
+                                            ))
+                                      : const SizedBox.shrink(),
+                                ],
+                              );
+                            } else if (snapshot.hasError) {
+                              return Text(S.of(context).somethingWentWrong);
+                            } else {
+                              return const EnteLoadingWidget(size: 10);
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
-          tagPrefix: heroTagPrefix,
-        );
-        // ignore: unawaited_futures
-        routeToPage(context, page);
-      },
+          Flexible(
+            flex: 1,
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              switchInCurve: Curves.easeOut,
+              switchOutCurve: Curves.easeIn,
+              child: isSelected
+                  ? IconButtonWidget(
+                      key: const ValueKey("selected"),
+                      icon: Icons.check_circle_rounded,
+                      iconButtonType: IconButtonType.secondary,
+                      iconColor: colorScheme.blurStrokeBase,
+                    )
+                  : const IconButtonWidget(
+                      key: ValueKey("unselected"),
+                      icon: Icons.chevron_right_outlined,
+                      iconButtonType: IconButtonType.secondary,
+                    ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

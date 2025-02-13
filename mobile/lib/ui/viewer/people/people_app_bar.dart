@@ -1,23 +1,30 @@
 import 'dart:async';
 
-import "package:flutter/cupertino.dart";
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
 import 'package:photos/core/configuration.dart';
+import "package:photos/core/constants.dart";
 import 'package:photos/core/event_bus.dart';
 import "package:photos/events/people_changed_event.dart";
 import 'package:photos/events/subscription_purchased_event.dart';
-import "package:photos/face/model/person.dart";
 import "package:photos/generated/l10n.dart";
+import "package:photos/l10n/l10n.dart";
 import "package:photos/models/file/file.dart";
 import 'package:photos/models/gallery_type.dart';
+import "package:photos/models/ml/face/person.dart";
 import 'package:photos/models/selected_files.dart';
 import 'package:photos/services/collections_service.dart';
 import "package:photos/services/machine_learning/face_ml/person/person_service.dart";
+import "package:photos/theme/ente_theme.dart";
 import 'package:photos/ui/actions/collection/collection_sharing_actions.dart';
+import "package:photos/ui/viewer/gallery/state/inherited_search_filter_data.dart";
+import "package:photos/ui/viewer/hierarchicial_search/applied_filters_for_appbar.dart";
+import "package:photos/ui/viewer/hierarchicial_search/recommended_filters_for_appbar.dart";
 import "package:photos/ui/viewer/people/add_person_action_sheet.dart";
 import "package:photos/ui/viewer/people/people_page.dart";
 import "package:photos/ui/viewer/people/person_cluster_suggestion.dart";
+import "package:photos/ui/viewer/people/person_selection_action_widgets.dart";
+import "package:photos/ui/viewer/people/save_or_edit_person.dart";
 import "package:photos/utils/dialog_util.dart";
 import "package:photos/utils/navigation_util.dart";
 
@@ -34,8 +41,8 @@ class PeopleAppBar extends StatefulWidget {
     this.title,
     this.selectedFiles,
     this.person, {
-    Key? key,
-  }) : super(key: key);
+    super.key,
+  });
 
   @override
   State<PeopleAppBar> createState() => _AppBarWidgetState();
@@ -47,6 +54,7 @@ enum PeoplePopupAction {
   removeLabel,
   reviewSuggestions,
   unignore,
+  reassignMe,
 }
 
 class _AppBarWidgetState extends State<PeopleAppBar> {
@@ -58,81 +66,151 @@ class _AppBarWidgetState extends State<PeopleAppBar> {
   final GlobalKey shareButtonKey = GlobalKey();
   bool isQuickLink = false;
   late GalleryType galleryType;
+  late PersonEntity person;
+  late StreamSubscription<PeopleChangedEvent> _peopleChangedEventSubscription;
 
   @override
   void initState() {
     super.initState();
+    person = widget.person;
+    galleryType = widget.type;
+    collectionActions = CollectionActions(CollectionsService.instance);
     _selectedFilesListener = () {
       setState(() {});
     };
-    collectionActions = CollectionActions(CollectionsService.instance);
+
     widget.selectedFiles.addListener(_selectedFilesListener);
-    _userAuthEventSubscription = Bus.instance.on<SubscriptionPurchasedEvent>().listen((event) {
+    _userAuthEventSubscription =
+        Bus.instance.on<SubscriptionPurchasedEvent>().listen((event) {
       setState(() {});
     });
-    _appBarTitle = widget.title;
-    galleryType = widget.type;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      setState(() {
+        if (person.data.email == Configuration.instance.getEmail()) {
+          // Don't know of any case where this will be null but just being safe
+          if (widget.title == null) {
+            _appBarTitle = "Me";
+          } else {
+            _appBarTitle =
+                context.l10n.accountOwnerPersonAppbarTitle(widget.title!);
+          }
+        } else {
+          _appBarTitle = widget.title;
+        }
+
+        _peopleChangedEventSubscription =
+            Bus.instance.on<PeopleChangedEvent>().listen(
+          (event) {
+            if (event.person != null &&
+                event.type == PeopleEventType.saveOrEditPerson &&
+                widget.person.remoteID == event.person!.remoteID &&
+                (event.source == "linkEmailToPerson" ||
+                    event.source == "reassignMe")) {
+              person = event.person!;
+
+              if (person.data.email == Configuration.instance.getEmail()) {
+                _appBarTitle = context.l10n.accountOwnerPersonAppbarTitle(
+                  person.data.name,
+                );
+              } else {
+                _appBarTitle = person.data.name;
+              }
+              setState(() {});
+            }
+          },
+        );
+      });
+    });
   }
 
   @override
   void dispose() {
     _userAuthEventSubscription.cancel();
     widget.selectedFiles.removeListener(_selectedFilesListener);
+    _peopleChangedEventSubscription.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return AppBar(
-      elevation: 0,
-      centerTitle: false,
-      title: Text(
-        _appBarTitle!,
-        style: Theme.of(context).textTheme.headlineSmall!.copyWith(fontSize: 16),
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-      ),
-      actions: _getDefaultActions(context),
-    );
+    final inheritedSearchFilterData =
+        InheritedSearchFilterData.maybeOf(context);
+    final isHierarchicalSearchable =
+        inheritedSearchFilterData?.isHierarchicalSearchable ?? false;
+    return isHierarchicalSearchable
+        ? ValueListenableBuilder(
+            valueListenable: inheritedSearchFilterData!
+                .searchFilterDataProvider!.isSearchingNotifier,
+            child: const PreferredSize(
+              preferredSize: Size.fromHeight(0),
+              child: Flexible(child: RecommendedFiltersForAppbar()),
+            ),
+            builder: (context, isSearching, child) {
+              return AppBar(
+                elevation: 0,
+                centerTitle: false,
+                title: isSearching
+                    ? const SizedBox(
+                        // +1 to account for the filter's outer stroke width
+                        height: kFilterChipHeight + 1,
+                        child: AppliedFiltersForAppbar(),
+                      )
+                    : Text(
+                        _appBarTitle ?? "",
+                        style: Theme.of(context)
+                            .textTheme
+                            .headlineSmall!
+                            .copyWith(fontSize: 16),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                bottom: child as PreferredSizeWidget,
+                actions: isSearching ? null : _getDefaultActions(context),
+                surfaceTintColor: Colors.transparent,
+                scrolledUnderElevation: 4,
+                shadowColor: Colors.black.withOpacity(0.15),
+              );
+            },
+          )
+        : AppBar(
+            elevation: 0,
+            centerTitle: false,
+            title: Text(
+              _appBarTitle ?? "",
+              style: Theme.of(context)
+                  .textTheme
+                  .headlineSmall!
+                  .copyWith(fontSize: 16),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            actions: _getDefaultActions(context),
+          );
   }
 
-  Future<dynamic> _renamePerson(BuildContext context) async {
-    final result = await showTextInputDialog(
+  Future<dynamic> _editPerson(BuildContext context) async {
+    final result = await routeToPage(
       context,
-      title: S.of(context).rename,
-      submitButtonLabel: S.of(context).done,
-      hintText: S.of(context).enterPersonName,
-      alwaysShowSuccessState: true,
-      initialValue: widget.person.data.name,
-      textCapitalization: TextCapitalization.words,
-      onSubmit: (String text) async {
-        // indicates user cancelled the rename request
-        if (text == "" || text == _appBarTitle!) {
-          return;
-        }
-
-        try {
-          await PersonService.instance.updateAttributes(widget.person.remoteID, name: text);
-          if (mounted) {
-            _appBarTitle = text;
-            setState(() {});
-          }
-          Bus.instance.fire(PeopleChangedEvent());
-        } catch (e, s) {
-          _logger.severe("Failed to rename album", e, s);
-          rethrow;
-        }
-      },
+      SaveOrEditPerson(
+        person.data.assigned.first.id,
+        person: person,
+        isEditing: true,
+      ),
     );
-    if (result is Exception) {
-      await showGenericErrorDialog(context: context, error: result);
+    if (result is PersonEntity) {
+      _appBarTitle = result.data.name;
+      person = result;
+      setState(() {});
     }
   }
 
   List<Widget> _getDefaultActions(BuildContext context) {
+    final textTheme = getEnteTextTheme(context);
     final List<Widget> actions = <Widget>[];
     // If the user has selected files, don't show any actions
-    if (widget.selectedFiles.files.isNotEmpty || !Configuration.instance.hasConfiguredAccount()) {
+    if (widget.selectedFiles.files.isNotEmpty ||
+        !Configuration.instance.hasConfiguredAccount()) {
       return actions;
     }
 
@@ -149,61 +227,74 @@ class _AppBarWidgetState extends State<PeopleAppBar> {
                 const Padding(
                   padding: EdgeInsets.all(8),
                 ),
-                Text(S.of(context).rename),
+                Text(
+                  S.of(context).edit,
+                  style: textTheme.bodyBold,
+                ),
               ],
             ),
           ),
-          // PopupMenuItem(
-          //   value: PeoplPopupAction.setCover,
-          //   child: Row(
-          //     children: [
-          //       const Icon(Icons.image_outlined),
-          //       const Padding(
-          //         padding: EdgeInsets.all(8),
-          //       ),
-          //       Text(S.of(context).setCover),
-          //     ],
-          //   ),
-          // ),
-
+          PopupMenuItem(
+            value: PeoplePopupAction.reviewSuggestions,
+            child: Row(
+              children: [
+                const Icon(Icons.search_outlined),
+                const Padding(
+                  padding: EdgeInsets.all(8),
+                ),
+                Text(
+                  S.of(context).review,
+                  style: textTheme.bodyBold,
+                ),
+              ],
+            ),
+          ),
           PopupMenuItem(
             value: PeoplePopupAction.removeLabel,
             child: Row(
               children: [
-                const Icon(Icons.remove_circle_outline),
+                const Icon(Icons.delete_outline),
                 const Padding(
                   padding: EdgeInsets.all(8),
                 ),
-                Text(S.of(context).removePersonLabel),
-              ],
-            ),
-          ),
-          const PopupMenuItem(
-            value: PeoplePopupAction.reviewSuggestions,
-            child: Row(
-              children: [
-                Icon(CupertinoIcons.square_stack_3d_down_right),
-                Padding(
-                  padding: EdgeInsets.all(8),
+                Text(
+                  S.of(context).remove,
+                  style: textTheme.bodyBold,
                 ),
-                Text('Review suggestions'),
               ],
             ),
           ),
+          if (widget.person.data.email != null &&
+              (widget.person.data.email == Configuration.instance.getEmail()))
+            PopupMenuItem(
+              value: PeoplePopupAction.reassignMe,
+              child: Row(
+                children: [
+                  const Icon(Icons.delete_outline),
+                  const Padding(
+                    padding: EdgeInsets.all(8),
+                  ),
+                  Text(
+                    context.l10n.reassignMe,
+                    style: textTheme.bodyBold,
+                  ),
+                ],
+              ),
+            ),
         ],
       );
     } else {
       items.addAll(
         [
-          const PopupMenuItem(
+          PopupMenuItem(
             value: PeoplePopupAction.unignore,
             child: Row(
               children: [
-                Icon(Icons.visibility_outlined),
-                Padding(
+                const Icon(Icons.visibility_outlined),
+                const Padding(
                   padding: EdgeInsets.all(8),
                 ),
-                Text("Show person"),
+                Text(S.of(context).showPerson),
               ],
             ),
           ),
@@ -223,18 +314,20 @@ class _AppBarWidgetState extends State<PeopleAppBar> {
               unawaited(
                 Navigator.of(context).push(
                   MaterialPageRoute(
-                    builder: (context) => PersonReviewClusterSuggestion(widget.person),
+                    builder: (context) => PersonReviewClusterSuggestion(person),
                   ),
                 ),
               );
             } else if (value == PeoplePopupAction.rename) {
-              await _renamePerson(context);
+              await _editPerson(context);
             } else if (value == PeoplePopupAction.setCover) {
               await setCoverPhoto(context);
             } else if (value == PeoplePopupAction.unignore) {
               await _showPerson(context);
             } else if (value == PeoplePopupAction.removeLabel) {
-              await _removePersonLabel(context);
+              await _resetPerson(context);
+            } else if (value == PeoplePopupAction.reassignMe) {
+              await _reassignMe(context);
             }
           },
         ),
@@ -244,19 +337,18 @@ class _AppBarWidgetState extends State<PeopleAppBar> {
     return actions;
   }
 
-  Future<void> _removePersonLabel(BuildContext context) async {
+  Future<void> _resetPerson(BuildContext context) async {
     await showChoiceDialog(
       context,
-      title: "Are you sure you want to remove this person label?",
-      body:
-          "All groupings for this person will be reset, and you will lose all suggestions made for this person",
-      firstButtonLabel: "Yes, remove person",
+      title: S.of(context).areYouSureYouWantToResetThisPerson,
+      body: S.of(context).allPersonGroupingWillReset,
+      firstButtonLabel: S.of(context).yesResetPerson,
       firstButtonOnTap: () async {
         try {
-          await PersonService.instance.deletePerson(widget.person.remoteID);
+          await PersonService.instance.deletePerson(person.remoteID);
           Navigator.of(context).pop();
         } catch (e, s) {
-          _logger.severe('Removing person label failed', e, s);
+          _logger.severe('Resetting person failed', e, s);
         }
       },
     );
@@ -266,11 +358,13 @@ class _AppBarWidgetState extends State<PeopleAppBar> {
     bool assignName = false;
     await showChoiceDialog(
       context,
-      title: "Are you sure you want to show this person in people section again?",
+      title:
+          "Are you sure you want to show this person in people section again?",
       firstButtonLabel: "Yes, show person",
       firstButtonOnTap: () async {
         try {
-          await PersonService.instance.deletePerson(widget.person.remoteID, onlyMapping: false);
+          await PersonService.instance
+              .deletePerson(widget.person.remoteID, onlyMapping: false);
           Bus.instance.fire(PeopleChangedEvent());
           assignName = true;
         } catch (e, s) {
@@ -282,15 +376,19 @@ class _AppBarWidgetState extends State<PeopleAppBar> {
     if (assignName) {
       final result = await showAssignPersonAction(
         context,
-        clusterID: widget.person.data.assigned!.first.id,
+        clusterID: widget.person.data.assigned.first.id,
       );
       Navigator.pop(context);
-      if (result != null && result is (PersonEntity, EnteFile)) {
+      if (result != null) {
+        final person = result is (PersonEntity, EnteFile) ? result.$1 : result;
         // ignore: unawaited_futures
-        routeToPage(context, PeoplePage(person: result.$1));
-      } else if (result != null && result is PersonEntity) {
-        // ignore: unawaited_futures
-        routeToPage(context, PeoplePage(person: result));
+        routeToPage(
+          context,
+          PeoplePage(
+            person: person,
+            searchResult: null,
+          ),
+        );
       }
     }
   }
@@ -303,5 +401,14 @@ class _AppBarWidgetState extends State<PeopleAppBar> {
     // if (coverPhotoID != null) {
     //   unawaited(changeCoverPhoto(context, widget.collection!, coverPhotoID));
     // }
+  }
+
+  Future<void> _reassignMe(BuildContext context) async {
+    await routeToPage(
+      context,
+      ReassignMeSelectionPage(
+        currentMeId: widget.person.remoteID,
+      ),
+    );
   }
 }

@@ -2,6 +2,7 @@ import "package:flutter/material.dart";
 import "package:flutter_map/flutter_map.dart";
 import "package:flutter_map_marker_cluster/flutter_map_marker_cluster.dart";
 import "package:latlong2/latlong.dart";
+import "package:maps_launcher/maps_launcher.dart";
 import "package:photos/ui/map/image_marker.dart";
 import "package:photos/ui/map/map_button.dart";
 import "package:photos/ui/map/map_gallery_tile.dart";
@@ -27,7 +28,7 @@ class MapView extends StatefulWidget {
   static const defaultMarkerSize = Size(75, 75);
 
   const MapView({
-    Key? key,
+    super.key,
     required this.updateVisibleImages,
     required this.imageMarkers,
     required this.controller,
@@ -41,7 +42,7 @@ class MapView extends StatefulWidget {
     this.onTap,
     this.interactiveFlags = InteractiveFlag.all,
     this.showControls = true,
-  }) : super(key: key);
+  });
 
   @override
   State<StatefulWidget> createState() => _MapViewState();
@@ -153,6 +154,24 @@ class _MapViewState extends State<MapView> {
                       Navigator.pop(context);
                     },
                     heroTag: 'back',
+                  ),
+                ),
+              )
+            : const SizedBox.shrink(),
+        widget.showControls
+            ? Positioned(
+                top: 4,
+                right: 10,
+                child: SafeArea(
+                  child: MapButton(
+                    icon: Icons.navigation_outlined,
+                    onPressed: () {
+                      MapsLauncher.launchCoordinates(
+                        widget.controller.camera.center.latitude,
+                        widget.controller.camera.center.longitude,
+                      );
+                    },
+                    heroTag: 'open-map',
                   ),
                 ),
               )

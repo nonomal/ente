@@ -1,25 +1,26 @@
-import log from "@/next/log";
-import EnteSpinner from "@ente/shared/components/EnteSpinner";
-import { styled } from "@mui/material";
+import { EnteLogo } from "@/base/components/EnteLogo";
+import { ActivityIndicator } from "@/base/components/mui/ActivityIndicator";
+import log from "@/base/log";
+import { Box, Stack, styled, Typography } from "@mui/material";
 import { PairingCode } from "components/PairingCode";
 import { useRouter } from "next/router";
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { readCastData, storeCastData } from "services/cast-data";
-import { getCastData, register } from "services/pair";
-import { advertiseOnChromecast } from "../services/chromecast";
+import { getCastPayload, register } from "services/pair";
+import { advertiseOnChromecast } from "../services/chromecast-receiver";
 
-export default function Index() {
-    const [publicKeyB64, setPublicKeyB64] = useState<string | undefined>();
-    const [privateKeyB64, setPrivateKeyB64] = useState<string | undefined>();
+const Page: React.FC = () => {
+    const [publicKey, setPublicKey] = useState<string | undefined>();
+    const [privateKey, setPrivateKey] = useState<string | undefined>();
     const [pairingCode, setPairingCode] = useState<string | undefined>();
 
     const router = useRouter();
 
     useEffect(() => {
         if (!pairingCode) {
-            register().then((r) => {
-                setPublicKeyB64(r.publicKeyB64);
-                setPrivateKeyB64(r.privateKeyB64);
+            void register().then((r) => {
+                setPublicKey(r.publicKey);
+                setPrivateKey(r.privateKey);
                 setPairingCode(r.pairingCode);
             });
         } else {
@@ -31,66 +32,62 @@ export default function Index() {
     }, [pairingCode]);
 
     useEffect(() => {
-        if (!publicKeyB64 || !privateKeyB64 || !pairingCode) return;
+        if (!publicKey || !privateKey || !pairingCode) return;
+
+        const pollTick = async () => {
+            try {
+                const data = await getCastPayload({
+                    publicKey,
+                    privateKey,
+                    pairingCode,
+                });
+                if (!data) {
+                    // No one has connected yet.
+                    return;
+                }
+
+                storeCastData(data);
+                await router.push("/slideshow");
+            } catch (e) {
+                // The pairing code becomes invalid after an hour, which will cause
+                // `getCastData` to fail. There might be other reasons this might
+                // fail too, but in all such cases, it is a reasonable idea to start
+                // again from the beginning.
+                log.warn("Failed to get cast data", e);
+                setPairingCode(undefined);
+            }
+        };
 
         const interval = setInterval(pollTick, 2000);
         return () => clearInterval(interval);
-    }, [publicKeyB64, privateKeyB64, pairingCode]);
-
-    const pollTick = async () => {
-        const registration = { publicKeyB64, privateKeyB64, pairingCode };
-        try {
-            const data = await getCastData(registration);
-            if (!data) {
-                // No one has connected yet.
-                return;
-            }
-
-            storeCastData(data);
-            await router.push("/slideshow");
-        } catch (e) {
-            // The pairing code becomes invalid after an hour, which will cause
-            // `getCastData` to fail. There might be other reasons this might
-            // fail too, but in all such cases, it is a reasonable idea to start
-            // again from the beginning.
-            log.warn("Failed to get cast data", e);
-            setPairingCode(undefined);
-        }
-    };
+    }, [publicKey, privateKey, pairingCode, router]);
 
     return (
         <Container>
-            <img width={150} src="/images/ente.svg" />
-            <h1>
+            <EnteLogo height={45} />
+            <Typography variant="h2" sx={{ marginBlock: "2rem" }}>
                 Enter this code on <b>Ente Photos</b> to pair this screen
-            </h1>
+            </Typography>
             {pairingCode ? <PairingCode code={pairingCode} /> : <Spinner />}
-            <p>
+            <Typography variant="h6" sx={{ fontWeight: "regular", mt: 3 }}>
                 Visit{" "}
-                <a href="https://ente.io/cast" target="_blank">
+                <a href="https://ente.io/cast" target="_blank" rel="noopener">
                     ente.io/cast
                 </a>{" "}
                 for help
-            </p>
+            </Typography>
         </Container>
     );
-}
+};
 
-const Container = styled("div")`
-    height: 100%;
-    display: flex;
-    flex-direction: column;
+export default Page;
+
+const Container = styled(Stack)`
+    height: 100svh;
     justify-content: center;
     align-items: center;
     text-align: center;
 
-    h1 {
-        font-weight: normal;
-    }
-
-    p {
-        font-size: 1.2rem;
-    }
     a {
         text-decoration: none;
         color: #87cefa;
@@ -99,12 +96,10 @@ const Container = styled("div")`
 `;
 
 const Spinner: React.FC = () => (
-    <Spinner_>
-        <EnteSpinner />
-    </Spinner_>
+    <Box
+        // Roughly same height as pairing code section to reduce layout shift.
+        sx={{ my: "1.7rem" }}
+    >
+        <ActivityIndicator />
+    </Box>
 );
-
-const Spinner_ = styled("div")`
-    /* Roughly same height as the pairing code section to roduce layout shift */
-    margin-block: 1.7rem;
-`;

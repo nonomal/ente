@@ -1,4 +1,5 @@
 import "package:flutter/material.dart";
+import "package:photos/extensions/user_extension.dart";
 import "package:photos/generated/l10n.dart";
 import "package:photos/models/file/extensions/file_props.dart";
 import 'package:photos/models/file/file.dart';
@@ -15,13 +16,18 @@ class AddedByWidget extends StatelessWidget {
     if (!file.isUploaded) {
       return const SizedBox.shrink();
     }
+    final bool fileIsFromSharedPublicLink =
+        CollectionsService.instance.isSharedPublicLink(file.collectionID!);
+    if (fileIsFromSharedPublicLink) {
+      return const SizedBox.shrink();
+    }
     String? addedBy;
     if (file.isOwner && file.isCollect) {
       addedBy = file.uploaderName;
     } else {
       final fileOwner = CollectionsService.instance
           .getFileOwner(file.ownerID!, file.collectionID);
-      addedBy = fileOwner.email;
+      addedBy = fileOwner.displayName ?? fileOwner.email;
     }
     if (addedBy == null || addedBy.isEmpty) {
       return const SizedBox.shrink();

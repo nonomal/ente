@@ -1,6 +1,9 @@
 {
+  "@@locale ": "en",
   "enterYourEmailAddress": "请输入您的电子邮件地址",
   "accountWelcomeBack": "欢迎回来！",
+  "emailAlreadyRegistered": "此电子邮件地址已被注册。",
+  "emailNotRegistered": "此电子邮件地址未被注册。",
   "email": "电子邮件地址",
   "cancel": "取消",
   "verify": "验证",
@@ -11,14 +14,14 @@
   "deleteAccountFeedbackPrompt": "我们很抱歉看到您离开。请分享您的反馈以帮助我们改进。",
   "feedback": "反馈",
   "kindlyHelpUsWithThisInformation": "请帮助我们了解这个信息",
-  "confirmDeletePrompt": "是的，我想永久删除此账户及其相关数据.",
+  "confirmDeletePrompt": "是的，我想永久删除此账户及其所有关联的应用程序的数据。",
   "confirmAccountDeletion": "确认删除账户",
   "deleteAccountPermanentlyButton": "永久删除账户",
   "yourAccountHasBeenDeleted": "您的账户已删除",
   "selectReason": "选择原因",
   "deleteReason1": "找不到我想要的功能",
   "deleteReason2": "应用或某个功能没有按我的预期运行",
-  "deleteReason3": "我找到了另一个我喜欢更好的服务",
+  "deleteReason3": "我找到了另一个我喜欢的更好的服务",
   "deleteReason4": "我的原因未被列出",
   "sendEmail": "发送电子邮件",
   "deleteRequestSLAText": "您的请求将在 72 小时内处理。",
@@ -40,7 +43,7 @@
   "recoverButton": "恢复",
   "recoverySuccessful": "恢复成功!",
   "decrypting": "解密中...",
-  "incorrectRecoveryKeyTitle": "不正确的恢复密钥",
+  "incorrectRecoveryKeyTitle": "恢复密钥不正确",
   "incorrectRecoveryKeyBody": "您输入的恢复密钥不正确",
   "forgotPassword": "忘记密码",
   "enterYourRecoveryKey": "输入您的恢复密钥",
@@ -149,7 +152,7 @@
   "tryAgain": "请再试一次",
   "viewRecoveryKey": "查看恢复密钥",
   "confirmRecoveryKey": "确认恢复密钥",
-  "recoveryKeyVerifyReason": "如果您忘记了您的密码，您的恢复密钥是恢复您的照片的唯一途径。 您可以在“设置 > 账户”中找到您的恢复密钥。\n\n请在此输入您的恢复密钥以确认您已经正确地保存了它。",
+  "recoveryKeyVerifyReason": "如果您忘记了密码，恢复密钥是恢复照片的唯一方法。您可以在“设置”>“账户”中找到恢复密钥。\n\n请在此处输入恢复密钥，以验证您是否已正确保存。",
   "confirmYourRecoveryKey": "确认您的恢复密钥",
   "addViewer": "添加查看者",
   "addCollaborator": "添加协作者",
@@ -184,6 +187,8 @@
   },
   "allowAddPhotosDescription": "允许具有链接的人也将照片添加到共享相册。",
   "passwordLock": "密码锁",
+  "canNotOpenTitle": "无法打开此相册",
+  "canNotOpenBody": "抱歉，该相册无法在应用中打开。",
   "disableDownloadWarningTitle": "请注意",
   "disableDownloadWarningBody": "查看者仍然可以使用外部工具截图或保存您的照片副本",
   "allowDownloads": "允许下载",
@@ -272,6 +277,11 @@
   "failedToApplyCode": "无法使用此代码",
   "enterReferralCode": "输入推荐代码",
   "codeAppliedPageTitle": "代码已应用",
+  "changeYourReferralCode": "更改您的推荐代码",
+  "change": "更改",
+  "unavailableReferralCode": "抱歉，此代码不可用。",
+  "codeChangeLimitReached": "抱歉，您已达到代码更改的限制。",
+  "onlyFamilyAdminCanChangeCode": "请联系{familyAdminEmail} 以更改您的代码。",
   "storageInGB": "{storageAmountInGB} GB",
   "claimed": "已领取",
   "@claimed": {
@@ -321,7 +331,7 @@
   "removingFromFavorites": "正在从收藏中删除...",
   "sorryCouldNotAddToFavorites": "抱歉，无法添加到收藏！",
   "sorryCouldNotRemoveFromFavorites": "抱歉，无法从收藏中移除！",
-  "subscribeToEnableSharing": "您的订阅似乎已过期。请订阅以启用分享。",
+  "subscribeToEnableSharing": "您需要有效的付费订阅才能启用共享。",
   "subscribe": "订阅",
   "canOnlyRemoveFilesOwnedByYou": "只能删除您拥有的文件",
   "deleteSharedAlbum": "要删除共享相册吗？",
@@ -345,6 +355,7 @@
   "failedToLoadAlbums": "加载相册失败",
   "hidden": "已隐藏",
   "authToViewYourHiddenFiles": "请验证以查看您的隐藏文件",
+  "authToViewTrashedFiles": "请验证身份以查看您已删除的文件",
   "trash": "回收站",
   "uncategorized": "未分类的",
   "videoSmallCase": "视频",
@@ -406,10 +417,35 @@
     "description": "The text to display in the advanced settings section"
   },
   "photoGridSize": "照片网格大小",
-  "manageDeviceStorage": "管理设备存储",
+  "manageDeviceStorage": "管理设备缓存",
+  "manageDeviceStorageDesc": "检查并清除本地缓存存储。",
   "machineLearning": "机器学习",
+  "mlConsent": "启用机器学习",
+  "mlConsentTitle": "要启用机器学习吗？",
+  "mlConsentDescription": "如果您启用机器学习，Ente 将从文件（包括与您共享的文件）中提取面部几何形状等信息。\n\n这将在您的设备上进行，并且任何生成的生物特征信息都将被端到端加密。",
+  "mlConsentPrivacy": "请点击此处查看我们隐私政策中有关此功能的更多详细信息",
+  "mlConsentConfirmation": "我了解了，并希望启用机器学习",
   "magicSearch": "魔法搜索",
-  "mlIndexingDescription": "请注意，机器学习将使用更高的带宽和更多的电量，直到所有项目都被索引为止。",
+  "discover": "发现",
+  "@discover": {
+    "description": "The text to display for the discover section under which we show receipts, screenshots, sunsets, greenery, etc."
+  },
+  "discover_identity": "身份",
+  "discover_screenshots": "屏幕截图",
+  "discover_receipts": "收据",
+  "discover_notes": "备注",
+  "discover_memes": "表情包",
+  "discover_visiting_cards": "访问卡",
+  "discover_babies": "婴儿",
+  "discover_pets": "宠物",
+  "discover_selfies": "自拍",
+  "discover_wallpapers": "壁纸",
+  "discover_food": "食物",
+  "discover_celebrations": "节日",
+  "discover_sunset": "日落",
+  "discover_hills": "山",
+  "discover_greenery": "绿植",
+  "mlIndexingDescription": "请注意，机器学习会导致带宽和电池使用量增加，直到所有项目都被索引。请考虑使用桌面应用程序来加快索引速度，所有结果都将自动同步。",
   "loadingModel": "正在下载模型...",
   "waitingForWifi": "正在等待 WiFi...",
   "status": "状态",
@@ -442,6 +478,8 @@
   "showMemories": "显示回忆",
   "yearsAgo": "{count, plural, one{{count} 年前} other{{count} 年前}}",
   "backupSettings": "备份设置",
+  "backupStatus": "备份状态",
+  "backupStatusDescription": "已备份的项目将显示在此处",
   "backupOverMobileData": "通过移动数据备份",
   "backupVideos": "备份视频",
   "disableAutoLock": "禁用自动锁定",
@@ -451,6 +489,7 @@
   "privacy": "隐私",
   "terms": "使用条款",
   "checkForUpdates": "检查更新",
+  "checkStatus": "检查状态",
   "checking": "正在检查...",
   "youAreOnTheLatestVersion": "当前为最新版本",
   "account": "账户",
@@ -478,9 +517,13 @@
   "backedUpFolders": "已备份的文件夹",
   "backup": "备份",
   "freeUpDeviceSpace": "释放设备空间",
+  "freeUpDeviceSpaceDesc": "通过清除已备份的文件来节省设备空间。",
   "allClear": "✨ 全部清除",
   "noDeviceThatCanBeDeleted": "您在此设备上没有可被删除的文件",
   "removeDuplicates": "移除重复内容",
+  "removeDuplicatesDesc": "检查并删除完全重复的文件。",
+  "viewLargeFiles": "大文件",
+  "viewLargeFilesDesc": "查看占用存储空间最多的文件。",
   "noDuplicates": "✨ 没有重复内容",
   "youveNoDuplicateFilesThatCanBeCleared": "您没有可以被清除的重复文件",
   "success": "成功",
@@ -527,7 +570,6 @@
   "authToConfigureTwofactorAuthentication": "请进行身份验证以配置双重身份认证",
   "lockscreen": "锁屏",
   "authToChangeLockscreenSetting": "请验证以更改锁屏设置",
-  "lockScreenEnablePreSteps": "要启用锁屏，请在系统设置中设置设备密码或屏幕锁定。",
   "viewActiveSessions": "查看活动会话",
   "authToViewYourActiveSessions": "请验证以查看您的活动会话",
   "disableTwofactor": "禁用双重认证",
@@ -652,6 +694,8 @@
   "noPhotosAreBeingBackedUpRightNow": "目前没有照片正在备份",
   "preserveMore": "保留更多",
   "grantFullAccessPrompt": "请在手机“设置”中授权软件访问所有照片",
+  "allowPermTitle": "允许访问照片",
+  "allowPermBody": "请从“设置”中选择允许访问您的照片，以便 Ente 可以显示和备份您的图库。",
   "openSettings": "打开“设置”",
   "selectMorePhotos": "选择更多照片",
   "existingUser": "现有用户",
@@ -667,7 +711,7 @@
   "mobileWebDesktop": "移动端, 网页端, 桌面端",
   "newToEnte": "初来 Ente",
   "pleaseLoginAgain": "请重新登录",
-  "devAccountChanged": "我们用于在 App Store 上发布 Ente 的开发者账户已更改。因此，您需要重新登录。\n\n对于给您带来的不便，我们深表歉意，但这是不可避免的。",
+  "autoLogoutMessage": "由于技术故障，您已退出登录。对于由此造成的不便，我们深表歉意。",
   "yourSubscriptionHasExpired": "您的订阅已过期",
   "storageLimitExceeded": "已超出存储限制",
   "upgrade": "升级",
@@ -780,7 +824,7 @@
   "referFriendsAnd2xYourPlan": "把我们推荐给你的朋友然后获得延长一倍的订阅计划",
   "shareAlbumHint": "打开相册并点击右上角的分享按钮进行分享",
   "itemsShowTheNumberOfDaysRemainingBeforePermanentDeletion": "项目显示永久删除前剩余的天数",
-  "trashDaysLeft": "{count, plural, =0 {} =1 {1天} other {{count} 天}}",
+  "trashDaysLeft": "{count, plural, =0 {马上} =1 {1 天} other {{count} 天}}",
   "@trashDaysLeft": {
     "description": "Text to indicate number of days remaining before permanent deletion",
     "placeholders": {
@@ -920,6 +964,8 @@
   "encryptingBackup": "正在加密备份...",
   "syncStopped": "同步已停止",
   "syncProgress": "已保存的回忆 {completed}/共 {total}",
+  "uploadingMultipleMemories": "正在保存 {count} 个回忆...",
+  "uploadingSingleMemory": "正在保存 1 个回忆...",
   "@syncProgress": {
     "description": "Text to tell user how many memories have been preserved",
     "placeholders": {
@@ -931,10 +977,10 @@
       }
     }
   },
-  "archiving": "正在归档中...",
-  "unarchiving": "正在取消归档...",
-  "successfullyArchived": "归档成功",
-  "successfullyUnarchived": "取消归档成功",
+  "archiving": "正在存档...",
+  "unarchiving": "正在取消存档...",
+  "successfullyArchived": "存档成功",
+  "successfullyUnarchived": "取消存档成功",
   "renameFile": "重命名文件",
   "enterFileName": "请输入文件名",
   "filesDeleted": "文件已删除",
@@ -1018,7 +1064,7 @@
   "flip": "上下翻转",
   "rotateRight": "向右旋转",
   "saveCopy": "保存副本",
-  "light": "浅色",
+  "light": "亮度",
   "color": "颜色",
   "yesDiscardChanges": "是的，放弃更改",
   "doYouWantToDiscardTheEditsYouHaveMade": "您想要放弃您所做的编辑吗？",
@@ -1042,7 +1088,7 @@
   "@storageUsageInfo": {
     "description": "Example: 1.2 GB of 2 GB used or 100 GB or 2TB used"
   },
-  "freeStorageSpace": "{freeAmount} {storageUnit} 空闲",
+  "availableStorageSpace": "{freeAmount} {storageUnit} 空闲",
   "appVersion": "版本: {versionValue}",
   "verifyIDLabel": "验证",
   "fileInfoAddDescHint": "添加说明...",
@@ -1138,6 +1184,7 @@
   "successfullyHid": "已成功隐藏",
   "successfullyUnhid": "已成功取消隐藏",
   "crashReporting": "上报崩溃",
+  "resumableUploads": "可续传上传",
   "addToHiddenAlbum": "添加到隐藏相册",
   "moveToHiddenAlbum": "移至隐藏相册",
   "fileTypes": "文件类型",
@@ -1194,16 +1241,23 @@
   "waitingForVerification": "等待验证...",
   "passkey": "通行密钥",
   "passkeyAuthTitle": "通行密钥认证",
+  "loginWithTOTP": "使用 TOTP 登录",
+  "passKeyPendingVerification": "仍需进行验证",
+  "loginSessionExpired": "会话已过期",
+  "loginSessionExpiredDetails": "您的会话已过期。请重新登录。",
   "verifyPasskey": "验证通行密钥",
   "playOnTv": "在电视上播放相册",
   "pair": "配对",
   "deviceNotFound": "未发现设备",
-  "castInstruction": "在您要配对的设备上访问 cast.ente.io。\n输入下面的代码即可在电视上播放相册。",
+  "castInstruction": "在您要配对的设备上访问 cast.ente.io。\n在下框中输入代码即可在电视上播放相册。",
   "deviceCodeHint": "输入代码",
   "joinDiscord": "加入 Discord",
   "locations": "位置",
-  "descriptions": "描述",
   "addAName": "添加一个名称",
+  "findThemQuickly": "快速找到它们",
+  "@findThemQuickly": {
+    "description": "Subtitle to indicate that the user can find people quickly by name"
+  },
   "findPeopleByName": "按名称快速查找人物",
   "addViewers": "{count, plural, zero {添加查看者} one {添加查看者} other {添加查看者}}",
   "addCollaborators": "{count, plural, zero {添加协作者} one {添加协作者} other {添加协作者}}",
@@ -1218,6 +1272,13 @@
   "createCollaborativeLink": "创建协作链接",
   "search": "搜索",
   "enterPersonName": "输入人物名称",
+  "enterName": "输入名称",
+  "savePerson": "保存人物",
+  "editPerson": "编辑人物",
+  "mergedPhotos": "已合并照片",
+  "orMergeWithExistingPerson": "或与现有的合并",
+  "enterDateOfBirth": "生日(可选)",
+  "birthday": "生日",
   "removePersonLabel": "移除人物标签",
   "autoPairDesc": "自动配对仅适用于支持 Chromecast 的设备。",
   "manualPairDesc": "用 PIN 码配对适用于您希望在其上查看相册的任何屏幕。",
@@ -1230,10 +1291,304 @@
   "castIPMismatchTitle": "投放相册失败",
   "castIPMismatchBody": "请确保您的设备与电视处于同一网络。",
   "pairingComplete": "配对完成",
+  "savingEdits": "正在保存编辑内容...",
   "autoPair": "自动配对",
   "pairWithPin": "用 PIN 配对",
   "faceRecognition": "人脸识别",
   "foundFaces": "已找到的人脸",
   "clusteringProgress": "聚类进展",
-  "indexingIsPaused": "索引已暂停。当设备准备就绪时，它将自动恢复。"
+  "indexingIsPaused": "索引已暂停。当设备准备就绪时，它将自动恢复。",
+  "trim": "修剪",
+  "crop": "裁剪",
+  "rotate": "旋转",
+  "left": "向左",
+  "right": "向右",
+  "whatsNew": "更新日志",
+  "reviewSuggestions": "查看建议",
+  "review": "查看",
+  "useAsCover": "用作封面",
+  "notPersonLabel": "不是 {name}？",
+  "@notPersonLabel": {
+    "description": "Label to indicate that the person in the photo is not the person whose name is mentioned",
+    "placeholders": {
+      "name": {
+        "content": "{name}",
+        "type": "String"
+      }
+    }
+  },
+  "enable": "启用",
+  "enabled": "已启用",
+  "moreDetails": "更多详情",
+  "enableMLIndexingDesc": "Ente 支持设备上的机器学习，实现人脸识别、魔法搜索和其他高级搜索功能",
+  "magicSearchHint": "魔法搜索允许按内容搜索照片，例如“lower'”、“red car”、“identity documents”",
+  "panorama": "全景",
+  "reenterPassword": "再次输入密码",
+  "reenterPin": "再次输入 PIN 码",
+  "deviceLock": "设备锁",
+  "pinLock": "PIN 锁定",
+  "next": "下一步",
+  "setNewPassword": "设置新密码",
+  "enterPin": "输入 PIN 码",
+  "setNewPin": "设置新 PIN 码",
+  "appLock": "应用锁",
+  "noSystemLockFound": "未找到系统锁",
+  "tapToUnlock": "点击解锁",
+  "tooManyIncorrectAttempts": "错误尝试次数过多",
+  "videoInfo": "视频详情",
+  "autoLock": "自动锁定",
+  "immediately": "立即",
+  "autoLockFeatureDescription": "应用程序进入后台后锁定的时间",
+  "hideContent": "隐藏内容",
+  "hideContentDescriptionAndroid": "在应用切换器中隐藏应用内容并禁用屏幕截图",
+  "hideContentDescriptionIos": "在应用切换器中隐藏应用内容",
+  "passwordStrengthInfo": "密码强度的计算考虑了密码的长度、使用的字符以及密码是否出现在最常用的 10,000 个密码中",
+  "noQuickLinksSelected": "未选择快速链接",
+  "pleaseSelectQuickLinksToRemove": "请选择要删除的快速链接",
+  "removePublicLinks": "删除公开链接",
+  "thisWillRemovePublicLinksOfAllSelectedQuickLinks": "这将删除所有选定的快速链接的公共链接。",
+  "guestView": "访客视图",
+  "guestViewEnablePreSteps": "要启用访客视图，请在系统设置中设置设备密码或屏幕锁。",
+  "nameTheAlbum": "命名相册",
+  "collectPhotosDescription": "创建一个您的朋友可以上传原图的链接。",
+  "collect": "收集",
+  "appLockDescriptions": "在设备的默认锁定屏幕和带有 PIN 或密码的自定义锁定屏幕之间进行选择。",
+  "toEnableAppLockPleaseSetupDevicePasscodeOrScreen": "要启用应用锁，请在系统设置中设置设备密码或屏幕锁。",
+  "authToViewPasskey": "请验证身份以查看您的通行密钥",
+  "loopVideoOn": "循环播放视频开启",
+  "loopVideoOff": "循环播放视频关闭",
+  "localSyncErrorMessage": "似乎出了点问题，因为本地照片同步耗时比预期的要长。请联系我们的支持团队",
+  "showPerson": "显示人员",
+  "sort": "排序",
+  "mostRecent": "最近",
+  "mostRelevant": "最相关",
+  "loadingYourPhotos": "正在加载您的照片...",
+  "processingImport": "正在处理 {folderName}...",
+  "personName": "人物名称",
+  "addNewPerson": "添加新人物",
+  "addNameOrMerge": "添加名称或合并",
+  "mergeWithExisting": "与现有的合并",
+  "newPerson": "新人物",
+  "addName": "添加名称",
+  "add": "添加",
+  "extraPhotosFoundFor": "为 {text} 找到额外照片",
+  "@extraPhotosFoundFor": {
+    "placeholders": {
+      "text": {
+        "type": "String"
+      }
+    }
+  },
+  "extraPhotosFound": "发现额外照片",
+  "configuration": "配置",
+  "localIndexing": "本地索引",
+  "processed": "已处理",
+  "resetPerson": "移除",
+  "areYouSureYouWantToResetThisPerson": "您确定要重设此人吗？",
+  "allPersonGroupingWillReset": "此人的所有分组都将被重设，并且您将丢失针对此人的所有建议",
+  "yesResetPerson": "是，重设人物",
+  "onlyThem": "仅限他们",
+  "checkingModels": "正在检查模型...",
+  "enableMachineLearningBanner": "启用机器学习进行魔法搜索和面部识别",
+  "searchDiscoverEmptySection": "处理和同步完成后，图像将显示在此处",
+  "searchPersonsEmptySection": "处理和同步完成后，人物将显示在此处",
+  "viewersSuccessfullyAdded": "{count, plural, =0 {已添加 0 位查看者} =1 {已添加 1 位查看者} other {已添加 {count} 位查看者}}",
+  "@viewersSuccessfullyAdded": {
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "2"
+      }
+    },
+    "description": "Number of viewers that were successfully added to an album."
+  },
+  "collaboratorsSuccessfullyAdded": "{count, plural, =0 {已添加 0 位协作者} =1 {已添加 1 位协作者} other {已添加 {count} 位协作者}}",
+  "@collaboratorsSuccessfullyAdded": {
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "2"
+      }
+    },
+    "description": "Number of collaborators that were successfully added to an album."
+  },
+  "accountIsAlreadyConfigured": "账户已配置。",
+  "sessionIdMismatch": "会话 ID 不匹配",
+  "@sessionIdMismatch": {
+    "description": "In passkey page, deeplink is ignored because of session ID mismatch."
+  },
+  "failedToFetchActiveSessions": "无法获取活动会话",
+  "@failedToFetchActiveSessions": {
+    "description": "In session page, warn user (in toast) that active sessions could not be fetched."
+  },
+  "failedToRefreshStripeSubscription": "刷新订阅失败",
+  "failedToPlayVideo": "播放视频失败",
+  "uploadIsIgnoredDueToIgnorereason": "由于 {ignoreReason}，上传被忽略",
+  "@uploadIsIgnoredDueToIgnorereason": {
+    "placeholders": {
+      "ignoreReason": {
+        "type": "String",
+        "example": "no network"
+      }
+    }
+  },
+  "typeOfGallerGallerytypeIsNotSupportedForRename": "相册类型 {galleryType} 不支持重命名",
+  "@typeOfGallerGallerytypeIsNotSupportedForRename": {
+    "placeholders": {
+      "galleryType": {
+        "type": "String",
+        "example": "no network"
+      }
+    }
+  },
+  "tapToUploadIsIgnoredDue": "点按上传，由于{ignoreReason}，目前上传已被忽略",
+  "@tapToUploadIsIgnoredDue": {
+    "description": "Shown in upload icon widet, inside a tooltip.",
+    "placeholders": {
+      "ignoreReason": {
+        "type": "String",
+        "example": "no network"
+      }
+    }
+  },
+  "tapToUpload": "点按上传",
+  "@tapToUpload": {
+    "description": "Shown in upload icon widet, inside a tooltip."
+  },
+  "info": "详情",
+  "addFiles": "添加文件",
+  "castAlbum": "投放相册",
+  "imageNotAnalyzed": "图像未分析",
+  "noFacesFound": "未找到任何面部",
+  "fileNotUploadedYet": "文件尚未上传",
+  "noSuggestionsForPerson": "没有针对 {personName} 的建议",
+  "@noSuggestionsForPerson": {
+    "placeholders": {
+      "personName": {
+        "type": "String",
+        "example": "Alice"
+      }
+    }
+  },
+  "month": "月",
+  "yearShort": "年",
+  "@yearShort": {
+    "description": "Appears in pricing page (/yr)"
+  },
+  "currentlyRunning": "目前正在运行",
+  "ignored": "已忽略",
+  "photosCount": "{count, plural, =0 {0 张照片} =1 {1 张照片} other {{count} 张照片}}",
+  "@photosCount": {
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "2"
+      }
+    }
+  },
+  "file": "文件",
+  "searchSectionsLengthMismatch": "部分长度不匹配：{snapshotLength} != {searchLength}",
+  "@searchSectionsLengthMismatch": {
+    "description": "Appears in search tab page",
+    "placeholders": {
+      "snapshotLength": {
+        "type": "int",
+        "example": "1"
+      },
+      "searchLength": {
+        "type": "int",
+        "example": "2"
+      }
+    }
+  },
+  "selectMailApp": "选择邮件应用",
+  "selectAllShort": "全部",
+  "@selectAllShort": {
+    "description": "Text that appears in bottom right when you start to select multiple photos. When clicked, it selects all photos."
+  },
+  "changeLogMagicSearchImprovementTitle": "魔法搜索改进",
+  "changeLogMagicSearchImprovementContent": "我们改进了魔法搜索，使其速度更快，因此您无需等待就能找到您要查找的内容。",
+  "changeLogBackupStatusTitle": "备份状态",
+  "changeLogBackupStatusContent": "我们添加了所有已上传到 Ente 的文件的日志，包括失败和排队的文件。",
+  "changeLogDiscoverTitle": "发现",
+  "changeLogDiscoverContent": "想要查找您的身份证、笔记甚至表情包的照片？转到搜索选项卡并查看“发现”。根据我们的语义搜索，您可以在这里找到对您来说可能很重要的照片。\\n\\n仅当您启用了机器学习时才可用。",
+  "selectCoverPhoto": "选择封面照片",
+  "newLocation": "新位置",
+  "faceNotClusteredYet": "人脸尚未聚类，请稍后再来",
+  "theLinkYouAreTryingToAccessHasExpired": "您尝试访问的链接已过期。",
+  "openFile": "打开文件",
+  "backupFile": "备份文件",
+  "openAlbumInBrowser": "在浏览器中打开相册",
+  "openAlbumInBrowserTitle": "请使用网络应用将照片添加到此相册",
+  "allow": "允许",
+  "allowAppToOpenSharedAlbumLinks": "允许应用打开共享相册链接",
+  "seePublicAlbumLinksInApp": "在应用程序中查看公开相册链接",
+  "emergencyContacts": "紧急联系人",
+  "acceptTrustInvite": "接受邀请",
+  "declineTrustInvite": "拒绝邀请",
+  "removeYourselfAsTrustedContact": "删除自己作为可信联系人",
+  "legacy": "遗产",
+  "legacyPageDesc": "遗产允许信任的联系人在您不在时访问您的账户。",
+  "legacyPageDesc2": "可信联系人可以启动账户恢复，如果 30 天内没有被阻止，则可以重置密码并访问您的账户。",
+  "legacyAccounts": "遗产账户",
+  "trustedContacts": "可信联系人",
+  "addTrustedContact": "添加可信联系人",
+  "removeInvite": "移除邀请",
+  "recoveryWarning": "一位可信联系人正在尝试访问您的账户",
+  "rejectRecovery": "拒绝恢复",
+  "recoveryInitiated": "已启动恢复",
+  "recoveryInitiatedDesc": "您可以在 {days} 天后访问该账户。通知将发送至 {email}。",
+  "@recoveryInitiatedDesc": {
+    "placeholders": {
+      "days": {
+        "type": "int",
+        "example": "30"
+      },
+      "email": {
+        "type": "String",
+        "example": "me@example.com"
+      }
+    }
+  },
+  "cancelAccountRecovery": "取消恢复",
+  "recoveryAccount": "恢复账户",
+  "cancelAccountRecoveryBody": "您真的要取消恢复吗？",
+  "startAccountRecoveryTitle": "开始恢复",
+  "whyAddTrustContact": "可信联系人可以帮助恢复您的数据。",
+  "recoveryReady": "您现在可以通过设置新密码来恢复 {email} 的账户。",
+  "@recoveryReady": {
+    "placeholders": {
+      "email": {
+        "type": "String",
+        "example": "me@example.com"
+      }
+    }
+  },
+  "recoveryWarningBody": "{email} 正在尝试恢复您的账户。",
+  "trustedInviteBody": "您已受邀通过 {email} 成为遗产联系人。",
+  "warning": "警告",
+  "proceed": "继续",
+  "confirmAddingTrustedContact": "您即将添加 {email} 作为可信联系人。如果您离开了 {numOfDays} 天，他们将能够恢复您的帐户。",
+  "@confirmAddingTrustedContact": {
+    "placeholders": {
+      "email": {
+        "type": "String",
+        "example": "me@example.com"
+      },
+      "numOfDays": {
+        "type": "int",
+        "example": "30"
+      }
+    }
+  },
+  "legacyInvite": "{email} 已邀请您成为可信联系人",
+  "authToManageLegacy": "请验证身份以管理您的可信联系人",
+  "useDifferentPlayerInfo": "播放此视频时遇到问题了吗？长按此处可尝试使用其他播放器。",
+  "hideSharedItemsFromHomeGallery": "隐藏主页图库中的共享项目",
+  "gallery": "图库",
+  "joinAlbum": "加入相册",
+  "joinAlbumSubtext": "来查看和添加您的照片",
+  "joinAlbumSubtextViewer": "来将其添加到共享相册",
+  "join": "加入",
+  "orPickFromYourContacts": "or pick from your contacts"
 }

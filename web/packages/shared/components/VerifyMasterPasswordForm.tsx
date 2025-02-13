@@ -1,11 +1,11 @@
-import log from "@/next/log";
-import type { SRPAttributes } from "@ente/accounts/types/srp";
+import type { SRPAttributes } from "@/accounts/services/srp-remote";
+import { sharedCryptoWorker } from "@/base/crypto";
+import log from "@/base/log";
 import { Input, type ButtonProps } from "@mui/material";
 import { t } from "i18next";
 import SingleInputForm, {
     type SingleInputFormProps,
 } from "../components/SingleInputForm";
-import ComlinkCryptoWorker from "../crypto";
 import { CustomError } from "../error";
 import type { KeyAttributes, User } from "../user/types";
 
@@ -20,6 +20,13 @@ export interface VerifyMasterPasswordFormProps {
     ) => void;
     buttonText: string;
     submitButtonProps?: ButtonProps;
+    /**
+     * A callback invoked when the form wants to get {@link KeyAttributes}.
+     *
+     * This function can throw an `CustomError.TWO_FACTOR_ENABLED` to signal to
+     * the form that some other form of second factor is enabled and the user
+     * has been redirected to a two factor verification page.
+     */
     getKeyAttributes?: (kek: string) => Promise<KeyAttributes | undefined>;
     srpAttributes?: SRPAttributes;
 }
@@ -38,7 +45,7 @@ export default function VerifyMasterPasswordForm({
         setFieldError,
     ) => {
         try {
-            const cryptoWorker = await ComlinkCryptoWorker.getInstance();
+            const cryptoWorker = await sharedCryptoWorker();
             let kek: string;
             try {
                 if (srpAttributes) {
@@ -87,13 +94,13 @@ export default function VerifyMasterPasswordForm({
                 log.error("failed to verify passphrase", e);
                 switch (e.message) {
                     case CustomError.WEAK_DEVICE:
-                        setFieldError(t("WEAK_DEVICE"));
+                        setFieldError(t("weak_device_hint"));
                         break;
                     case CustomError.INCORRECT_PASSWORD:
-                        setFieldError(t("INCORRECT_PASSPHRASE"));
+                        setFieldError(t("incorrect_password"));
                         break;
                     default:
-                        setFieldError(`${t("UNKNOWN_ERROR")} ${e.message}`);
+                        setFieldError(t("generic_error"));
                 }
             }
         }
@@ -102,7 +109,7 @@ export default function VerifyMasterPasswordForm({
     return (
         <SingleInputForm
             callback={verifyPassphrase}
-            placeholder={t("RETURN_PASSPHRASE_HINT")}
+            placeholder={t("password")}
             buttonText={buttonText}
             submitButtonProps={submitButtonProps}
             hiddenPreInput={

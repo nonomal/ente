@@ -5,214 +5,248 @@
 These are some global dev dependencies in the root `package.json`. These set the
 baseline for how our code be in all the workspaces in this (yarn) monorepo.
 
--   [prettier](https://prettier.io) - Formatter
+- [prettier](https://prettier.io) - Formatter
 
--   [eslint](https://eslint.org) - Linter
+- [eslint](https://eslint.org) - Linter
 
--   [typescript](https://www.typescriptlang.org/) - Type checker
+- [typescript](https://www.typescriptlang.org/) - Type checker
 
 They also need some support packages, which come from the leaf `@/build-config`
 package:
 
--   [@eslint/js](https://eslint.org/) provides JavaScript ESLint functionality,
-    and provides the configuration recommended the by ESLint team.
+- [@eslint/js](https://eslint.org/) provides JavaScript ESLint functionality,
+  and provides the configuration recommended the by ESLint team.
 
--   [typescript-eslint](https://typescript-eslint.io/packages/typescript-eslint/)
-    \- provides TypeScript ESLint functionality and provides a set of
-    recommended configurations (`typescript-eslint` is the new entry point, our
-    yet-unmigrated packages use the older method of separately including
-    [@typescript-eslint/parser](https://typescript-eslint.io/packages/eslint-plugin/)
-    \- which tells ESLint how to read TypeScript syntax - and
-    [@typescript-eslint/eslint-plugin](https://typescript-eslint.io/packages/eslint-plugin/)
-    \- which provides the TypeScript rules and presets).
+- [typescript-eslint](https://typescript-eslint.io/packages/typescript-eslint/)
+  \- provides TypeScript ESLint functionality and provides a set of recommended
+  configurations (`typescript-eslint` is the new entry point, our yet-unmigrated
+  packages use the older method of separately including
+  [@typescript-eslint/parser](https://typescript-eslint.io/packages/eslint-plugin/)
+  \- which tells ESLint how to read TypeScript syntax - and
+  [@typescript-eslint/eslint-plugin](https://typescript-eslint.io/packages/eslint-plugin/)
+  \- which provides the TypeScript rules and presets).
 
--   [eslint-plugin-react-hooks](https://github.com/jsx-eslint/eslint-plugin-react),
-    [eslint-plugin-react-hooks](https://reactjs.org/) \- Some React specific
-    ESLint rules and configurations that are used by the workspaces that have
-    React code.
+- [eslint-plugin-react](https://github.com/jsx-eslint/eslint-plugin-react),
+  [eslint-plugin-react-hooks](https://reactjs.org/) \- Some React specific
+  ESLint rules and configurations that are used by the workspaces that have
+  React code.
 
--   [eslint-plugin-react-refresh](https://github.com/ArnaudBarre/eslint-plugin-react-refresh)
-    \- A plugin to ensure that React components are exported in a way that they
-    can be HMR-ed.
+- [eslint-plugin-react-refresh](https://github.com/ArnaudBarre/eslint-plugin-react-refresh)
+  \- A plugin to ensure that React components are exported in a way that they
+  can be HMR-ed.
 
--   [prettier-plugin-organize-imports](https://github.com/simonhaenisch/prettier-plugin-organize-imports)
-    \- A Prettier plugin to sort imports.
+- [prettier-plugin-organize-imports](https://github.com/simonhaenisch/prettier-plugin-organize-imports)
+  \- A Prettier plugin to sort imports.
 
--   [prettier-plugin-packagejson](https://github.com/matzkoh/prettier-plugin-packagejson)
-    \- A Prettier plugin to also prettify `package.json`.
+- [prettier-plugin-packagejson](https://github.com/matzkoh/prettier-plugin-packagejson)
+  \- A Prettier plugin to also prettify `package.json`.
 
 The root `package.json` also has a convenience dev dependency:
 
--   [concurrently](https://github.com/open-cli-tools/concurrently) for spawning
-    parallel tasks when we invoke various yarn scripts.
+- [concurrently](https://github.com/open-cli-tools/concurrently) for spawning
+  parallel tasks when we invoke various yarn scripts.
 
-## Utils
+## Cryptography
 
-### Crypto
-
-We use [libsodium](https://libsodium.gitbook.io/doc/) for encryption, key
-generation etc. Specifically, we use its WebAssembly and JS wrappers made using
-Emscripten, maintained by the original authors of libsodium themselves -
+We use [libsodium](https://libsodium.gitbook.io/doc/) for our cryptography
+primitives. We use its WebAssembly target, accessible via JavaScript wrappers
+maintained by the original authors of libsodium themselves -
 [libsodium-wrappers](https://github.com/jedisct1/libsodium.js).
 
-Currently, we've pinned the version to 0.7.9 since later versions remove the
-`crypto_pwhash_*` functionality that we use (they've not been deprecated,
-they've just been moved to a different NPM package). From the (upstream)
-[release notes](https://github.com/jedisct1/libsodium/releases/tag/1.0.19-RELEASE):
+More precisely, we use the sumo variant, "libsodium-wrappers-sumo", since the
+standard variant does not provide the `crypto_pwhash_*` functions.
 
-> Emscripten: the `crypto_pwhash_*()` functions have been removed from Sumo
-> builds, as they reserve a substantial amount of JavaScript memory, even when
-> not used.
+## Meta frameworks
 
-This wording is a bit incorrect, they've actually been _added_ to the sumo
-builds (See this [issue](https://github.com/jedisct1/libsodium.js/issues/326)).
+### Next.js
 
-Updating it is not a big problem, it is just a pending chore - we want to test a
-bit more exhaustively when changing the crypto layer.
+[Next.js](https://nextjs.org) (package:
+[next](https://github.com/vercel/next.js)) provides the meta framework for both
+the photos and the auth app, and also for some of the sidecar apps like accounts
+and cast.
+
+We use a limited subset of Next.js. The main thing we get out of it is a
+reasonable set of defaults for bundling our app into a static export which we
+can then deploy to our webserver. In addition, the Next.js page router is
+convenient. Overall our apps can be described as regular React SPAs, and are not
+particularly tied to Next.js.
+
+### Vite
+
+For some of our newer code, we have started to use [Vite](https://vitejs.dev).
+It is likely the future (both generally, and for our code) since Next.js is
+becoming less suitable for SPAs and static SSR with their push towards RSC and
+dynamic SSR.
 
 ## UI
 
 ### React
 
-[React](https://react.dev) ("react") is our core framework. It also has a
-sibling "react-dom" package that renders JSX to the DOM.
+[React](https://react.dev) (package: [react](https://github.com/facebook/react))
+is our core framework. We also import its a sibling
+[react-dom](https://github.com/facebook/react) package that renders JSX to the
+DOM.
 
-### MUI and Emotion
-
-We use [MUI](https://mui.com) ("@mui/material"), which is a React component
-library, to get a base set of components.
-
-MUI uses [Emotion](https://emotion.sh/) (a styled-component variant) as its
-preferred CSS-in-JS library.
-
-Emotion itself comes in many parts, of which we need the following:
-
--   "@emotion/react" - React interface to Emotion. In particular, we set this as
-    the package that handles the transformation of JSX into JS (via the
-    `jsxImportSource` property in `tsconfig.json`).
-
--   "@emotion/styled" - Provides the `styled` utility, a la styled-components.
-    We don't use it directly, instead we import it from `@mui/material`.
-    However, MUI docs
-    [mention](https://mui.com/material-ui/integrations/interoperability/#styled-components)
-    that
-
-    > Keep `@emotion/styled` as a dependency of your project. Even if you never
-    > use it explicitly, it's a peer dependency of `@mui/material`.
-
-#### Component selectors
-
-Note that currently the SWC plugin doesn't allow the use of the component
-selectors API (i.e using `styled.div` instead of `styled("div")`).
-
-> I think the transform for component selectors is not implemented in the swc
-> plugin.
+> [!NOTE]
 >
-> https://github.com/vercel/next.js/issues/46973
+> We need to repeat the dependency on react and its siblings in multiple
+> package.jsons to avoid the unmet peer dependency warnings printed by yarn.
+> Ideally, the react dependencies can be specified just in the _@/base_ package.
 
-There is a way of enabling it by installing the `@emotion/babel-plugin` and
-specifying the import map as mentioned
-[here](https://mui.com/system/styled/#how-to-use-components-selector-api)
-([full example](https://github.com/mui/material-ui/issues/27380#issuecomment-928973157)),
-but that disables the SWC integration altogether, so we live with this
-infelicity for now.
+### MUI and Material Icons
+
+We use [MUI](https://mui.com)'s
+[@mui/material](https://mui.com/material-ui/getting-started/installation/) as
+our base React component library (In our code and documentation, we use the name
+"MUI" to refer to the the combination of both MUI's "Material UI" and "System"
+packages that we use).
+
+MUI uses [Emotion](https://emotion.sh/) as its preferred CSS-in-JS library, for
+which we need to install install two Emotion packages (`@emotion/react` and
+`@emotion/styled`) as peer dependencies.
+
+We also use MUI's
+[@mui/material-icons](https://mui.com/material-ui/material-icons/) package,
+which provides Material icons exported as React components (a `SvgIcon`).
+
+> [!NOTE]
+>
+> For a similar reason as with react,
+>
+> - the `@mui/material` dependency is also repeated at more places - the one in
+>   _@/base_ is the canonical one.
+> - we need to add an explicit dependency to `mui/system` in _@/new_ even though
+>   we don't directly depend on it.
+
+### Date pickers
+
+[@mui/x-date-pickers](https://mui.com/x/react-date-pickers/getting-started/) is
+used to get a date/time picker component. This is the community version of the
+DateTimePicker component provided by MUI.
+
+[dayjs](https://github.com/iamkun/dayjs) is used as the date library that that
+`@mui/x-date-pickers` will internally use to manipulate dates.
 
 ### Translations
 
-For showing the app's UI in multiple languages, we use the i18next library,
-specifically its three components
+For showing the app's UI in multiple languages, we use the
+[i18next](https://www.i18next.com), specifically its three components
 
--   "i18next": The core `i18next` library.
--   "i18next-http-backend": Adds support for initializing `i18next` with JSON
-    file containing the translation in a particular language, fetched at
-    runtime.
--   "react-i18next": React specific support in `i18next`.
+- [i18next](https://github.com/i18next/i18next): The core `i18next` library.
+- [react-i18next](https://github.com/i18next/react-i18next): React specific
+  support in `i18next`.
+- [i18next-http-backend](https://github.com/i18next/i18next-http-backend): Adds
+  support for initializing `i18next` with JSON file containing the translation
+  in a particular language, fetched at runtime.
 
 Note that inspite of the "next" in the name of the library, it has nothing to do
 with Next.js.
 
 For more details, see [translations.md](translations.md).
 
-## Meta frameworks
+### Font
 
-### Next.js
+Inter Variable (with support for weights 100 - 90) is used as the primary font,
+via [@fontsource-variable/inter](https://fontsource.org/fonts/inter/install).
 
-[Next.js](https://nextjs.org) ("next") provides the meta framework for both the
-Photos and the Auth app, and also for some of the sidecar apps like accounts and
-cast.
+### UI components
 
-We use a limited subset of Next. The main thing we get out of it is a reasonable
-set of defaults for bundling our app into a static export which we can then
-deploy to our webserver. In addition, the Next.js page router is convenient.
-Apart from this, while we use a few tidbits from Next.js here and there, overall
-our apps are regular React SPAs, and are not particularly tied to Next.
+- [react-window](https://github.com/bvaughn/react-window) is used for lazy-ily
+  rendering large lists of dynamically created content, each item being of a
+  variable height. It is usually used in tandem with its sibling package,
+  [react-virtualized-auto-sizer](https://github.com/bvaughn/react-virtualized-auto-sizer)
+  which allows the lazy list to resize itself automatically to fill the entire
+  remaining space available in the container.
 
-### Vite
+- [formik](https://github.com/jaredpalmer/formik) provides an easier to use
+  abstraction for dealing with form state, validation and submission states when
+  using React.
 
-For some of our newer code, we have started to use [Vite](https://vitejs.dev).
-It is more lower level than Next, but the bells and whistles it doesn't have are
-the bells and whistles (and the accompanying complexity) that we don't need in
-some cases.
+- [react-select](https://react-select.com/) is used for search dropdowns.
 
-## General
+- [react-otp-input](https://github.com/devfolioco/react-otp-input) is used to
+  render a segmented OTP input field for 2FA authentication.
 
--   [comlink](https://github.com/GoogleChromeLabs/comlink) provides a minimal
-    layer on top of Web Workers to make them more easier to use.
+## Utilities
 
--   [idb](https://github.com/jakearchibald/idb) provides a promise API over the
-    browser-native IndexedDB APIs.
+- [comlink](https://github.com/GoogleChromeLabs/comlink) provides a minimal
+  layer on top of web workers to make them more easier to use.
+
+- [idb](https://github.com/jakearchibald/idb) provides a promise API over the
+  browser-native IndexedDB APIs.
 
     > For more details about IDB and its role, see [storage.md](storage.md).
 
--   [zod](https://github.com/colinhacks/zod) is used for runtime typechecking
-    (e.g. verifying that API responses match the expected TypeScript shape).
+- [zod](https://github.com/colinhacks/zod) is used for runtime typechecking
+  (e.g. verifying that API responses match the expected TypeScript shape).
+
+- [nanoid](https://github.com/ai/nanoid) is used for generating unique
+  identifiers. For one particular use case, we also need
+  [uuid](https://github.com/uuidjs/uuid) for UUID v4 generation.
+
+- [bs58](https://github.com/cryptocoinjs/bs58) is used for base-58 conversion
+  (used for encoding the collection key to use as the hash in the share URL).
+
+- [debounce](https://github.com/sindresorhus/debounce) and its
+  promise-supporting sibling
+  [pDebounce](https://github.com/sindresorhus/p-debounce) are used for
+  debouncing operations (See also: `[Note: Throttle and debounce]`).
+
+- [zxcvbn](https://github.com/dropbox/zxcvbn) is used for password strength
+  estimation.
 
 ## Media
 
--   [jszip](https://github.com/Stuk/jszip) is used for reading zip files in
-    JavaScript (Live photos are zip files under the hood).
+- [ffmpeg.wasm](https://github.com/ffmpegwasm/ffmpeg.wasm) is used to run FFmpeg
+  in the browser using WebAssembly (Wasm). Note that this is substantially
+  slower than native ffmpeg (the desktop app can, and does, bundle the faster
+  native ffmpeg implementation too).
 
--   [file-type](https://github.com/sindresorhus/file-type) is used for MIME type
-    detection. We are at an old version 16.5.4 because v17 onwards the package
-    became ESM only - for our limited use case, the custom Webpack configuration
-    that entails is not worth the upgrade.
+- [ExifReader](https://github.com/mattiasw/ExifReader) is used for Exif parsing.
 
--   [heic-convert](https://github.com/catdad-experiments/heic-convert) is used
-    for converting HEIC files (which browsers don't natively support) into JPEG.
+- [jszip](https://github.com/Stuk/jszip) is used for reading zip files in the
+  web code (Live photos are zip files under the hood). Note that the desktop app
+  uses also has a ZIP parser (that one supports streaming).
+
+- [file-type](https://github.com/sindresorhus/file-type) is used for MIME type
+  detection. We are at an old version 16.5.4 because v17 onwards the package
+  became ESM only - for our limited use case, the custom Webpack configuration
+  that it'd entail is not worth the upgrade.
+
+- [heic-convert](https://github.com/catdad-experiments/heic-convert) is used for
+  converting HEIC files (which browsers don't natively support) into JPEG. For
+  (much more) details, see [heic.md](heic.md).
 
 ## Photos app specific
 
--   [react-dropzone](https://github.com/react-dropzone/react-dropzone/) is a
-    React hook to create a drag-and-drop input zone.
+- [react-dropzone](https://github.com/react-dropzone/react-dropzone/) is a React
+  hook to create a drag-and-drop input zone. Note that we pin to the last
+  version in the 14.2 series, since if we use 14.3 onwards (I tested till
+  14.3.5) then we are unable to get back a path from the file by using the
+  `webUtils.getPathForFile` function provided by Electron.
 
--   [sanitize-filename](https://github.com/parshap/node-sanitize-filename) is
-    for converting arbitrary strings into strings that are suitable for being
-    used as filenames.
+- [sanitize-filename](https://github.com/parshap/node-sanitize-filename) is for
+  converting arbitrary strings into strings that are suitable for being used as
+  filenames.
 
-## Face search
+- [chrono-node](https://github.com/wanasit/chrono) is used for parsing natural
+  language queries into dates for showing search results.
 
--   [transformation-matrix](https://github.com/chrvadala/transformation-matrix)
-    is used for performing 2D affine transformations using transformation
-    matrices. It is used during face detection.
+- [matrix](https://github.com/mljs/matrix) is mathematical matrix abstraction by
+  the machine learning code. It is used alongwith
+  [similarity-transformation](https://github.com/shaileshpandit/similarity-transformation-js)
+  during face alignment.
 
--   [matrix](https://github.com/mljs/matrix) is mathematical matrix abstraction.
-    It is used alongwith
-    [similarity-transformation](https://github.com/shaileshpandit/similarity-transformation-js)
-    during face alignment.
-
-    > Note that while both `transformation-matrix` and `matrix` are "matrix"
-    > libraries, they have different foci and purposes: `transformation-matrix`
-    > provides affine transforms, while `matrix` is for performing computations
-    > on matrices, say inverting them or performing their decomposition.
-
--   [hdbscan](https://github.com/shaileshpandit/hdbscan-js) is used for face
-    clustering.
+- [react-top-loading-bar](https://github.com/klendi/react-top-loading-bar) is
+  used for showing a progress indicator for global actions (This shouldn't be
+  used always, it is only meant as a fallback when there isn't an otherwise
+  suitable place for showing a local activity indicator).
 
 ## Auth app specific
 
--   [otpauth](https://github.com/hectorm/otpauth) is used for the generation of
-    the actual OTP from the user's TOTP/HOTP secret.
+- [otpauth](https://github.com/hectorm/otpauth) is used for the generation of
+  the actual OTP from the user's TOTP/HOTP secret.
 
--   However, otpauth doesn't support steam OTPs. For these, we need to compute
-    the SHA-1, and we use the same library, `jssha` that `otpauth` uses (since
-    it is already part of our bundle).
+- However, otpauth doesn't support steam OTPs. For these, we need to compute the
+  SHA-1, and we use the same library, `jssha` that `otpauth` uses since it is
+  already part of our bundle (transitively).
